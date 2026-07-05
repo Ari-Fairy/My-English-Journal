@@ -20,7 +20,6 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
 
-  // Ловим результат редиректа при загрузке компонента
   useEffect(() => {
     getRedirectResult(auth)
       .then((result) => {
@@ -70,7 +69,7 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
     provider.setCustomParameters({ prompt: "select_account" });
 
     try {
-      // Используем редирект вместо всплывающего окна
+      (auth as any).config.authDomain = "centered-kayak-xcf5x.firebaseapp.com";
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error(err);
