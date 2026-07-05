@@ -10,7 +10,7 @@ import {
   saveUserProgress 
 } from "./firebaseSync";
 import { Word, IrregularVerb, UserProgress } from "./types";
-import { checkAchievements, ACHIEVEMENTS_DEF } from "./data";
+import { checkAchievements, ACHIEVEMENTS_DEF, SEED_WORDS, SEED_IRREGULAR } from "./data";
 
 // Sub-screens imports
 import AuthScreen from "./components/AuthScreen";
@@ -92,6 +92,45 @@ export default function App() {
     }
   };
 
+  const loadUserData = (userId: string) => {
+    try {
+      const cached = localStorage.getItem(`my-eng-v3-user-${userId}`);
+      if (cached) {
+        const parsed = JSON.parse(cached);
+        setWords(parsed.words || []);
+        setIrregular(parsed.irregular || []);
+        setProgress(parsed.stats || {
+          userId,
+          streak: 1,
+          best: 1,
+          lastVisit: null,
+          achievements: [],
+          booksRead: 0,
+          wordsFromBooks: 0,
+          bestStreak: 0,
+          daily: {},
+          dailyBooksRead: {}
+        });
+        return true;
+      }
+    } catch (e) {
+      console.error("Local storage user load error:", e);
+    }
+    return false;
+  };
+
+  const saveUserData = (userId: string, updatedWords: Word[], updatedIrregular: IrregularVerb[], updatedProgress: UserProgress) => {
+    try {
+      localStorage.setItem(`my-eng-v3-user-${userId}`, JSON.stringify({
+        words: updatedWords,
+        irregular: updatedIrregular,
+        stats: updatedProgress
+      }));
+    } catch (e) {
+      console.error("Local storage user save error:", e);
+    }
+  };
+
   // Auth State Listener
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (firebaseUser) => {
@@ -159,6 +198,7 @@ export default function App() {
             setWords(mergedWords);
             setIrregular(mergedIrregular);
             setProgress(pStats);
+            saveUserData(firebaseUser.uid, mergedWords, mergedIrregular, pStats);
 
             // Optional: clear migrated local guest cache to prevent duplicate merges in the future
             localStorage.removeItem("my-eng-v3-guest");
@@ -215,6 +255,7 @@ export default function App() {
               setWords(migratedWordsList);
               setIrregular(migratedIrregularList);
               setProgress(newProgress);
+              saveUserData(firebaseUser.uid, migratedWordsList, migratedIrregularList, newProgress);
 
               // Clear guest cache since it's now fully backed up in Firestore
               localStorage.removeItem("my-eng-v3-guest");
@@ -224,6 +265,7 @@ export default function App() {
               setWords(seeded.words);
               setIrregular(seeded.irregular);
               setProgress(seeded.progress);
+              saveUserData(firebaseUser.uid, seeded.words, seeded.irregular, seeded.progress);
             }
           }
           setWelcome(true);
@@ -236,11 +278,64 @@ export default function App() {
                             errStr.toLowerCase().includes("permission");
           if (isOffline) {
             console.warn("Database loading: Cloud is restricted or offline. Quietly falling back to local storage.");
+            const hasCached = loadUserData(firebaseUser.uid);
+            if (!hasCached) {
+              const defaultProgress: UserProgress = {
+                userId: firebaseUser.uid,
+                streak: 1,
+                best: 1,
+                lastVisit: new Date().toISOString().slice(0, 10),
+                achievements: [],
+                booksRead: 0,
+                wordsFromBooks: 0,
+                bestStreak: 0,
+                daily: {},
+                dailyBooksRead: {},
+                customTopics: {},
+                customPos: {}
+              };
+              
+              const seededWords: Word[] = SEED_WORDS.map((w, idx) => ({
+                id: `loc-word-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+                userId: firebaseUser.uid,
+                en: w.en,
+                ru: w.ru,
+                partOfSpeech: w.pos,
+                topic: w.topic,
+                note: "",
+                learned: false,
+                learnedDate: null,
+                lastReviewed: null,
+                correct: 0,
+                wrong: 0,
+                streak: 0,
+                created: new Date().toISOString()
+              }));
+
+              const seededIrregular: IrregularVerb[] = SEED_IRREGULAR.map((v, idx) => ({
+                id: `loc-verb-${idx}-${Math.random().toString(36).substring(2, 9)}`,
+                userId: firebaseUser.uid,
+                base: v.base,
+                past: v.past,
+                participle: v.participle,
+                ru: v.ru,
+                learned: false,
+                learnedDate: null,
+                streak: 0
+              }));
+              
+              setWords(seededWords);
+              setIrregular(seededIrregular);
+              setProgress(defaultProgress);
+              saveUserData(firebaseUser.uid, seededWords, seededIrregular, defaultProgress);
+            }
+            setWelcome(true);
+            setSyncError("⚠️ Автономный режим работы: прогресс сохраняется локально.");
           } else {
             console.error("Database loading error:", e);
+            setSyncError("⚠️ Ошибка соединения с облаком. Переключение в локальный режим...");
+            loadGuestData();
           }
-          setSyncError("⚠️ Ошибка соединения с облаком. Переключение в локальный режим...");
-          loadGuestData();
         } finally {
           setDbLoading(false);
         }
@@ -305,6 +400,7 @@ export default function App() {
     setWords(list);
 
     if (user && user !== "guest") {
+      saveUserData(user.uid, list, irregular, progress);
       try {
         await saveWord(updatedWord);
         setSyncError(null);
@@ -315,8 +411,7 @@ export default function App() {
         } else {
           console.error("Cloud save failed:", e);
         }
-        setSyncError("⚠️ Не удалось сохранить изменения в облако. Прогресс сохранен на устройстве.");
-        saveGuestData(list, irregular, progress);
+        setSyncError("⚠️ Автономный режим: изменения сохранены на устройстве.");
       }
     } else {
       saveGuestData(list, irregular, progress);
@@ -333,6 +428,7 @@ export default function App() {
     setIrregular(list);
 
     if (user && user !== "guest") {
+      saveUserData(user.uid, words, list, progress);
       try {
         await saveIrregularVerb(updatedVerb);
         setSyncError(null);
@@ -343,8 +439,7 @@ export default function App() {
         } else {
           console.error("Cloud save failed:", e);
         }
-        setSyncError("⚠️ Не удалось сохранить изменения в облако. Прогресс сохранен на устройстве.");
-        saveGuestData(words, list, progress);
+        setSyncError("⚠️ Автономный режим: изменения сохранены на устройстве.");
       }
     } else {
       saveGuestData(words, list, progress);
@@ -357,6 +452,7 @@ export default function App() {
     setProgress(updatedProgress);
 
     if (user && user !== "guest") {
+      saveUserData(user.uid, words, irregular, updatedProgress);
       try {
         await saveUserProgress(updatedProgress);
         setSyncError(null);
@@ -367,8 +463,7 @@ export default function App() {
         } else {
           console.error("Cloud save failed:", e);
         }
-        setSyncError("⚠️ Не удалось сохранить изменения в облако. Прогресс сохранен на устройстве.");
-        saveGuestData(words, irregular, updatedProgress);
+        setSyncError("⚠️ Автономный режим: прогресс сохранен на устройстве.");
       }
     } else {
       saveGuestData(words, irregular, updatedProgress);
@@ -382,6 +477,7 @@ export default function App() {
     setWords(list);
 
     if (user && user !== "guest") {
+      saveUserData(user.uid, list, irregular, progress);
       try {
         await deleteWord(wordId);
         setSyncError(null);
@@ -392,8 +488,7 @@ export default function App() {
         } else {
           console.error("Cloud delete failed:", e);
         }
-        setSyncError("⚠️ Не удалось удалить из облака. Изменения применены локально.");
-        saveGuestData(list, irregular, progress);
+        setSyncError("⚠️ Автономный режим: изменения применены локально.");
       }
     } else {
       saveGuestData(list, irregular, progress);
