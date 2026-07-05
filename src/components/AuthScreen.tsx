@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInWithPopup, 
+  signInWithRedirect, 
   GoogleAuthProvider 
 } from "firebase/auth";
 import { auth } from "../firebase";
@@ -56,11 +56,10 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
     setErrorMsg("");
     const provider = new GoogleAuthProvider();
     try {
-      const credential = await signInWithPopup(auth, provider);
-      onSuccess(credential.user.uid);
+      await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Вход через Google временно недоступен или заблокирован в браузере.");
+      setErrorMsg("Ошибка авторизации через Google. Попробуйте обновить страницу.");
     } finally {
       setLoading(false);
     }
