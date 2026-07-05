@@ -3,8 +3,14 @@ import { getAuth } from "firebase/auth";
 import { initializeFirestore } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
-// Initialize Firebase App
-const app = initializeApp(firebaseConfig);
+// Перезаписываем authDomain на тот, который точно разрешен в консоли Firebase
+const customConfig = {
+  ...firebaseConfig,
+  authDomain: "centered-kayak-xcf5x.firebaseapp.com"
+};
+
+// Initialize Firebase App с обновленным конфигом
+const app = initializeApp(customConfig);
 
 // Initialize Firebase Auth
 export const auth = getAuth(app);
