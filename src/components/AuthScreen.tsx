@@ -1,9 +1,8 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInWithRedirect, 
-  getRedirectResult,
+  signInWithPopup, 
   GoogleAuthProvider 
 } from "firebase/auth";
 import { auth } from "../firebase";
@@ -19,19 +18,6 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
   const [isRegistering, setIsRegistering] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
-
-  useEffect(() => {
-    getRedirectResult(auth)
-      .then((result) => {
-        if (result?.user) {
-          onSuccess(result.user.uid);
-        }
-      })
-      .catch((err: any) => {
-        console.error("Ошибка редиректа:", err);
-        setErrorMsg("Не удалось завершить вход через Google. Попробуйте ещё раз.");
-      });
-  }, [onSuccess]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -54,6 +40,10 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
         message = "Неверный логин или пароль.";
       } else if (err.code === "auth/email-already-in-use") {
         message = "Этот Email уже зарегистрирован.";
+      } else if (err.code === "auth/weak-password") {
+        message = "Пароль должен быть не менее 6 символов.";
+      } else if (err.code === "auth/invalid-email") {
+        message = "Некорректный формат Email.";
       }
       setErrorMsg(message);
     } finally {
@@ -64,16 +54,26 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
   const handleGoogleAuth = async () => {
     setLoading(true);
     setErrorMsg("");
-    
     const provider = new GoogleAuthProvider();
-    provider.setCustomParameters({ prompt: "select_account" });
-
     try {
-      (auth as any).config.authDomain = "centered-kayak-xcf5x.firebaseapp.com";
-      await signInWithRedirect(auth, provider);
+      const credential = await signInWithPopup(auth, provider);
+      onSuccess(credential.user.uid);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Ошибка инициализации авторизации. Попробуйте обновить страницу.");
+      let errorDetail = "";
+      if (err.code === "auth/unauthorized-domain") {
+        errorDetail = "Этот домен (например, vercel.app) не добавлен в список разрешенных в консоли Firebase. Перейдите в Firebase Console -> Authentication -> Settings -> Authorized domains и добавьте ваш домен.";
+      } else if (err.code === "auth/popup-blocked") {
+        errorDetail = "Всплывающее окно было заблокировано браузером. Пожалуйста, разрешите всплывающие окна для этого сайта в настройках браузера.";
+      } else if (err.code === "auth/cancelled-popup-request") {
+        errorDetail = "Вход отменен пользователем (окно было закрыто).";
+      } else if (err.code === "auth/network-request-failed") {
+        errorDetail = "Ошибка сети. Проверьте подключение к интернету или доступность серверов Google/Firebase.";
+      } else {
+        errorDetail = err.message || String(err);
+      }
+      setErrorMsg(`Ошибка входа через Google: ${errorDetail} (Код: ${err.code || "unknown"})`);
+    } finally {
       setLoading(false);
     }
   };
@@ -131,7 +131,7 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
             style={{ width: "100%", padding: 14, marginTop: 8 }}
             disabled={loading}
           >
-            {loading ? "⏳ Секунду..." : isRegistering ? "Зарегистрироваться" : "Войти"}
+            {loading ? "⏳ Пожалуйста, подождите..." : isRegistering ? "Зарегистрироваться" : "Войти"}
           </button>
         </form>
 
