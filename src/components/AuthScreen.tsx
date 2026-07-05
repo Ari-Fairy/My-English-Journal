@@ -5,7 +5,7 @@ import {
   signInWithCredential, 
   GoogleAuthProvider 
 } from "firebase/auth";
-import { auth } from "../firebase"; // Путь к твоему файлу firebase.ts
+import { auth } from "../firebase"; // Исправленный путь к файлу конфигурации
 
 interface AuthScreenProps {
   onSuccess: (uid: string) => void;
@@ -78,15 +78,15 @@ export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
     }
   };
 
-  // Исправленная функция входа через Google
+  // Функция входа через Google OAuth2
   const handleGoogleAuth = () => {
     setLoading(true);
     setErrorMsg("");
 
-    // Твой проверенный Web Client ID из Firebase
+    // Web Client ID из Firebase
     const clientId = "482980463406-53ncf12c8ojkbqh6bmksjdf899moa3rv.apps.googleusercontent.com"; 
     
-    // Доверенный домен Firebase для обхода ошибки redirect_uri_mismatch
+    // Доверенный домен Firebase для авторизации
     const redirectUri = "https://centered-kayak-xcf5x.firebaseapp.com"; 
     
     const scope = "openid email profile";
@@ -252,3 +252,6 @@ const styles: { [key: string]: React.CSSProperties } = {
     fontWeight: "bold"
   }
 };
+
+// Исправление экспорта по умолчанию для App.tsx
+export default AuthScreen;
