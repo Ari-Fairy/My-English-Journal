@@ -596,28 +596,62 @@ export default function App() {
     <div className="app">
       {syncError && (
         <div style={{
-          background: "rgba(220, 95, 95, 0.12)",
-          color: "rgb(200, 75, 75)",
-          border: "1px solid rgba(220, 95, 95, 0.25)",
-          borderRadius: "0.75rem",
-          padding: "10px 16px",
+          background: "rgba(255, 255, 255, 0.95)",
+          color: "#4a3e3e",
+          border: "1px solid rgba(212, 165, 165, 0.4)",
+          borderRadius: "1rem",
+          padding: "14px 18px",
           margin: "12px 16px 4px 16px",
           fontSize: "13px",
-          fontWeight: 600,
+          lineHeight: "1.5",
+          boxShadow: "0 4px 12px rgba(0, 0, 0, 0.05)",
           display: "flex",
-          justifyContent: "space-between",
-          alignItems: "center",
-          gap: "12px",
+          flexDirection: "column",
+          gap: "8px",
           zIndex: 500,
           position: "relative"
         }}>
-          <span>{syncError}</span>
-          <button 
-            style={{ background: "none", border: "none", color: "inherit", cursor: "pointer", fontSize: "16px", fontWeight: "bold", padding: "0 4px" }}
-            onClick={() => setSyncError(null)}
-          >
-            ×
-          </button>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
+            <span style={{ fontWeight: 500 }}>
+              {syncError.includes("Автономный") || syncError.includes("локально") ? (
+                <>
+                  <span style={{ fontSize: "16px" }}>🦉</span> <strong>Локальный режим:</strong> Ваш прогресс сохраняется на устройстве! Из-за политики безопасности браузера (ограничений iframe-песочницы редактора), прямое подключение к облаку внутри этой панели ограничено.
+                </>
+              ) : (
+                syncError
+              )}
+            </span>
+            <button 
+              style={{ background: "none", border: "none", color: "#8a7e7e", cursor: "pointer", fontSize: "18px", fontWeight: "bold", padding: "0 4px", lineHeight: 1 }}
+              onClick={() => setSyncError(null)}
+            >
+              ×
+            </button>
+          </div>
+          {(syncError.includes("Автономный") || syncError.includes("локально")) && (
+            <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "4px" }}>
+              <a 
+                href={window.location.href} 
+                target="_blank" 
+                rel="noreferrer"
+                style={{ 
+                  display: "inline-flex", 
+                  alignItems: "center", 
+                  gap: "6px", 
+                  padding: "6px 14px", 
+                  fontSize: "12px", 
+                  borderRadius: "999px",
+                  textDecoration: "none",
+                  fontWeight: 600,
+                  color: "#5c4d4d",
+                  border: "1.5px solid rgba(212, 165, 165, 0.4)",
+                  background: "#fff5f5"
+                }}
+              >
+                🌐 Открыть в новой вкладке (для работы с облаком) →
+              </a>
+            </div>
+          )}
         </div>
       )}
       {/* Welcome Streak Overlay */}
