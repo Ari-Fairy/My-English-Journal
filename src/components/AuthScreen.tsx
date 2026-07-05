@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInWithRedirect, 
+  signInWithCredential,
   GoogleAuthProvider 
 } from "firebase/auth";
 import { auth } from "../firebase";
@@ -18,6 +18,30 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
   const [isRegistering, setIsRegistering] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Обработка возврата с Google (если в URL есть access_token)
+  React.useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes("access_token")) {
+      const params = new URLSearchParams(hash.substring(1));
+      const accessToken = params.get("access_token");
+      
+      if (accessToken) {
+        setLoading(true);
+        const credential = GoogleAuthProvider.credential(null, accessToken);
+        signInWithCredential(auth, credential)
+          .then((result) => {
+            onSuccess(result.user.uid);
+            window.location.hash = ""; // Очищаем хэш
+          })
+          .catch((err) => {
+            console.error(err);
+            setErrorMsg("Не удалось завершить вход через Google. Попробуйте еще раз.");
+          })
+          .finally(() => setLoading(false));
+      }
+    }
+  }, [onSuccess]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -51,25 +75,23 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
     }
   };
 
-  const handleGoogleAuth = async () => {
+  const handleGoogleAuth = () => {
     setLoading(true);
     setErrorMsg("");
-    const provider = new GoogleAuthProvider();
-    
-    // Настраиваем параметры, чтобы редирект шёл через ваш рабочий домен-прокси
-    provider.setCustomParameters({
-      prompt: "select_account",
-      auth_proxy_url: "https://my-english-journal-app.vercel.app/__/auth"
-    });
 
-    try {
-      await signInWithRedirect(auth, provider);
-    } catch (err: any) {
-      console.error(err);
-      setErrorMsg("Ошибка авторизации через Google. Попробуйте обновить страницу.");
-    } finally {
-      setLoading(false);
-    }
+    // Идентификатор твоего Web-клиента Google из Firebase / Google Cloud
+    const clientId = "543788226922-h211516f3chfbbesapamqqj12u7201b1.apps.googleusercontent.com"; 
+    const redirectUri = window.location.origin; // Автоматически подставит твой текущий домен Vercel
+    const scope = "openid email profile";
+    const responseType = "token";
+
+    // Прямая ссылка на авторизацию Google, которая не блокируется из РФ
+    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
+      redirectUri
+    )}&response_type=${responseType}&scope=${encodeURIComponent(scope)}&prompt=select_account`;
+
+    // Выполняем жесткий редирект силами браузера
+    window.location.href = authUrl;
   };
 
   return (
