@@ -55,6 +55,13 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
     setLoading(true);
     setErrorMsg("");
     const provider = new GoogleAuthProvider();
+    
+    // Настраиваем параметры, чтобы редирект шёл через ваш рабочий домен-прокси
+    provider.setCustomParameters({
+      prompt: "select_account",
+      auth_proxy_url: "https://my-english-journal-app.vercel.app/__/auth"
+    });
+
     try {
       await signInWithRedirect(auth, provider);
     } catch (err: any) {
