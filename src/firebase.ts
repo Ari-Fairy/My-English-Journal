@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getAuth } from "firebase/auth";
-import { initializeFirestore } from "firebase/firestore";
+import { initializeFirestore, memoryLocalCache } from "firebase/firestore";
 import firebaseConfig from "../firebase-applet-config.json";
 
 // Read from client-side environment variables (perfect for Vercel/production)
@@ -31,8 +31,14 @@ const app = initializeApp(config);
 // Initialize Firebase Auth
 export const auth = getAuth(app);
 
-// Initialize Firestore
+// Initialize Firestore with settings optimized for sandboxed iframes and restrictive network/privacy settings
+const firestoreSettings = {
+  experimentalForceLongPolling: true,
+  useFetchStreams: false,
+  localCache: memoryLocalCache()
+};
+
 export const db = databaseId && databaseId !== "(default)"
-  ? initializeFirestore(app, { experimentalForceLongPolling: true }, databaseId)
-  : initializeFirestore(app, { experimentalForceLongPolling: true });
+  ? initializeFirestore(app, firestoreSettings, databaseId)
+  : initializeFirestore(app, firestoreSettings);
 
