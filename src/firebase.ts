@@ -32,5 +32,7 @@ const app = initializeApp(config);
 export const auth = getAuth(app);
 
 // Initialize Firestore
-export const db = initializeFirestore(app, {}, databaseId);
+export const db = databaseId && databaseId !== "(default)"
+  ? initializeFirestore(app, { experimentalForceLongPolling: true }, databaseId)
+  : initializeFirestore(app, { experimentalForceLongPolling: true });
 
