@@ -228,8 +228,17 @@ export default function App() {
           }
           setWelcome(true);
           setSyncError(null);
-        } catch (e) {
-          console.error("Database loading error:", e);
+        } catch (e: any) {
+          const errStr = e instanceof Error ? e.message : String(e);
+          const isOffline = errStr.toLowerCase().includes("offline") || 
+                            errStr.toLowerCase().includes("network") || 
+                            errStr.toLowerCase().includes("storage") ||
+                            errStr.toLowerCase().includes("permission");
+          if (isOffline) {
+            console.warn("Database loading: Cloud is restricted or offline. Quietly falling back to local storage.");
+          } else {
+            console.error("Database loading error:", e);
+          }
           setSyncError("⚠️ Ошибка соединения с облаком. Переключение в локальный режим...");
           loadGuestData();
         } finally {
@@ -299,8 +308,13 @@ export default function App() {
       try {
         await saveWord(updatedWord);
         setSyncError(null);
-      } catch (e) {
-        console.error("Cloud save failed:", e);
+      } catch (e: any) {
+        const errStr = e instanceof Error ? e.message : String(e);
+        if (errStr.toLowerCase().includes("offline") || errStr.toLowerCase().includes("network") || errStr.toLowerCase().includes("storage")) {
+          console.warn("Cloud save word pending/restricted: saved locally.");
+        } else {
+          console.error("Cloud save failed:", e);
+        }
         setSyncError("⚠️ Не удалось сохранить изменения в облако. Прогресс сохранен на устройстве.");
         saveGuestData(list, irregular, progress);
       }
@@ -322,8 +336,13 @@ export default function App() {
       try {
         await saveIrregularVerb(updatedVerb);
         setSyncError(null);
-      } catch (e) {
-        console.error("Cloud save failed:", e);
+      } catch (e: any) {
+        const errStr = e instanceof Error ? e.message : String(e);
+        if (errStr.toLowerCase().includes("offline") || errStr.toLowerCase().includes("network") || errStr.toLowerCase().includes("storage")) {
+          console.warn("Cloud save irregular pending/restricted: saved locally.");
+        } else {
+          console.error("Cloud save failed:", e);
+        }
         setSyncError("⚠️ Не удалось сохранить изменения в облако. Прогресс сохранен на устройстве.");
         saveGuestData(words, list, progress);
       }
@@ -341,8 +360,13 @@ export default function App() {
       try {
         await saveUserProgress(updatedProgress);
         setSyncError(null);
-      } catch (e) {
-        console.error("Cloud save failed:", e);
+      } catch (e: any) {
+        const errStr = e instanceof Error ? e.message : String(e);
+        if (errStr.toLowerCase().includes("offline") || errStr.toLowerCase().includes("network") || errStr.toLowerCase().includes("storage")) {
+          console.warn("Cloud save progress pending/restricted: saved locally.");
+        } else {
+          console.error("Cloud save failed:", e);
+        }
         setSyncError("⚠️ Не удалось сохранить изменения в облако. Прогресс сохранен на устройстве.");
         saveGuestData(words, irregular, updatedProgress);
       }
@@ -361,8 +385,13 @@ export default function App() {
       try {
         await deleteWord(wordId);
         setSyncError(null);
-      } catch (e) {
-        console.error("Cloud delete failed:", e);
+      } catch (e: any) {
+        const errStr = e instanceof Error ? e.message : String(e);
+        if (errStr.toLowerCase().includes("offline") || errStr.toLowerCase().includes("network") || errStr.toLowerCase().includes("storage")) {
+          console.warn("Cloud delete pending/restricted: applied locally.");
+        } else {
+          console.error("Cloud delete failed:", e);
+        }
         setSyncError("⚠️ Не удалось удалить из облака. Изменения применены локально.");
         saveGuestData(list, irregular, progress);
       }
