@@ -5,7 +5,7 @@ import {
   signInWithCredential, 
   GoogleAuthProvider 
 } from "firebase/auth";
-import { auth } from "./firebase"; // Путь к твоему файлу firebase.ts
+import { auth } from "../firebase"; // Путь к твоему файлу firebase.ts
 
 interface AuthScreenProps {
   onSuccess: (uid: string) => void;
