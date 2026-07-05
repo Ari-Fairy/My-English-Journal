@@ -23,17 +23,7 @@ const config = {
   measurementId: getEnvValue("VITE_FIREBASE_MEASUREMENT_ID", firebaseConfig.measurementId),
 };
 
-const isAiStudio = 
-  typeof window !== "undefined" && 
-  (window.location.hostname.includes("run.app") || 
-   window.location.hostname.includes("localhost") || 
-   window.location.hostname.includes("127.0.0.1"));
-
-const defaultDatabaseId = isAiStudio 
-  ? (firebaseConfig.firestoreDatabaseId || "(default)") 
-  : "(default)";
-
-const databaseId = getEnvValue("VITE_FIREBASE_DATABASE_ID", defaultDatabaseId);
+const databaseId = getEnvValue("VITE_FIREBASE_DATABASE_ID", firebaseConfig.firestoreDatabaseId || "(default)");
 
 // Initialize Firebase App
 const app = initializeApp(config);
