@@ -1,257 +1,165 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInWithCredential, 
+  signInWithPopup, 
   GoogleAuthProvider 
 } from "firebase/auth";
-import { auth } from "../firebase"; // Исправленный путь к файлу конфигурации
+import { auth } from "../firebase";
 
 interface AuthScreenProps {
-  onSuccess: (uid: string) => void;
+  onGuestMode: () => void;
+  onSuccess: (userId: string) => void;
 }
 
-export const AuthScreen: React.FC<AuthScreenProps> = ({ onSuccess }) => {
-  const [isLogin, setIsLogin] = useState(true);
+export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
-  const [loading, setLoading] = useState(false);
+  const [isRegistering, setIsRegistering] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
+  const [loading, setLoading] = useState(false);
 
-  // Обработка возврата с авторизации Google
-  useEffect(() => {
-    let hash = window.location.hash;
-    
-    // Если токен был передан через sessionStorage или URL параметры
-    const savedToken = sessionStorage.getItem("oauth_access_token");
-    if (savedToken) {
-      sessionStorage.removeItem("oauth_access_token");
-      hash = `#access_token=${savedToken}`;
-    }
-
-    if (hash && hash.includes("access_token")) {
-      const params = new URLSearchParams(hash.substring(1));
-      const accessToken = params.get("access_token");
-      
-      if (accessToken) {
-        setLoading(true);
-        const credential = GoogleAuthProvider.credential(null, accessToken);
-        signInWithCredential(auth, credential)
-          .then((result) => {
-            onSuccess(result.user.uid);
-            window.location.hash = "";
-          })
-          .catch((err) => {
-            console.error("Ошибка авторизации с учетными данными:", err);
-            setErrorMsg("Не удалось завершить вход через Google. Попробуйте еще раз.");
-          })
-          .finally(() => setLoading(false));
-      }
-    }
-  }, [onSuccess]);
-
-  // Стандартная авторизация по Email/Паролю
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!email || !password) return;
     setLoading(true);
     setErrorMsg("");
 
     try {
-      if (isLogin) {
-        const res = await signInWithEmailAndPassword(auth, email, password);
-        onSuccess(res.user.uid);
+      if (isRegistering) {
+        const credential = await createUserWithEmailAndPassword(auth, email, password);
+        onSuccess(credential.user.uid);
       } else {
-        const res = await createUserWithEmailAndPassword(auth, email, password);
-        onSuccess(res.user.uid);
+        const credential = await signInWithEmailAndPassword(auth, email, password);
+        onSuccess(credential.user.uid);
       }
     } catch (err: any) {
       console.error(err);
+      let message = "Произошла ошибка при входе.";
       if (err.code === "auth/user-not-found" || err.code === "auth/wrong-password") {
-        setErrorMsg("Неверный email или пароль.");
+        message = "Неверный логин или пароль.";
       } else if (err.code === "auth/email-already-in-use") {
-        setErrorMsg("Этот email уже зарегистрирован.");
-      } else {
-        setErrorMsg("Произошла ошибка. Проверьте данные.");
+        message = "Этот Email уже зарегистрирован.";
       }
+      setErrorMsg(message);
     } finally {
       setLoading(false);
     }
   };
 
-  // Функция входа через Google OAuth2
-  const handleGoogleAuth = () => {
+  const handleGoogleAuth = async () => {
     setLoading(true);
     setErrorMsg("");
-
-    // Web Client ID из Firebase
-    const clientId = "482980463406-53ncf12c8ojkbqh6bmksjdf899moa3rv.apps.googleusercontent.com"; 
     
-    // Доверенный домен Firebase для авторизации
-    const redirectUri = "https://centered-kayak-xcf5x.firebaseapp.com"; 
-    
-    const scope = "openid email profile";
-    const responseType = "token";
+    const provider = new GoogleAuthProvider();
+    // Заставляем окно всегда предлагать выбор аккаунта
+    provider.setCustomParameters({ prompt: "select_account" });
 
-    const authUrl = `https://accounts.google.com/o/oauth2/v2/auth?client_id=${clientId}&redirect_uri=${encodeURIComponent(
-      redirectUri
-    )}&response_type=${responseType}&scope=${encodeURIComponent(scope)}&prompt=select_account`;
-
-    // Перенаправляем пользователя на страницу авторизации Google
-    window.location.href = authUrl;
+    try {
+      const result = await signInWithPopup(auth, provider);
+      onSuccess(result.user.uid);
+    } catch (err: any) {
+      console.error(err);
+      setErrorMsg("Ошибка авторизации через Google. Попробуйте обновить страницу.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
-    <div style={styles.container}>
-      <div style={styles.card}>
-        <h2 style={styles.title}>{isLogin ? "Вход в приложение" : "Регистрация"}</h2>
-        
-        {errorMsg && <div style={styles.error}>{errorMsg}</div>}
+    <div className="auth-container fade-in">
+      <div style={{ textAlign: "center", marginBottom: 24 }}>
+        <h1 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 34, color: "var(--warm)" }}>
+          My English Journal
+        </h1>
+        <p className="sub-text" style={{ color: "var(--sage)", marginTop: 6, fontSize: 12 }}>
+          Синхронизация прогресса и чтение книг
+        </p>
+      </div>
 
-        <form onSubmit={handleEmailAuth} style={styles.form}>
-          <input
-            type="email"
-            placeholder="Электронная почта"
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-            required
-            style={styles.input}
+      <div className="card">
+        <h3 className="section-title" style={{ textAlign: "center", marginBottom: 16 }}>
+          {isRegistering ? "Регистрация" : "Вход в аккаунт"}
+        </h3>
+
+        {errorMsg && (
+          <div style={{ color: "var(--rose)", background: "rgba(212,165,165,0.12)", border: "1.5px solid rgba(212,165,165,0.3)", borderRadius: "1rem", padding: "10px 14px", fontSize: 13, marginBottom: 14, textAlign: "center" }}>
+            {errorMsg}
+          </div>
+        )}
+
+        <form onSubmit={handleEmailAuth} style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+          <div>
+            <label className="sub-text" style={{ fontSize: 10, display: "block", marginBottom: 4, fontWeight: 600 }}>Email адрес</label>
+            <input 
+              type="email" 
+              className="input" 
+              placeholder="name@example.com" 
+              value={email}
+              onChange={e => setEmail(e.target.value)}
+              required
+            />
+          </div>
+
+          <div>
+            <label className="sub-text" style={{ fontSize: 10, display: "block", marginBottom: 4, fontWeight: 600 }}>Пароль</label>
+            <input 
+              type="password" 
+              className="input" 
+              placeholder="••••••" 
+              value={password}
+              onChange={e => setPassword(e.target.value)}
+              required
+            />
+          </div>
+
+          <button 
+            type="submit" 
+            className="btn btn-primary" 
+            style={{ width: "100%", padding: 14, marginTop: 8 }}
             disabled={loading}
-          />
-          <input
-            type="password"
-            placeholder="Пароль"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            required
-            style={styles.input}
-            disabled={loading}
-          />
-          <button type="submit" style={styles.button} disabled={loading}>
-            {loading ? "Загрузка..." : isLogin ? "Войти" : "Зарегистрироваться"}
+          >
+            {loading ? "⏳ Секунду..." : isRegistering ? "Зарегистрироваться" : "Войти"}
           </button>
         </form>
 
-        <div style={styles.divider}>или</div>
+        <div style={{ margin: "16px 0", display: "flex", alignItems: "center", gap: 10 }}>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+          <span style={{ fontSize: 11, color: "#ccc", textTransform: "uppercase" }}>или</span>
+          <div style={{ flex: 1, height: 1, background: "var(--border)" }} />
+        </div>
 
         <button 
-          onClick={handleGoogleAuth} 
-          style={{ ...styles.button, ...styles.googleButton }} 
+          className="btn btn-outline" 
+          style={{ width: "100%", padding: 12, display: "flex", alignItems: "center", justifyContent: "center", gap: 8, fontSize: 14 }}
+          onClick={handleGoogleAuth}
           disabled={loading}
         >
-          <svg style={styles.googleIcon} viewBox="0 0 24 24">
-            <path
-              fill="#EA4335"
-              d="M5.266 9.765A7.077 7.077 0 0112 4.909c1.69 0 3.218.6 4.418 1.582L19.9 3C17.782 1.145 15.055 0 12 0 7.33 0 3.357 2.72 1.5 6.664l3.766 3.101z"
-            />
-            <path
-              fill="#4285F4"
-              d="M23.49 12.275c0-.796-.073-1.564-.205-2.305H12v4.545h6.459a5.537 5.537 0 01-2.395 3.636l3.722 2.887c2.182-2.014 3.436-4.977 3.436-8.763z"
-            />
-            <path
-              fill="#FBBC05"
-              d="M5.266 14.235L1.5 17.336A11.954 11.954 0 010 12c0-1.923.455-3.736 1.5-5.336l3.766 3.101A7.07 7.07 0 004.91 12c0 8.04.136.79.356 2.235z"
-            />
-            <path
-              fill="#34A853"
-              d="M12 24c3.24 0 5.955-1.077 7.936-2.918l-3.722-2.887c-1.032.69-2.35.1-4.214.1-4.418 0-6.146-4.855-6.734-7.146L1.5 14.235C3.357 21.28 7.33 24 12 24z"
-            />
+          <svg style={{ width: 18, height: 18 }} viewBox="0 0 24 24">
+            <path fill="#EA4335" d="M12 5.04c1.63 0 3.1.56 4.25 1.66l3.18-3.18C17.51 1.7 14.98 1 12 1 7.35 1 3.37 3.67 1.39 7.56l3.86 2.45c.91-2.73 3.49-4.97 6.75-4.97z"/>
+            <path fill="#4285F4" d="M23.49 12.27c0-.81-.07-1.59-.2-2.27H12v4.51h6.44c-.28 1.47-1.08 2.72-2.33 3.56l3.63 2.81c2.13-1.96 3.75-4.84 3.75-8.61z"/>
+            <path fill="#FBBC05" d="M5.25 14.51c-.24-.72-.38-1.49-.38-2.27s.14-1.55.38-2.27L1.39 7.52C.5 9.27 0 11.23 0 12.27s.5 3 1.39 4.75l3.86-2.51z"/>
+            <path fill="#34A853" d="M12 22.96c3.24 0 5.96-1.08 7.94-2.91l-3.63-2.81c-1.01.68-2.3 1.08-4.31 1.08-3.26 0-5.84-2.24-6.75-4.97H1.39v2.51c1.98 3.89 5.96 6.56 10.61 6.56z"/>
           </svg>
           Войти через Google
         </button>
 
-        <div style={styles.toggleText}>
-          {isLogin ? "Впервые у нас? " : "Уже есть аккаунт? "}
-          <span onClick={() => setIsLogin(!isLogin)} style={styles.toggleLink}>
-            {isLogin ? "Создать аккаунт" : "Войти"}
-          </span>
-        </div>
+        <button 
+          className="btn btn-ghost" 
+          style={{ width: "100%", marginTop: 14, fontSize: 13, color: "var(--sage)" }}
+          onClick={() => setIsRegistering(!isRegistering)}
+        >
+          {isRegistering ? "Уже есть аккаунт? Войти" : "Нет аккаунта? Зарегистрироваться"}
+        </button>
       </div>
+
+      <button 
+        className="btn btn-ghost" 
+        style={{ width: "100%", marginTop: 16, fontSize: 13, color: "var(--muted)" }}
+        onClick={onGuestMode}
+      >
+        Войти как Гость (прогресс сохранится только в этом браузере)
+      </button>
     </div>
   );
-};
-
-// Простые встроенные стили
-const styles: { [key: string]: React.CSSProperties } = {
-  container: {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    minHeight: "100vh",
-    backgroundColor: "#f5f5f7",
-    fontFamily: "sans-serif"
-  },
-  card: {
-    background: "#fff",
-    padding: "30px",
-    borderRadius: "12px",
-    boxShadow: "0 4px 12px rgba(0,0,0,0.1)",
-    width: "100%",
-    maxWidth: "400px",
-    boxSizing: "border-box",
-    textAlign: "center"
-  },
-  title: {
-    margin: "0 0 20px 0",
-    color: "#333"
-  },
-  error: {
-    color: "#fff",
-    background: "#ea4335",
-    padding: "10px",
-    borderRadius: "6px",
-    marginBottom: "15px",
-    fontSize: "14px"
-  },
-  form: {
-    display: "flex",
-    flexDirection: "column",
-    gap: "12px"
-  },
-  input: {
-    padding: "12px",
-    borderRadius: "6px",
-    border: "1px solid #ccc",
-    fontSize: "16px"
-  },
-  button: {
-    padding: "12px",
-    borderRadius: "6px",
-    border: "none",
-    backgroundColor: "#0071e3",
-    color: "#fff",
-    fontSize: "16px",
-    fontWeight: "bold",
-    cursor: "pointer",
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    gap: "10px"
-  },
-  divider: {
-    margin: "20px 0",
-    color: "#888",
-    fontSize: "14px"
-  },
-  googleButton: {
-    backgroundColor: "#fff",
-    color: "#5f6368",
-    border: "1px solid #dadce0"
-  },
-  googleIcon: {
-    width: "18px",
-    height: "18px"
-  },
-  toggleText: {
-    marginTop: "20px",
-    fontSize: "14px",
-    color: "#666"
-  },
-  toggleLink: {
-    color: "#0071e3",
-    cursor: "pointer",
-    fontWeight: "bold"
-  }
-};
-
-// Исправление экспорта по умолчанию для App.tsx
-export default AuthScreen;
+}
