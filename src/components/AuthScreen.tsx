@@ -67,7 +67,7 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
   };
 
   return (
-    <div className="fade-in max-w-md mx-auto" style={{ paddingTop: 40 }}>
+    <div className="auth-container fade-in">
       <div style={{ textAlign: "center", marginBottom: 24 }}>
         <h1 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 34, color: "var(--warm)" }}>
           My English Journal

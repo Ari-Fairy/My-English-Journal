@@ -47,6 +47,14 @@ body::before {
   z-index: 1;
 }
 
+.auth-container {
+  max-width: 480px;
+  margin: 0 auto;
+  padding: 40px 16px 88px;
+  position: relative;
+  z-index: 1;
+}
+
 .card {
   background: var(--card);
   border: 1px solid var(--border);
