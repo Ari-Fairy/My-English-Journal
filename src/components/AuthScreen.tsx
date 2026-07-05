@@ -1,8 +1,9 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import { 
   signInWithEmailAndPassword, 
   createUserWithEmailAndPassword, 
-  signInWithPopup, 
+  signInWithRedirect, 
+  getRedirectResult,
   GoogleAuthProvider 
 } from "firebase/auth";
 import { auth } from "../firebase";
@@ -18,6 +19,20 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
   const [isRegistering, setIsRegistering] = useState(false);
   const [errorMsg, setErrorMsg] = useState("");
   const [loading, setLoading] = useState(false);
+
+  // Ловим результат редиректа при загрузке компонента
+  useEffect(() => {
+    getRedirectResult(auth)
+      .then((result) => {
+        if (result?.user) {
+          onSuccess(result.user.uid);
+        }
+      })
+      .catch((err: any) => {
+        console.error("Ошибка редиректа:", err);
+        setErrorMsg("Не удалось завершить вход через Google. Попробуйте ещё раз.");
+      });
+  }, [onSuccess]);
 
   const handleEmailAuth = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,16 +67,14 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
     setErrorMsg("");
     
     const provider = new GoogleAuthProvider();
-    // Заставляем окно всегда предлагать выбор аккаунта
     provider.setCustomParameters({ prompt: "select_account" });
 
     try {
-      const result = await signInWithPopup(auth, provider);
-      onSuccess(result.user.uid);
+      // Используем редирект вместо всплывающего окна
+      await signInWithRedirect(auth, provider);
     } catch (err: any) {
       console.error(err);
-      setErrorMsg("Ошибка авторизации через Google. Попробуйте обновить страницу.");
-    } finally {
+      setErrorMsg("Ошибка инициализации авторизации. Попробуйте обновить страницу.");
       setLoading(false);
     }
   };
