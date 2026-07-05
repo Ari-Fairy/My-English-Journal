@@ -1,0 +1,75 @@
+{
+  "entities": {
+    "Word": {
+      "title": "Word",
+      "description": "A vocabulary word entry in the user's dictionary.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "en": { "type": "string" },
+        "ru": { "type": "string" },
+        "partOfSpeech": { "type": "string" },
+        "topic": { "type": "string" },
+        "note": { "type": "string" },
+        "learned": { "type": "boolean" },
+        "learnedDate": { "type": "string" },
+        "lastReviewed": { "type": "string" },
+        "correct": { "type": "integer" },
+        "wrong": { "type": "integer" },
+        "streak": { "type": "integer" },
+        "created": { "type": "string" }
+      },
+      "required": ["userId", "en", "ru", "partOfSpeech", "topic", "learned", "correct", "wrong", "streak", "created"]
+    },
+    "IrregularVerb": {
+      "title": "IrregularVerb",
+      "description": "An irregular verb tracking entry.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "base": { "type": "string" },
+        "past": { "type": "string" },
+        "participle": { "type": "string" },
+        "ru": { "type": "string" },
+        "learned": { "type": "boolean" },
+        "learnedDate": { "type": "string" },
+        "streak": { "type": "integer" }
+      },
+      "required": ["userId", "base", "past", "participle", "ru", "learned", "streak"]
+    },
+    "UserProgress": {
+      "title": "UserProgress",
+      "description": "A user's learning stats, configurations and progress records.",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "streak": { "type": "integer" },
+        "best": { "type": "integer" },
+        "lastVisit": { "type": "string" },
+        "achievements": { "type": "array" },
+        "booksRead": { "type": "integer" },
+        "wordsFromBooks": { "type": "integer" },
+        "bestStreak": { "type": "integer" },
+        "daily": { "type": "object" },
+        "dailyBooksRead": { "type": "object" },
+        "customTopics": { "type": "object" },
+        "customPos": { "type": "object" }
+      },
+      "required": ["userId"]
+    }
+  },
+  "firestore": {
+    "/words/{wordId}": {
+      "schema": "Word",
+      "description": "Dictionary words of all users."
+    },
+    "/irregular/{verbId}": {
+      "schema": "IrregularVerb",
+      "description": "Irregular verbs configurations and user-learned state tracking."
+    },
+    "/users/{userId}": {
+      "schema": "UserProgress",
+      "description": "User progress statistics and settings."
+    }
+  }
+}

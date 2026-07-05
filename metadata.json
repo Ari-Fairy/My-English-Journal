@@ -1,0 +1,6 @@
+{
+  "name": "My English Journal",
+  "description": "An elegant English learning journal featuring text-to-speech reading, irregular verbs exercises, custom dictionaries, and progress tracking.",
+  "requestFramePermissions": ["microphone"],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}

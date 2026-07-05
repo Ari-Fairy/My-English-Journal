@@ -1,0 +1,107 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Common helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() <= 128;
+    }
+
+    // Enforce valid Word document structure
+    function isValidWord(data) {
+      return data.userId is string 
+        && data.userId.size() <= 128
+        && data.en is string 
+        && data.en.size() <= 200
+        && data.ru is string 
+        && data.ru.size() <= 300
+        && (data.partOfSpeech == null || (data.partOfSpeech is string && data.partOfSpeech.size() <= 100))
+        && (data.topic == null || (data.topic is string && data.topic.size() <= 100))
+        && (data.learned == null || data.learned is bool)
+        && (data.correct == null || data.correct is int)
+        && (data.wrong == null || data.wrong is int)
+        && (data.streak == null || data.streak is int)
+        && (data.created == null || data.created is string);
+    }
+
+    // Enforce valid IrregularVerb document structure
+    function isValidIrregularVerb(data) {
+      return data.userId is string
+        && data.userId.size() <= 128
+        && (data.base == null || (data.base is string && data.base.size() <= 100))
+        && (data.past == null || (data.past is string && data.past.size() <= 100))
+        && (data.participle == null || (data.participle is string && data.participle.size() <= 100))
+        && (data.ru == null || (data.ru is string && data.ru.size() <= 200))
+        && (data.learned == null || data.learned is bool)
+        && (data.streak == null || data.streak is int);
+    }
+
+    // Enforce valid UserProgress document structure
+    function isValidUserProgress(data) {
+      return data.userId is string
+        && data.userId.size() <= 128;
+    }
+
+    // Match rules for Words collection
+    match /words/{wordId} {
+      allow create: if isSignedIn() 
+        && isValidId(wordId)
+        && request.resource.data.userId == request.auth.uid
+        && isValidWord(request.resource.data);
+
+      allow read, delete: if isSignedIn() 
+        && resource.data.userId == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && isValidWord(request.resource.data);
+    }
+
+    // Match rules for Irregular verbs collection
+    match /irregular/{verbId} {
+      allow create: if isSignedIn()
+        && isValidId(verbId)
+        && request.resource.data.userId == request.auth.uid
+        && isValidIrregularVerb(request.resource.data);
+
+      allow read, delete: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+
+      allow update: if isSignedIn()
+        && resource.data.userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && isValidIrregularVerb(request.resource.data);
+    }
+
+    // Match rules for Users collection
+    match /users/{userId} {
+      allow create: if isSignedIn()
+        && isValidId(userId)
+        && userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && isValidUserProgress(request.resource.data);
+
+      allow read: if isSignedIn()
+        && userId == request.auth.uid;
+
+      allow update, delete: if isSignedIn()
+        && userId == request.auth.uid
+        && request.resource.data.userId == request.auth.uid
+        && isValidUserProgress(request.resource.data);
+    }
+  }
+}
