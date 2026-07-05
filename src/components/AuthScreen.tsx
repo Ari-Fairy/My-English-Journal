@@ -80,7 +80,7 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
     setErrorMsg("");
 
     // Идентификатор твоего Web-клиента Google из Firebase / Google Cloud
-    const clientId = "543788226922-h211516f3chfbbesapamqqj12u7201b1.apps.googleusercontent.com"; 
+    const clientId = "482980463406-h211516f3chfbbesapamqqj12u7201b1.apps.googleusercontent.com";
     const redirectUri = window.location.origin; // Автоматически подставит твой текущий домен Vercel
     const scope = "openid email profile";
     const responseType = "token";
