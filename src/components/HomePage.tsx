@@ -106,15 +106,15 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             borderRadius: "1.75rem", 
             fontSize: 15,
             background: reviewWords.length > 0 ? "var(--sage)" : learnedCount > 0 ? "rgba(148,161,135,.15)" : "rgba(180,180,180,.14)",
-            color: reviewWords.length > 0 ? "#fff" : learnedCount > 0 ? "var(--text-dark)" : "#aaa",
+            color: reviewWords.length > 0 ? "#fff" : learnedCount > 0 ? "var(--warm)" : "#aaa",
             boxShadow: reviewWords.length > 0 ? "0 4px 14px rgba(148,161,135,.3)" : "none",
             border: reviewWords.length > 0 ? "none" : learnedCount > 0 ? "1.5px solid var(--sage)" : "1.5px dashed rgba(180,180,180,.3)",
             cursor: learnedCount > 0 ? "pointer" : "default"
           }}
           onClick={() => {
-            if (reviewWords.length > 0 || learnedCount > 0) {
+            if (reviewWords.length > 0) {
               onStartStudy("review");
-            } else {
+            } else if (learnedCount > 0) {
               setRecallInfo(r => !r);
             }
           }}
@@ -128,7 +128,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
                 ? "Сначала выучи слова 📚" 
                 : reviewWords.length > 0 
                   ? `${reviewWords.length} слов ждут` 
-                  : `Все ${learnedCount} слов повторены. Повторить вне очереди?`
+                  : `Все ${learnedCount} слов повторены! См. график 📅`
               }
             </div>
           </div>
@@ -139,9 +139,9 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
           <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>📅 Расписание повторений</div>
             {words.filter(w => w.learned).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b)).slice(0, 5).map(w => (
-              <div key={w.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid #f0ebe3" }}>
+              <div key={w.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
                 <span style={{ fontWeight: 500 }}>{w.en}</span>
-                <span style={{ color: "#aaa" }}>{formatTimeLeft(getNextReviewTimeMs(w))}</span>
+                <span style={{ color: "var(--muted)" }}>{formatTimeLeft(getNextReviewTimeMs(w))}</span>
               </div>
             ))}
           </div>

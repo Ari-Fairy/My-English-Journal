@@ -140,10 +140,7 @@ export default function StudyScreen({
   const getPool = () => {
     if (sessionType === "learn") return words.filter(w => !w.learned);
     if (sessionType === "review") {
-      const due = words.filter(w => w.learned && getNextReviewTimeMs(w) === 0);
-      if (due.length > 0) return due;
-      // Если запланированных нет, возвращаем все выученные слова для свободного повторения!
-      return words.filter(w => w.learned);
+      return words.filter(w => w.learned && getNextReviewTimeMs(w) === 0);
     }
     return words.filter(w => w.learned);
   };

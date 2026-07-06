@@ -10,6 +10,9 @@ interface SettingsScreenProps {
   words: Word[];
   irregular: IrregularVerb[];
   stats: UserProgress;
+  theme: "light" | "dark";
+  onToggleTheme: () => void;
+  onResetProgress: () => Promise<void>;
   onLogout: () => void;
   onImportData: (data: { words: Word[]; irregular: IrregularVerb[]; progress: UserProgress }) => void;
   onBack: () => void;
@@ -20,6 +23,9 @@ export default function SettingsScreen({
   words,
   irregular,
   stats,
+  theme,
+  onToggleTheme,
+  onResetProgress,
   onLogout,
   onBack,
   onImportData
@@ -81,6 +87,22 @@ export default function SettingsScreen({
       }
     };
     reader.readAsText(file);
+  };
+
+  const handleResetProgress = async () => {
+    const ok = confirm("Вы уверены, что хотите сбросить только прогресс обучения, серии дней и достижения? Все добавленные в словарь слова и глаголы ОСТАНУТСЯ.");
+    if (!ok) return;
+
+    setLoading(true);
+    try {
+      await onResetProgress();
+      notify("✅ Статистика и прогресс сброшены! Словарь и глаголы сохранены.");
+    } catch (err) {
+      console.error(err);
+      notify("❌ Ошибка при сбросе прогресса.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   const handleWipeData = async () => {
@@ -204,6 +226,28 @@ export default function SettingsScreen({
         )}
       </div>
 
+      {/* Theme Settings */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🎨 Оформление</h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+          <span style={{ fontSize: 13, color: "var(--warm)" }}>Режим отображения</span>
+          <button 
+            className="btn btn-outline btn-sm"
+            style={{ 
+              display: "flex", 
+              alignItems: "center", 
+              gap: 6,
+              fontSize: 13,
+              borderColor: "var(--border)",
+              background: "var(--card)"
+            }}
+            onClick={onToggleTheme}
+          >
+            {theme === "dark" ? "🌙 Тёмная тема" : "☀️ Светлая тема"}
+          </button>
+        </div>
+      </div>
+
       {/* Manual Import / Export */}
       <div className="card" style={{ marginBottom: 12 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>💾 Резервное копирование</h3>
@@ -226,6 +270,24 @@ export default function SettingsScreen({
 
       {/* Danger Zone */}
       <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+        <button 
+          className="btn" 
+          style={{ 
+            width: "100%", 
+            padding: 13, 
+            color: "var(--sage)", 
+            border: "1.5px solid rgba(124, 139, 114, 0.35)", 
+            borderRadius: "999px",
+            background: "transparent",
+            fontSize: 14,
+            fontWeight: 500
+          }} 
+          onClick={handleResetProgress}
+          disabled={loading}
+        >
+          🔄 Сбросить только прогресс обучения
+        </button>
+
         <button 
           className="btn" 
           style={{ width: "100%", padding: 13, color: "var(--rose)", border: "1.5px solid rgba(212,165,165,.25)", borderRadius: "999px" }} 

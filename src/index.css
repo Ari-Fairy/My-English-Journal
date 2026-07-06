@@ -19,6 +19,22 @@
   --border-dashed: #D1CEC4;
   --rose-soft: rgba(181, 93, 76, 0.08);
   --sage-soft: #E5E9E0;         /* Soft light green background */
+  --level-b2-bg: rgba(62, 61, 57, 0.08);
+}
+
+[data-theme="dark"] {
+  --rose: #D37D6C;              /* Cozy warm terracotta */
+  --sage: #9AB28C;              /* Soft olive sage */
+  --lavender: #B5AB9B;          /* Soft taupe */
+  --cream: #1A1917;             /* Cozy dark charcoal background */
+  --warm: #F2EFE8;              /* Warm off-white */
+  --muted: #9F9D95;             /* Soft grayish brown */
+  --card: #252320;              /* Rich warm dark grey */
+  --border: #3A3833;            /* Warm dark border */
+  --border-dashed: #4F4C45;
+  --rose-soft: rgba(211, 125, 108, 0.12);
+  --sage-soft: #272C22;         /* Dark olive tint */
+  --level-b2-bg: rgba(242, 239, 232, 0.1);
 }
 
 body {
@@ -178,7 +194,7 @@ body::before {
 .select {
   padding: 10px 13px;
   border: 1.5px solid var(--border);
-  background: #fff;
+  background: var(--card);
   border-radius: 1rem;
   font-size: 13px;
   color: var(--warm);
@@ -191,7 +207,7 @@ body::before {
   display: flex;
   gap: 4px;
   padding: 4px;
-  background: #EBE8E0;
+  background: var(--border);
   border-radius: 999px;
 }
 
@@ -211,7 +227,7 @@ body::before {
 }
 
 .tab.active {
-  background: #fff;
+  background: var(--card);
   color: var(--rose);
   font-weight: 600;
   box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
@@ -259,7 +275,7 @@ body::before {
 
 .progress-bar {
   height: 6px;
-  background: #EBE8E0;
+  background: var(--border);
   border-radius: 999px;
   overflow: hidden;
 }
@@ -279,7 +295,7 @@ body::before {
   font-weight: 700;
   text-transform: uppercase;
   letter-spacing: .06em;
-  background: #F0EEE6;
+  background: var(--border);
   color: var(--warm);
 }
 
@@ -298,7 +314,7 @@ body::before {
   align-items: center;
   gap: 8px;
   padding: 8px;
-  background: #F5F3EC;
+  background: var(--border);
   border-radius: 12px;
   margin-bottom: 6px;
 }
@@ -429,7 +445,7 @@ body::before {
   width: 100%;
   padding: 15px 18px;
   border: 1.5px solid var(--border);
-  background: rgba(255, 255, 255, 0.7);
+  background: var(--card);
   border-radius: 1.5rem;
   text-align: left;
   font-size: 15px;
@@ -440,7 +456,7 @@ body::before {
 }
 
 .choice-btn:hover {
-  background: #F5F3EC;
+  background: var(--cream);
   border-color: var(--sage);
 }
 
@@ -464,7 +480,7 @@ body::before {
 }
 
 .voice-btn.idle {
-  background: #fff;
+  background: var(--card);
   color: var(--rose);
   border: 3px solid rgba(181, 93, 76, 0.2);
 }
@@ -733,7 +749,7 @@ body::before {
 }
 
 .level-A2 {
-  background: #F0EEE6;
+  background: var(--border);
   color: var(--lavender);
 }
 
@@ -743,7 +759,7 @@ body::before {
 }
 
 .level-B2 {
-  background: rgba(62, 61, 57, 0.08);
+  background: var(--level-b2-bg);
   color: var(--warm);
 }
 

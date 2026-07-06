@@ -32,6 +32,15 @@ export default function App() {
   const [view, setView] = useState<"home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings">("home");
   const [sessionType, setSessionType] = useState<"learn" | "review">("learn");
 
+  const [theme, setTheme] = useState<"light" | "dark">(() => {
+    return (localStorage.getItem("my-eng-theme") as "light" | "dark") || "light";
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute("data-theme", theme);
+    localStorage.setItem("my-eng-theme", theme);
+  }, [theme]);
+
   // Core app data (local state sync)
   const [words, setWords] = useState<Word[]>([]);
   const [irregular, setIrregular] = useState<IrregularVerb[]>([]);
@@ -545,6 +554,63 @@ export default function App() {
     }
   };
 
+  // Reset study progress while keeping dictionary words and irregular verbs intact
+  const handleResetProgress = async () => {
+    const userId = user && user !== "guest" ? user.uid : "guest";
+
+    const resetWordsList = words.map(w => ({
+      ...w,
+      learned: false,
+      correct: 0,
+      wrong: 0,
+      streak: 0,
+      learnedDate: undefined,
+      lastReviewed: undefined
+    }));
+
+    const resetVerbsList = irregular.map(v => ({
+      ...v,
+      correct: 0,
+      wrong: 0,
+      streak: 0,
+      lastReviewed: undefined
+    }));
+
+    const resetProgress: UserProgress = {
+      userId,
+      streak: 1,
+      best: 1,
+      lastVisit: getLocalDateString(),
+      achievements: [],
+      booksRead: 0,
+      wordsFromBooks: 0,
+      bestStreak: 0,
+      daily: {},
+      dailyBooksRead: {}
+    };
+
+    setWords(resetWordsList);
+    setIrregular(resetVerbsList);
+    setProgress(resetProgress);
+
+    if (user && user !== "guest") {
+      saveUserData(user.uid, resetWordsList, resetVerbsList, resetProgress);
+      try {
+        await Promise.all([
+          ...resetWordsList.map(w => saveWord(w)),
+          ...resetVerbsList.map(v => saveIrregularVerb(v)),
+          saveUserProgress(resetProgress)
+        ]);
+        setSyncError(null);
+      } catch (e) {
+        console.error("Failed to sync reset to cloud:", e);
+        setSyncError("⚠️ Ошибка при синхронизации сброса с облаком.");
+      }
+    } else {
+      saveGuestData(resetWordsList, resetVerbsList, resetProgress);
+    }
+  };
+
   const handleLogout = () => {
     setUser(null);
     setWords([]);
@@ -772,6 +838,9 @@ export default function App() {
           words={words}
           irregular={irregular}
           stats={progress}
+          theme={theme}
+          onToggleTheme={() => setTheme(t => t === "light" ? "dark" : "light")}
+          onResetProgress={handleResetProgress}
           onLogout={handleLogout}
           onImportData={handleImportBackup}
           onBack={() => setView("home")}
