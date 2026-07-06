@@ -46,27 +46,14 @@ export default function SettingsScreen({
   const sendImmediateNotification = (title: string, body: string) => {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
       try {
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.ready.then((registration) => {
-            registration.showNotification(title, {
-              body,
-              icon: "/favicon.ico",
-              badge: "/favicon.ico",
-              tag: "my-eng-reminder",
-              renotify: true
-            } as any);
-          }).catch(() => {
-            new Notification(title, { body, icon: "/favicon.ico" });
-          });
-        } else {
-          new Notification(title, { body, icon: "/favicon.ico" });
-        }
+        new Notification(title, {
+          body,
+          icon: "/favicon.ico",
+          badge: "/favicon.ico",
+          tag: "my-eng-reminder"
+        } as any);
       } catch (e) {
-        try {
-          new Notification(title, { body, icon: "/favicon.ico" });
-        } catch (err) {
-          console.error("Notification constructor failed:", err);
-        }
+        console.error("Notification constructor failed:", e);
       }
     }
   };

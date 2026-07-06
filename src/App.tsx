@@ -89,27 +89,16 @@ export default function App() {
       const body = "Пора повторить новые слова! Зайди в журнал сегодня, чтобы закрепить материал и сохранить свою серию занятий активной! 🔥";
       
       try {
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.ready.then((registration) => {
-            registration.showNotification(title, {
-              body,
-              icon: "/favicon.ico",
-              badge: "/favicon.ico",
-              tag: "my-eng-reminder",
-              renotify: true
-            } as any);
-          }).catch(() => {
-            new Notification(title, { body, icon: "/favicon.ico" });
-          });
-        } else {
-          new Notification(title, { body, icon: "/favicon.ico" });
+        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+          new Notification(title, {
+            body,
+            icon: "/favicon.ico",
+            badge: "/favicon.ico",
+            tag: "my-eng-reminder"
+          } as any);
         }
       } catch (e) {
-        try {
-          new Notification(title, { body, icon: "/favicon.ico" });
-        } catch (err) {
-          console.error("Reminder notification failed:", err);
-        }
+        console.error("Reminder notification failed:", e);
       }
     };
 
