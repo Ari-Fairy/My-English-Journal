@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI } from "@google/genai";
+import { GoogleGenAI, Type } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -206,21 +206,7 @@ app.post("/api/generate-quiz", async (req, res) => {
 
     const systemInstruction = `You are an expert English teacher. Analyze the English story provided and generate 3 interactive multiple-choice questions (comprehension check) to test the reader's understanding of the plot.
 The questions themselves should be in simple, level-appropriate English (appropriate for level ${level || "A2"}). The options should be in English.
-Provide a clear, brief explanation in Russian of why the correct answer is correct.
-
-Return ONLY a valid JSON object in this exact shape:
-{
-  "questions": [
-    {
-      "question": "Question text in English?",
-      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
-      "correctIndex": 0,
-      "explanation": "Explanation in Russian of why this is correct."
-    }
-  ]
-}
-
-Ensure correctIndex is an integer between 0 and 3. Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
+Provide a clear, brief explanation in Russian of why the correct answer is correct.`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
@@ -228,13 +214,50 @@ Ensure correctIndex is an integer between 0 and 3. Return absolutely nothing els
         { text: systemInstruction },
         { text: `Story Title: "${title}"\nStory Content:\n"${storyText}"` }
       ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            questions: {
+              type: Type.ARRAY,
+              description: "Array of exactly 3 multiple choice questions based on the story content.",
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  question: {
+                    type: Type.STRING,
+                    description: "The question text in English, appropriate for the given CEFR level."
+                  },
+                  options: {
+                    type: Type.ARRAY,
+                    description: "Exactly 4 options in English.",
+                    items: {
+                      type: Type.STRING
+                    }
+                  },
+                  correctIndex: {
+                    type: Type.INTEGER,
+                    description: "0-based index of the correct option (integer 0 to 3)."
+                  },
+                  explanation: {
+                    type: Type.STRING,
+                    description: "A short, encouraging explanation in Russian explaining why this answer is correct."
+                  }
+                },
+                required: ["question", "options", "correctIndex", "explanation"]
+              }
+            }
+          },
+          required: ["questions"]
+        }
+      }
     });
 
     const text = response.text || "";
-    const cleanText = text.replace(/```json|```/g, "").trim();
 
     try {
-      const parsedQuiz = JSON.parse(cleanText);
+      const parsedQuiz = JSON.parse(text.trim());
       res.json(parsedQuiz);
     } catch (parseError) {
       console.error("Failed to parse quiz JSON. Raw response was:", text);

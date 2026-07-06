@@ -7,7 +7,8 @@ import {
   saveWord, 
   deleteWord, 
   saveIrregularVerb, 
-  saveUserProgress 
+  saveUserProgress,
+  batchResetUserData
 } from "./firebaseSync";
 import { Word, IrregularVerb, UserProgress } from "./types";
 import { checkAchievements, ACHIEVEMENTS_DEF, SEED_WORDS, SEED_IRREGULAR } from "./data";
@@ -596,11 +597,7 @@ export default function App() {
     if (user && user !== "guest") {
       saveUserData(user.uid, resetWordsList, resetVerbsList, resetProgress);
       try {
-        await Promise.all([
-          ...resetWordsList.map(w => saveWord(w)),
-          ...resetVerbsList.map(v => saveIrregularVerb(v)),
-          saveUserProgress(resetProgress)
-        ]);
+        await batchResetUserData(user.uid, resetWordsList, resetVerbsList, resetProgress);
         setSyncError(null);
       } catch (e) {
         console.error("Failed to sync reset to cloud:", e);

@@ -227,6 +227,28 @@ export async function saveUserProgress(progress: UserProgress): Promise<void> {
   }
 }
 
+// Batch reset user study data atomically using writeBatch to avoid connection limits and timeouts
+export async function batchResetUserData(userId: string, resetWords: Word[], resetVerbs: IrregularVerb[], resetProgress: UserProgress): Promise<void> {
+  const batch = writeBatch(db);
+
+  for (const w of resetWords) {
+    batch.set(doc(wordsCollection, w.id), w);
+  }
+
+  for (const v of resetVerbs) {
+    batch.set(doc(irregularCollection, v.id), v);
+  }
+
+  batch.set(doc(usersCollection, userId), resetProgress);
+
+  try {
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `batchResetUserData/${userId}`);
+    throw error;
+  }
+}
+
 // Completely delete all data for a specific user ID (Settings wipeout feature!)
 export async function wipeUserAccountData(userId: string): Promise<void> {
   const batch = writeBatch(db);
