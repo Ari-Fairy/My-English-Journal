@@ -191,10 +191,29 @@ export async function fetchUserData(userId: string): Promise<{ words: Word[]; ir
   }
 }
 
+// Recursively sanitize objects for Firestore to remove 'undefined' fields
+export function cleanForFirestore<T>(obj: T): T {
+  if (obj === null || obj === undefined) return null as any;
+  if (Array.isArray(obj)) {
+    return obj.map(item => cleanForFirestore(item)) as any;
+  }
+  if (typeof obj === "object") {
+    const cleaned: any = {};
+    for (const key of Object.keys(obj)) {
+      const val = (obj as any)[key];
+      if (val !== undefined) {
+        cleaned[key] = cleanForFirestore(val);
+      }
+    }
+    return cleaned;
+  }
+  return obj;
+}
+
 // Save a word (insert or update)
 export async function saveWord(word: Word): Promise<void> {
   try {
-    await setDoc(doc(wordsCollection, word.id), word);
+    await setDoc(doc(wordsCollection, word.id), cleanForFirestore(word));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `words/${word.id}`);
   }
@@ -212,7 +231,7 @@ export async function deleteWord(wordId: string): Promise<void> {
 // Save an irregular verb
 export async function saveIrregularVerb(verb: IrregularVerb): Promise<void> {
   try {
-    await setDoc(doc(irregularCollection, verb.id), verb);
+    await setDoc(doc(irregularCollection, verb.id), cleanForFirestore(verb));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `irregular/${verb.id}`);
   }
@@ -221,7 +240,7 @@ export async function saveIrregularVerb(verb: IrregularVerb): Promise<void> {
 // Save user progress stats
 export async function saveUserProgress(progress: UserProgress): Promise<void> {
   try {
-    await setDoc(doc(usersCollection, progress.userId), progress);
+    await setDoc(doc(usersCollection, progress.userId), cleanForFirestore(progress));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `users/${progress.userId}`);
   }
@@ -232,14 +251,14 @@ export async function batchResetUserData(userId: string, resetWords: Word[], res
   const batch = writeBatch(db);
 
   for (const w of resetWords) {
-    batch.set(doc(wordsCollection, w.id), w);
+    batch.set(doc(wordsCollection, w.id), cleanForFirestore(w));
   }
 
   for (const v of resetVerbs) {
-    batch.set(doc(irregularCollection, v.id), v);
+    batch.set(doc(irregularCollection, v.id), cleanForFirestore(v));
   }
 
-  batch.set(doc(usersCollection, userId), resetProgress);
+  batch.set(doc(usersCollection, userId), cleanForFirestore(resetProgress));
 
   try {
     await batch.commit();

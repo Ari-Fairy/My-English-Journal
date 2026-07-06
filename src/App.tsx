@@ -565,8 +565,8 @@ export default function App() {
       correct: 0,
       wrong: 0,
       streak: 0,
-      learnedDate: undefined,
-      lastReviewed: undefined
+      learnedDate: null,
+      lastReviewed: null
     }));
 
     const resetVerbsList = irregular.map(v => ({
@@ -574,7 +574,7 @@ export default function App() {
       correct: 0,
       wrong: 0,
       streak: 0,
-      lastReviewed: undefined
+      lastReviewed: null
     }));
 
     const resetProgress: UserProgress = {

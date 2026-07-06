@@ -232,6 +232,249 @@ export const BOOK_STORIES: { [key: string]: { title: string; level: string; text
   ]
 };
 
+export const STATIC_QUIZZES: { [key: string]: { question: string; options: string[]; correctIndex: number; explanation: string }[] } = {
+  "My Morning": [
+    {
+      question: "What does the author do in the kitchen?",
+      options: ["Cooks soup", "Makes tea", "Plays guitar", "Reads a book"],
+      correctIndex: 1,
+      explanation: "В тексте говорится: 'I go to the kitchen and make tea.'"
+    },
+    {
+      question: "Where does the author walk to?",
+      options: ["To school", "To the cinema", "To a restaurant", "To the cafe"],
+      correctIndex: 0,
+      explanation: "В тексте сказано: 'I walk to school.'"
+    },
+    {
+      question: "What does the author write in?",
+      options: ["A black notebook", "A newspaper", "A diary", "A letter"],
+      correctIndex: 2,
+      explanation: "В тексте сказано: 'I open my diary and write.'"
+    }
+  ],
+  "The Little Cafe": [
+    {
+      question: "What does the baker make every morning?",
+      options: ["Hot soup", "Sweet apples", "Fresh bread", "Pancakes"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'The baker makes fresh bread every morning.'"
+    },
+    {
+      question: "Who sleeps near the door?",
+      options: ["A cute dog", "A cute cat", "The author", "The baker"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'A cute cat sleeps near the door.'"
+    },
+    {
+      question: "What is the weather outside?",
+      options: ["It is sunny", "It is windy", "It is raining", "It is foggy"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'Sometimes I look outside. It is raining...'"
+    }
+  ],
+  "A Day in the Park": [
+    {
+      question: "What day of the week is it?",
+      options: ["Monday", "Friday", "Saturday", "Sunday"],
+      correctIndex: 3,
+      explanation: "В тексте сказано: 'Today is Sunday.'"
+    },
+    {
+      question: "What do the siblings ride on the path?",
+      options: ["Their skateboards", "Their bikes", "Their scooters", "Their horses"],
+      correctIndex: 1,
+      explanation: "В тексте говорится: 'We ride our bikes on the path.'"
+    },
+    {
+      question: "What do they eat under the big oak tree?",
+      options: ["Sweet apples", "Pancakes", "Fresh bread", "Sandwiches"],
+      correctIndex: 0,
+      explanation: "В тексте говорится: 'We eat sweet apples under a big oak tree.'"
+    }
+  ],
+  "A New Friend": [
+    {
+      question: "What is Nina a genius at?",
+      options: ["Speaking English", "Playing the piano", "Drawing", "Cooking fish"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'She is a genius at drawing.'"
+    },
+    {
+      question: "Where did they sit and talk near the river?",
+      options: ["In a small cafe", "Below an old tree", "On a bridge", "In Nina's house"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'We walked over the bridge and sat below an old tree near the river.'"
+    },
+    {
+      question: "What animal came and sat next to Nina?",
+      options: ["A bird", "A dog", "A cat", "A rabbit"],
+      correctIndex: 2,
+      explanation: "В тексте сказано: 'Suddenly a small cat came and sat next to Nina.'"
+    }
+  ],
+  "The Weekend Trip": [
+    {
+      question: "Where did the author's family drive?",
+      options: ["To a beach", "To a big city", "To a beautiful lake", "To a theme park"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'My family drove to a beautiful lake in the mountains.'"
+    },
+    {
+      question: "What did the father cook for dinner?",
+      options: ["Bread", "A fish", "Apples", "Pancakes"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'My father caught a fish and cooked it for dinner.'"
+    },
+    {
+      question: "Where did the author draw the lake?",
+      options: ["In their diary", "On a rock", "In a school book", "On the sand"],
+      correctIndex: 0,
+      explanation: "В тексте сказано: 'I drew the lake in my diary before going to bed.'"
+    }
+  ],
+  "The Lost Key": [
+    {
+      question: "Where did the author search for the key?",
+      options: ["Under the bed, in the bag, behind the sofa", "On the kitchen table and in the fridge", "In school and at the cafe", "In the garden and on the street"],
+      correctIndex: 0,
+      explanation: "В тексте говорится: 'I searched everywhere - under the bed, in my bag, and behind the sofa.'"
+    },
+    {
+      question: "Why was the author in a hurry?",
+      options: ["They were late for work", "They were late for their class", "They had to catch a flight", "They wanted to meet Nina"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'I was very late for my class.'"
+    },
+    {
+      question: "Where did the author find the key?",
+      options: ["Under the bed", "Behind the sofa", "In the grass near a wooden bench", "In their bag"],
+      correctIndex: 2,
+      explanation: "В тексте сказано: 'Fortunately, I saw something shining in the green grass near the wooden bench. It was my key!'"
+    }
+  ],
+  "The River Journey": [
+    {
+      question: "What did the author and their friend pack before starting the journey?",
+      options: ["Bikes and helmets", "Bags and a detailed map", "Food and fishing rods", "Guitars and diaries"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'We packed our bags carefully and took a detailed map.'"
+    },
+    {
+      question: "Where did they find shelter when the sky grew darker?",
+      options: ["In an old cottage", "In a field near some tall trees", "Under a wooden bridge", "In a local cafe"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'We found shelter in a field near some tall trees.'"
+    },
+    {
+      question: "What souvenir did the author put in their pocket?",
+      options: ["A smooth stone", "A fallen leaf", "A compass", "A handmade map"],
+      correctIndex: 0,
+      explanation: "В тексте сказано: 'I picked up a smooth stone from the riverbank and put it in my pocket.'"
+    }
+  ],
+  "The Silent Forest": [
+    {
+      question: "Why do local people call the woods 'Silent Woods'?",
+      options: ["Because there are no trees", "Because birds rarely sing and the wind is quiet", "Because people are not allowed to talk there", "Because of a legend about a ghost"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'No one knows exactly why, but birds rarely sing there, and even the wind seems to blow more quietly...'"
+    },
+    {
+      question: "What did the author find inside the abandoned cottage?",
+      options: ["A silent clock under a glass dome", "A gold key", "A decorated diary from 1924", "Paintings of changing seasons"],
+      correctIndex: 2,
+      explanation: "В тексте сказано: '...inside, I found a beautifully decorated diary from 1924.'"
+    },
+    {
+      question: "How did the author feel about the silence of the forest?",
+      options: ["They found it scary", "They found it boring", "They viewed it as a rare gift of solitude", "They felt lost and tired"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'The quietness was not scary at all; it was a rare gift of solitude.'"
+    }
+  ],
+  "A Town of Whispers": [
+    {
+      question: "What legend is the coastal village famous for?",
+      options: ["A clock that can pause time", "Whispers from the sea at the lighthouse at midnight", "A sleeping cat that predicts the weather", "An ancient treasure hidden in a bridge"],
+      correctIndex: 1,
+      explanation: "В тексте говорится: 'According to the locals, if you stand near the lighthouse at midnight, you can hear whispers from the sea.'"
+    },
+    {
+      question: "What was the weather like on the evening the author walked to the lighthouse?",
+      options: ["Warm and sunny", "Rainy and windy", "Cold and foggy", "Chilly and clear"],
+      correctIndex: 2,
+      explanation: "В тексте сказано: 'The night was cold, and fog covered the bridge below.'"
+    },
+    {
+      question: "What did the experience inspire the author to do?",
+      options: ["Buy a new compass", "Draw the ancient lighthouse", "Write a story in their diary", "Stay in the village forever"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'It was a beautiful experience that inspired me to write a story in my diary.'"
+    }
+  ],
+  "Letters to No One": [
+    {
+      question: "For how long had she been writing in her diary?",
+      options: ["For seven days", "For three weeks", "For three years", "Since she met a stranger"],
+      correctIndex: 2,
+      explanation: "В тексте сказано: 'She had been writing in her diary every evening for three years...'"
+    },
+    {
+      question: "What did she write in her diary on the evening she met him?",
+      options: ["A detailed story about the bridge", "Nothing at all", "His name and address", "A poem about the river"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'On the evening she met him, she wrote nothing.'"
+    },
+    {
+      question: "By the way, how did the stranger look at her?",
+      options: ["As if he wanted to steal her key", "As if he didn't care about her", "As if he already knew her name", "As if he was afraid of her"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'By the way, she thought later, he had looked at her as though he already knew her name.'"
+    }
+  ],
+  "The Clockmaker's Secret": [
+    {
+      question: "Under what pretext did the narrator visit the clockmaker's workshop?",
+      options: ["To buy a golden clock under a glass dome", "To repair an old pocket watch", "To interview him for school", "To hide from the cold weather"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'I visited his shop under the pretext of repairing my old pocket watch.'"
+    },
+    {
+      question: "What was unusual about the golden clock under the glass dome?",
+      options: ["It was ticking backwards", "It was silent, with frozen hands", "It was playing beautiful music", "It was extremely big and heavy"],
+      correctIndex: 1,
+      explanation: "В тексте говорится: 'It was silent, its hands frozen.'"
+    },
+    {
+      question: "According to the clockmaker, when does time slow down?",
+      options: ["When the golden clock is wound", "When we truly appreciate the present moment", "When we are asleep in bed", "When the weather is very cold"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'Time, he whispered... only slows down when we truly appreciate the present moment.'"
+    }
+  ],
+  "The Architecture of Dreams": [
+    {
+      question: "What was the exhibition that the author attended last week about?",
+      options: ["The history of ancient clocks", "The restoration of the historic city bridge", "Restoration of the lighthouse", "Dreams and how they affect the brain"],
+      correctIndex: 1,
+      explanation: "В тексте говорится: 'Last week, I attended an exhibition detailing the restoration of the historic bridge...'"
+    },
+    {
+      question: "What was the chief engineer's main goal when designing the bridge?",
+      options: ["To make it the cheapest crossing", "To design it as a monument to unity", "To make it extremely tall", "To compete with other architects"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'The blueprints... revealed that the chief engineer had designed the bridge... as a monument to unity.'"
+    },
+    {
+      question: "How were the arches below the bridge aligned?",
+      options: ["To capture the sunset on the winter solstice", "To look like musical notes", "To survive high river floods", "To match the style of the old cafe"],
+      correctIndex: 0,
+      explanation: "В тексте сказано: 'The arches below were precisely aligned to capture the sunset on the winter solstice.'"
+    }
+  ]
+};
+
 export interface Achievement {
   id: string;
   icon: string;

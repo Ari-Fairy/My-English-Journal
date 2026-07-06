@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Word, UserProgress } from "../types";
-import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR } from "../data";
+import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR, STATIC_QUIZZES } from "../data";
 import { speak, getLocalDateString } from "../utils";
 
 interface ReaderScreenProps {
@@ -200,13 +200,56 @@ export default function ReaderScreen({
         }
       }
     } catch (e) {
-      console.error("Failed to generate quiz", e);
+      console.error("Failed to generate quiz, using local fallback", e);
     }
 
-    // Fallback to finishing book directly if quiz generation fails
+    // High fidelity offline fallback
+    const staticQuiz = STATIC_QUIZZES[story.title];
+    if (staticQuiz && staticQuiz.length > 0) {
+      setQuizQuestions(staticQuiz);
+      setQuizLoading(false);
+      return;
+    }
+
+    // General robust dynamic local fallback quiz for AI-generated books when backend is down/unavailable
+    const generalFallbackQuiz = [
+      {
+        question: "What was the main purpose of reading this story?",
+        options: [
+          "To practice and improve your English vocabulary and reading skills",
+          "To translate every single word into your native language",
+          "To read as fast as possible without understanding",
+          "To learn how to draw paintings"
+        ],
+        correctIndex: 0,
+        explanation: "Главная цель чтения адаптированных книг — улучшение понимания английского языка и расширение словарного запаса в контексте!"
+      },
+      {
+        question: "Based on the text you just read, which statement is true?",
+        options: [
+          "The story had level-appropriate vocabulary and was written for active study",
+          "The story was written in a completely incomprehensible ancient language",
+          "The story contained no verbs or adjectives",
+          "The story was about a spacesuit repair manual"
+        ],
+        correctIndex: 0,
+        explanation: "История была создана с использованием лексики, соответствующей вашему уровню владения языком."
+      },
+      {
+        question: "What is the best way to remember new words that you clicked on during reading?",
+        options: [
+          "Repeat them several times and review them regularly in your built-in Dictionary",
+          "Forget them immediately after finishing the book",
+          "Never read any more stories",
+          "Write them on a wall"
+        ],
+        correctIndex: 0,
+        explanation: "Регулярный повтор изученных слов в разделе 'Словарь' — залог надежного запоминания!"
+      }
+    ];
+
+    setQuizQuestions(generalFallbackQuiz);
     setQuizLoading(false);
-    setCurrentQuizIdx(null);
-    handleFinishBook();
   };
 
   if (!selectedLevel) {
