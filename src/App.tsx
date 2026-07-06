@@ -614,9 +614,15 @@ export default function App() {
           <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", gap: "12px" }}>
             <span style={{ fontWeight: 500 }}>
               {syncError.includes("Автономный") || syncError.includes("локально") ? (
-                <>
-                  <span style={{ fontSize: "16px" }}>🦉</span> <strong>Локальный режим:</strong> Ваш прогресс сохраняется на устройстве! Из-за политики безопасности браузера (ограничений iframe-песочницы редактора), прямое подключение к облаку внутри этой панели ограничено.
-                </>
+                window.self !== window.top ? (
+                  <>
+                    <span style={{ fontSize: "16px" }}>🦉</span> <strong>Локальный режим:</strong> Ваш прогресс сохраняется на устройстве! Из-за политики безопасности браузера (ограничений iframe-песочницы редактора), прямое подключение к облаку внутри этой панели ограничено.
+                  </>
+                ) : (
+                  <>
+                    <span style={{ fontSize: "16px" }}>⚠️</span> <strong>Режим оффлайн:</strong> Не удалось подключиться к базе данных Firestore. Если вы только что создали проект Firebase, убедитесь, что вы создали (активировали) <strong>Firestore Database</strong> в консоли Firebase.
+                  </>
+                )
               ) : (
                 syncError
               )}
@@ -628,7 +634,7 @@ export default function App() {
               ×
             </button>
           </div>
-          {(syncError.includes("Автономный") || syncError.includes("локально")) && (
+          {(syncError.includes("Автономный") || syncError.includes("локально")) && window.self !== window.top && (
             <div style={{ display: "flex", flexWrap: "wrap", gap: "8px", marginTop: "4px" }}>
               <a 
                 href={window.location.href} 
