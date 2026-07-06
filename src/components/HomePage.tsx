@@ -15,6 +15,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
   const learnedCount = words.filter(w => w.learned).length;
   const today = getLocalDateString();
   const todayLearned = words.filter(w => w.learnedDate === today).length;
+  const wordsThisWeek = words.filter(w => w.learned && w.learnedDate && (Date.now() - new Date(w.learnedDate).getTime() <= 7 * 24 * 3600 * 1000)).length;
   const newWords = words.filter(w => !w.learned);
 
   const getNextReviewTimeMs = (w: Word) => {
@@ -146,6 +147,74 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             ))}
           </div>
         )}
+      </div>
+
+      {/* 🎯 Мои цели и привычки */}
+      <div className="card" style={{ marginBottom: 20, padding: "16px 18px", border: "1px solid var(--border)" }}>
+        <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, fontWeight: 600, marginBottom: 14, color: "var(--sage)", display: "flex", alignItems: "center", gap: 8 }}>
+          🎯 Мои цели и привычки
+        </h3>
+        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+          {/* Goal 1: Learn 15 words */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+              <span style={{ fontWeight: 500, color: "var(--warm)" }}>📚 Выучить 15 слов за неделю</span>
+              <span style={{ color: "var(--muted)", fontWeight: 600 }}>{wordsThisWeek}/15</span>
+            </div>
+            <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
+              <div 
+                className="progress-fill" 
+                style={{ 
+                  width: `${(Math.min(wordsThisWeek, 15) / 15) * 100}%`,
+                  background: wordsThisWeek >= 15 ? "var(--sage)" : "var(--rose)",
+                  height: "100%",
+                  transition: "width 0.3s ease",
+                  borderRadius: 4
+                }} 
+              />
+            </div>
+          </div>
+
+          {/* Goal 2: Read 1 book */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+              <span style={{ fontWeight: 500, color: "var(--warm)" }}>📖 Прочитать хотя бы 1 книгу</span>
+              <span style={{ color: "var(--muted)", fontWeight: 600 }}>{Math.min(stats.booksRead || 0, 1)}/1</span>
+            </div>
+            <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
+              <div 
+                className="progress-fill" 
+                style={{ 
+                  width: `${(Math.min(stats.booksRead || 0, 1) / 1) * 100}%`,
+                  background: (stats.booksRead || 0) >= 1 ? "var(--sage)" : "var(--rose)",
+                  height: "100%",
+                  transition: "width 0.3s ease",
+                  borderRadius: 4
+                }} 
+              />
+            </div>
+          </div>
+
+          {/* Goal 3: Study 3 days in a row */}
+          <div>
+            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+              <span style={{ fontWeight: 500, color: "var(--warm)" }}>🔥 Заниматься 3 дня подряд</span>
+              <span style={{ color: "var(--muted)", fontWeight: 600 }}>{stats.streak || 0}/3</span>
+            </div>
+            <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
+              <div 
+                className="progress-fill" 
+                style={{ 
+                  width: `${(Math.min(stats.streak || 0, 3) / 3) * 100}%`,
+                  background: (stats.streak || 0) >= 3 ? "var(--sage)" : "var(--rose)",
+                  height: "100%",
+                  transition: "width 0.3s ease",
+                  borderRadius: 4
+                }} 
+              />
+            </div>
+          </div>
+        </div>
       </div>
 
       <div style={{ display: "grid", gridTemplateColumns: "1fr 1fr 1fr", gap: 10, marginBottom: 16 }}>

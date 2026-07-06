@@ -25,6 +25,14 @@ export default function ReaderScreen({
   const [addedWords, setAddedWords] = useState<{ [key: string]: boolean }>({});
   const [toast, setToast] = useState("");
 
+  // Quiz interactive state
+  const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
+  const [quizLoading, setQuizLoading] = useState(false);
+  const [currentQuizIdx, setCurrentQuizIdx] = useState<number | null>(null);
+  const [selectedOptionIdx, setSelectedOptionIdx] = useState<number | null>(null);
+  const [quizScore, setQuizScore] = useState(0);
+  const [showQuizExplanation, setShowQuizExplanation] = useState(false);
+
   const [dailyStories, setDailyStories] = useState<{ [level: string]: { title: string; level: string; text: string } }>({});
   const [loadingStory, setLoadingStory] = useState<{ [level: string]: boolean }>({});
 
@@ -162,6 +170,45 @@ export default function ReaderScreen({
     setFinished(true);
   };
 
+  const handleStartQuiz = async () => {
+    if (!selectedLevel) return;
+    setQuizLoading(true);
+    setCurrentQuizIdx(0);
+    setQuizQuestions([]);
+    setSelectedOptionIdx(null);
+    setShowQuizExplanation(false);
+    setQuizScore(0);
+
+    const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
+
+    try {
+      const res = await fetch("/api/generate-quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ 
+          title: story.title, 
+          text: story.text, 
+          level: story.level 
+        })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+          setQuizQuestions(data.questions);
+          setQuizLoading(false);
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to generate quiz", e);
+    }
+
+    // Fallback to finishing book directly if quiz generation fails
+    setQuizLoading(false);
+    setCurrentQuizIdx(null);
+    handleFinishBook();
+  };
+
   if (!selectedLevel) {
     return (
       <div className="fade-in">
@@ -231,6 +278,124 @@ export default function ReaderScreen({
   // Find the selected story (prefer generated, fallback to static)
   const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
 
+  if (quizLoading) {
+    return (
+      <div className="fade-in" style={{ textAlign: "center", paddingTop: 48, paddingBottom: 48 }}>
+        <div style={{ fontSize: 56, animation: "spin 2s linear infinite" }} className="spinning-icon">🧠</div>
+        <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, marginTop: 20, color: "var(--warm)" }}>
+          ИИ придумывает вопросы...
+        </h3>
+        <p className="sub-text" style={{ marginTop: 8, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
+          Пожалуйста, подождите. Мы готовим 3 интерактивных вопроса на английском языке, чтобы проверить ваше понимание прочитанного сюжета!
+        </p>
+      </div>
+    );
+  }
+
+  if (currentQuizIdx !== null && quizQuestions.length > 0) {
+    const curQ = quizQuestions[currentQuizIdx];
+    const isLast = currentQuizIdx + 1 === quizQuestions.length;
+
+    return (
+      <div className="fade-in" style={{ paddingBottom: 30 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+          <span style={{ fontSize: 13, color: "var(--sage)", fontWeight: 600 }}>🧠 Тест по пониманию книги</span>
+          <span className="badge" style={{ background: "rgba(148, 161, 135, 0.15)", color: "var(--sage)" }}>
+            Вопрос {currentQuizIdx + 1}/{quizQuestions.length}
+          </span>
+        </div>
+
+        <div className="card" style={{ marginBottom: 20, padding: 20, border: "1px solid var(--border)" }}>
+          <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17, color: "var(--warm)", marginBottom: 18, lineHeight: 1.4 }}>
+            {curQ.question}
+          </h3>
+
+          <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            {curQ.options.map((opt: string, i: number) => {
+              const isSelected = selectedOptionIdx === i;
+              const isCorrect = curQ.correctIndex === i;
+              
+              let optStyle: React.CSSProperties = {
+                width: "100%",
+                padding: "14px 16px",
+                textAlign: "left",
+                borderRadius: "1rem",
+                border: "1px solid var(--border)",
+                background: "rgba(255, 255, 255, 0.03)",
+                color: "var(--foreground)",
+                fontSize: 14,
+                cursor: "pointer",
+                transition: "all 0.2s"
+              };
+
+              if (selectedOptionIdx !== null) {
+                if (isCorrect) {
+                  optStyle.border = "1px solid var(--sage)";
+                  optStyle.background = "rgba(148, 161, 135, 0.15)";
+                  optStyle.color = "var(--sage)";
+                  optStyle.fontWeight = 600;
+                } else if (isSelected) {
+                  optStyle.border = "1px solid var(--rose)";
+                  optStyle.background = "rgba(220, 95, 95, 0.12)";
+                  optStyle.color = "var(--rose)";
+                } else {
+                  optStyle.opacity = 0.5;
+                }
+              }
+
+              return (
+                <button
+                  key={i}
+                  style={optStyle}
+                  disabled={selectedOptionIdx !== null}
+                  onClick={() => {
+                    setSelectedOptionIdx(i);
+                    setShowQuizExplanation(true);
+                    if (i === curQ.correctIndex) {
+                      setQuizScore(s => s + 1);
+                    }
+                  }}
+                >
+                  <span style={{ marginRight: 8, fontWeight: 600 }}>{String.fromCharCode(65 + i)}.</span> {opt}
+                </button>
+              );
+            })}
+          </div>
+
+          {showQuizExplanation && (
+            <div className="card" style={{ marginTop: 20, padding: 14, background: "rgba(255, 255, 255, 0.01)", border: "1px solid var(--border)", borderRadius: "0.75rem" }}>
+              <div style={{ fontWeight: 600, fontSize: 13, marginBottom: 6, color: selectedOptionIdx === curQ.correctIndex ? "var(--sage)" : "var(--rose)" }}>
+                {selectedOptionIdx === curQ.correctIndex ? "🎉 Правильно!" : "❌ Неверно"}
+              </div>
+              <p style={{ fontSize: 13, color: "#ccc", lineHeight: "1.4" }}>
+                {curQ.explanation}
+              </p>
+            </div>
+          )}
+        </div>
+
+        {selectedOptionIdx !== null && (
+          <button
+            className="btn btn-primary"
+            style={{ width: "100%", padding: 16 }}
+            onClick={() => {
+              if (isLast) {
+                handleFinishBook();
+                setCurrentQuizIdx(null);
+              } else {
+                setCurrentQuizIdx(idx => idx! + 1);
+                setSelectedOptionIdx(null);
+                setShowQuizExplanation(false);
+              }
+            }}
+          >
+            {isLast ? "Завершить тест и сохранить результат 🏁" : "Следующий вопрос →"}
+          </button>
+        )}
+      </div>
+    );
+  }
+
   if (finished) {
     const totalWordsAdded = Object.keys(addedWords).length;
     return (
@@ -238,6 +403,20 @@ export default function ReaderScreen({
         <div style={{ fontSize: 56, marginBottom: 12 }}>📚</div>
         <h2 className="section-title">Книга прочитана!</h2>
         <p style={{ fontSize: 14, color: "#aaa", margin: "8px 0 20px" }}>«{story.title}» — Уровень {story.level}</p>
+
+        {quizQuestions.length > 0 && (
+          <div className="card" style={{ marginBottom: 16, padding: "16px 14px", border: "1px solid var(--border)" }}>
+            <div style={{ fontSize: 14, color: "var(--sage)", fontWeight: 600, display: "flex", alignItems: "center", justifyContent: "center", gap: 6, marginBottom: 4 }}>
+              🏆 Результат теста на понимание
+            </div>
+            <div style={{ fontSize: 24, fontWeight: 700, color: "var(--warm)", margin: "8px 0" }}>
+              {quizScore} из {quizQuestions.length} верных ответов!
+            </div>
+            <div style={{ fontSize: 12, color: "#888" }}>
+              {quizScore === quizQuestions.length ? "Вы полностью поняли сюжет этой книги! Потрясающе! 🌟" : "Хорошая попытка! Читайте больше книг, чтобы улучшить понимание."}
+            </div>
+          </div>
+        )}
         
         {totalWordsAdded > 0 && (
           <div className="card" style={{ marginBottom: 16, padding: 14 }}>
@@ -269,7 +448,7 @@ export default function ReaderScreen({
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <button className="back-btn" onClick={() => setSelectedLevel(null)}>← Назад</button>
         <span className={`level-badge level-${story.level}`}>{story.level}</span>
-        <button className="btn btn-ghost" style={{ fontSize: 13, color: "var(--sage)", fontWeight: 600 }} onClick={handleFinishBook}>
+        <button className="btn btn-ghost" style={{ fontSize: 13, color: "var(--sage)", fontWeight: 600 }} onClick={handleStartQuiz}>
           ✓ Прочитала
         </button>
       </div>

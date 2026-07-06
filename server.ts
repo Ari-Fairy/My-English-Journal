@@ -193,6 +193,59 @@ Return absolutely nothing else, no markdown formatting, no comments, just raw JS
   }
 });
 
+// Endpoint to generate 3 quiz questions for a book story using Gemini API
+app.post("/api/generate-quiz", async (req, res) => {
+  try {
+    const { title, text: storyText, level } = req.body;
+    if (!title || !storyText) {
+      res.status(400).json({ error: "Missing story title or text" });
+      return;
+    }
+
+    const ai = getAIClient();
+
+    const systemInstruction = `You are an expert English teacher. Analyze the English story provided and generate 3 interactive multiple-choice questions (comprehension check) to test the reader's understanding of the plot.
+The questions themselves should be in simple, level-appropriate English (appropriate for level ${level || "A2"}). The options should be in English.
+Provide a clear, brief explanation in Russian of why the correct answer is correct.
+
+Return ONLY a valid JSON object in this exact shape:
+{
+  "questions": [
+    {
+      "question": "Question text in English?",
+      "options": ["Option 1", "Option 2", "Option 3", "Option 4"],
+      "correctIndex": 0,
+      "explanation": "Explanation in Russian of why this is correct."
+    }
+  ]
+}
+
+Ensure correctIndex is an integer between 0 and 3. Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [
+        { text: systemInstruction },
+        { text: `Story Title: "${title}"\nStory Content:\n"${storyText}"` }
+      ],
+    });
+
+    const text = response.text || "";
+    const cleanText = text.replace(/```json|```/g, "").trim();
+
+    try {
+      const parsedQuiz = JSON.parse(cleanText);
+      res.json(parsedQuiz);
+    } catch (parseError) {
+      console.error("Failed to parse quiz JSON. Raw response was:", text);
+      res.status(500).json({ error: "Failed to parse quiz JSON", raw: text });
+    }
+  } catch (error: any) {
+    console.error("Quiz Generation API error:", error);
+    res.status(500).json({ error: error?.message || "Internal server error during quiz generation" });
+  }
+});
+
 // Vite server setup & static serving middleware
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {

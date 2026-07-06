@@ -22,9 +22,10 @@ export default function StudyScreen({
   const [stage, setStage] = useState<"mode" | "dir" | "session" | "done">(
     sessionType === "learn" ? "dir" : "mode"
   );
-  const [mode, setMode] = useState<"cards" | "choice" | "written" | "voice">(
+  const [mode, setMode] = useState<"cards" | "choice" | "written" | "voice" | "listening">(
     sessionType === "learn" ? "cards" : "choice"
   );
+  const [listeningSubMode, setListeningSubMode] = useState<"choice" | "written">("choice");
   const [micGranted, setMicGranted] = useState<boolean | null>(null);
   const [dir, setDir] = useState<"en-ru" | "ru-en" | "mixed">("en-ru");
   const [queue, setQueue] = useState<Word[]>([]);
@@ -113,18 +114,29 @@ export default function StudyScreen({
   };
 
   const choices = useMemo(() => {
-    if (!cur || mode !== "choice") return [];
-    const others = words.filter(w => w.id !== cur.id).map(w => pDir === "en-ru" ? w.ru : w.en);
-    return shuffle([expected, ...shuffle(others).slice(0, 3)]);
-  }, [cur?.id, mode, pDir, expected, words]);
+    if (!cur) return [];
+    if (mode !== "choice" && (mode !== "listening" || listeningSubMode !== "choice")) return [];
+    const exp = mode === "listening" ? cur.ru : expected;
+    const others = words.filter(w => w.id !== cur.id).map(w => mode === "listening" ? w.ru : (pDir === "en-ru" ? w.ru : w.en));
+    return shuffle([exp, ...shuffle(others).slice(0, 3)]);
+  }, [cur?.id, mode, listeningSubMode, pDir, expected, words]);
 
   useEffect(() => {
-    if (mode === "written") {
+    if (mode === "written" || (mode === "listening" && listeningSubMode === "written")) {
       setTimeout(() => {
         if (inputRef.current) inputRef.current.focus();
       }, 200);
     }
-  }, [cur?.id, mode]);
+  }, [cur?.id, mode, listeningSubMode]);
+
+  useEffect(() => {
+    if (stage === "session" && cur && mode === "listening") {
+      const t = setTimeout(() => {
+        speak(cur.en, "en-US");
+      }, 300);
+      return () => clearTimeout(t);
+    }
+  }, [cur?.id, mode, stage]);
 
   const getNextReviewTimeMs = (w: Word) => {
     if (!w.learned) return Infinity;
@@ -166,16 +178,17 @@ export default function StudyScreen({
 
   const handleAns = (a: string) => {
     if (!cur || answered) return;
+    const exp = mode === "listening" ? (listeningSubMode === "choice" ? cur.ru : cur.en) : expected;
     const dontRemember = a === "__dont_remember__";
-    const correct = dontRemember ? false : isCorrect(a, expected);
-    const finalAns = dontRemember ? expected : a;
+    const correct = dontRemember ? false : isCorrect(a, exp);
+    const finalAns = dontRemember ? exp : a;
 
     setOk(correct);
     setAnswered(true);
     setAns(finalAns);
     beep(correct);
 
-    if (mode !== "cards" && mode !== "voice") {
+    if (mode !== "cards" && mode !== "voice" && mode !== "listening") {
       setTimeout(() => speak(cur.en), 400);
     }
 
@@ -302,6 +315,7 @@ export default function StudyScreen({
             { v: "cards", l: "🃏 Карточки", s: "Флип-карточки" },
             { v: "choice", l: "🎯 Выбор варианта", s: "Выбери из 4 вариантов" },
             { v: "written", l: "✍️ Письменно", s: "Напиши ответ" },
+            { v: "listening", l: "🎧 Аудирование", s: "Выбери или запиши на слух" },
             { v: "voice", l: "🎤 Голосом", s: "Произнеси ответ" }
           ] as const).map(m => (
             <button 
@@ -309,6 +323,25 @@ export default function StudyScreen({
               className="card btn" 
               style={{ textAlign: "left", padding: 18 }} 
               onClick={() => {
+                if (m.v === "listening") {
+                  setMode("listening");
+                  setListeningSubMode("choice");
+                  setDir("en-ru");
+                  const pool = getPool();
+                  const withErrors = shuffle(pool.filter(w => w.wrong > w.correct));
+                  const rest = shuffle(pool.filter(w => w.wrong <= w.correct));
+                  setQueue([...withErrors, ...rest].slice(0, 15));
+                  setIdx(0);
+                  setWrongIds([]);
+                  setIsRepeatRound(false);
+                  setAnswered(false);
+                  setAns("");
+                  setOk(null);
+                  setHint(false);
+                  setScore({ c: 0, w: 0 });
+                  setStage("session");
+                  return;
+                }
                 if (m.v === "voice" && micGranted === null) {
                   navigator.mediaDevices?.getUserMedia({ audio: true }).then(s => {
                     s.getTracks().forEach(t => t.stop());
@@ -503,25 +536,95 @@ export default function StudyScreen({
       </div>
       <div className="card" style={{ marginTop: 18 }}>
         <div className="study-card">
-          <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "English" : "Russian"}</div>
-          <div className="study-word">{prompt}</div>
-          {!answered && <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={() => setHint(!hint)}>{hint ? <span className="hint-box">🔑 «{expected[0]}» · {expected.length} симв.</span> : "💡 Подсказка"}</button>}
+          {mode === "listening" ? (
+            <div style={{ textAlign: "center", padding: "12px 0" }}>
+              <button 
+                className="btn"
+                style={{
+                  background: "rgba(148, 161, 135, 0.15)",
+                  color: "var(--sage)",
+                  borderRadius: "50%",
+                  width: 80,
+                  height: 80,
+                  fontSize: 32,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  margin: "0 auto 16px",
+                  border: "none",
+                  cursor: "pointer",
+                  boxShadow: "0 4px 10px rgba(148, 161, 135, 0.2)",
+                  transition: "transform 0.2s"
+                }}
+                onClick={() => speak(cur.en, "en-US")}
+              >
+                🔊
+              </button>
+              <div style={{ fontSize: 14, color: "var(--muted)", fontWeight: 500, marginBottom: 8 }}>
+                Прослушайте слово и {listeningSubMode === "choice" ? "выберите правильный перевод" : "запишите его на слух"}
+              </div>
+              
+              {!answered && (
+                <div style={{ display: "flex", justifyContent: "center", gap: 8, marginTop: 12 }}>
+                  <button 
+                    className={`btn btn-sm ${listeningSubMode === "choice" ? "btn-primary" : "btn-ghost"}`}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: "1rem" }}
+                    onClick={() => {
+                      setListeningSubMode("choice");
+                      setAns("");
+                    }}
+                  >
+                    🎯 Выбрать перевод
+                  </button>
+                  <button 
+                    className={`btn btn-sm ${listeningSubMode === "written" ? "btn-primary" : "btn-ghost"}`}
+                    style={{ fontSize: 11, padding: "4px 10px", borderRadius: "1rem" }}
+                    onClick={() => {
+                      setListeningSubMode("written");
+                      setAns("");
+                    }}
+                  >
+                    ✍️ Написать на слух
+                  </button>
+                </div>
+              )}
+            </div>
+          ) : (
+            <>
+              <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "English" : "Russian"}</div>
+              <div className="study-word">{prompt}</div>
+              {!answered && <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={() => setHint(!hint)}>{hint ? <span className="hint-box">🔑 «{expected[0]}» · {expected.length} симв.</span> : "💡 Подсказка"}</button>}
+            </>
+          )}
           {answered && (
             <div style={{ marginTop: 18 }}>
               <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4, color: ok ? "var(--sage)" : "var(--rose)" }}>{ok ? "Perfect ✨" : "Неверно"}</div>
-              <div style={{ fontSize: 18, fontWeight: 500 }}>{expected}</div>
-              <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => speak(cur.en)}>🔊 Послушать</button>
+              <div style={{ fontSize: 18, fontWeight: 500 }}>{cur.en} — {cur.ru}</div>
+              {cur.partOfSpeech && (
+                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
+                  [{cur.partOfSpeech}] {cur.topic ? `• тема: ${cur.topic}` : ""}
+                </div>
+              )}
+              <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => speak(cur.en)}>🔊 Послушать еще раз</button>
             </div>
           )}
         </div>
       </div>
       <div style={{ marginTop: 18 }}>
-        {mode === "choice" && !answered && choices.map(c => (
-          <button key={c} className="choice-btn btn" style={{ marginBottom: 8 }} onClick={() => handleAns(c)}>{c}</button>
+        {((mode === "choice") || (mode === "listening" && listeningSubMode === "choice")) && !answered && choices.map(c => (
+          <button key={c} className="choice-btn btn" style={{ marginBottom: 8, width: "100%", padding: 14 }} onClick={() => handleAns(c)}>{c}</button>
         ))}
-        {mode === "written" && !answered && (
+        {((mode === "written") || (mode === "listening" && listeningSubMode === "written")) && !answered && (
           <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-            <input ref={inputRef} className="input" style={{ textAlign: "center", fontSize: 18 }} value={ans} onChange={e => setAns(e.target.value)} onKeyDown={e => e.key === "Enter" && ans.trim() && handleAns(ans)} placeholder="Ваш ответ..." />
+            <input 
+              ref={inputRef} 
+              className="input" 
+              style={{ textAlign: "center", fontSize: 18 }} 
+              value={ans} 
+              onChange={e => setAns(e.target.value)} 
+              onKeyDown={e => e.key === "Enter" && ans.trim() && handleAns(ans)} 
+              placeholder={mode === "listening" ? "Напишите услышанное слово по-английски..." : "Ваш ответ..."} 
+            />
             <button className="btn btn-primary" style={{ width: "100%", padding: 15 }} onClick={() => ans.trim() && handleAns(ans)} disabled={!ans.trim()}>Проверить</button>
             <button className="btn btn-ghost" style={{ color: "#ccc" }} onClick={() => handleAns("__dont_remember__")}>🤍 Не помню</button>
           </div>
