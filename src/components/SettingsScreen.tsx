@@ -24,11 +24,17 @@ export default function SettingsScreen({
   onImportData
 }: SettingsScreenProps) {
   const [msg, setMsg] = useState("");
+  const [isPersistent, setIsPersistent] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const notify = (text: string) => {
+  const notify = (text: string, persistent = false) => {
     setMsg(text);
-    setTimeout(() => setMsg(""), 3500);
+    setIsPersistent(persistent);
+    if (!persistent) {
+      setTimeout(() => {
+        setMsg(current => current === text ? "" : current);
+      }, 3500);
+    }
   };
 
   const handleLogout = async () => {
@@ -123,7 +129,7 @@ export default function SettingsScreen({
     } catch (err: any) {
       console.error(err);
       if (err.code === "auth/requires-recent-login") {
-        notify("🔒 Для удаления аккаунта требуется повторный вход. Пожалуйста, выйдите из аккаунта, войдите заново и сразу же повторите удаление.");
+        notify("🔒 Для удаления аккаунта требуется повторный вход. Пожалуйста, выйдите из аккаунта, войдите заново и сразу же повторите удаление.", true);
       } else {
         notify("❌ Ошибка при удалении аккаунта: " + (err.message || err));
       }
@@ -138,8 +144,35 @@ export default function SettingsScreen({
       <h2 className="section-title" style={{ marginBottom: 16 }}>Настройки</h2>
 
       {msg && (
-        <div className="card" style={{ textAlign: "center", marginBottom: 12, padding: 11, fontSize: 14 }}>
-          {msg}
+        <div className="card" style={{ 
+          display: "flex", 
+          justifyContent: "space-between", 
+          alignItems: "center", 
+          gap: "10px",
+          marginBottom: 12, 
+          padding: "11px 14px", 
+          fontSize: 14,
+          borderLeft: isPersistent ? "4px solid var(--rose)" : "none",
+          background: isPersistent ? "rgba(181, 93, 76, 0.05)" : undefined,
+          borderRadius: "12px"
+        }}>
+          <span style={{ flex: 1, textAlign: "left", lineHeight: "1.4" }}>{msg}</span>
+          <button 
+            onClick={() => setMsg("")} 
+            style={{ 
+              background: "none", 
+              border: "none", 
+              fontSize: "18px", 
+              cursor: "pointer", 
+              padding: "2px 6px",
+              color: "var(--text-muted)",
+              opacity: 0.8,
+              lineHeight: 1
+            }}
+            title="Закрыть"
+          >
+            ×
+          </button>
         </div>
       )}
 
