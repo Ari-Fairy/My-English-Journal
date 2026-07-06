@@ -105,10 +105,10 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             alignItems: "center", 
             borderRadius: "1.75rem", 
             fontSize: 15,
-            background: reviewWords.length > 0 ? "var(--sage)" : learnedCount > 0 ? "rgba(148,161,135,.15)" : "rgba(180,180,180,.14)",
-            color: reviewWords.length > 0 ? "#fff" : learnedCount > 0 ? "var(--warm)" : "#aaa",
-            boxShadow: reviewWords.length > 0 ? "0 4px 14px rgba(148,161,135,.3)" : "none",
-            border: reviewWords.length > 0 ? "none" : learnedCount > 0 ? "1.5px solid var(--sage)" : "1.5px dashed rgba(180,180,180,.3)",
+            background: learnedCount > 0 ? "var(--sage)" : "rgba(180,180,180,.14)",
+            color: learnedCount > 0 ? "#fff" : "#aaa",
+            boxShadow: learnedCount > 0 ? "0 4px 14px rgba(124, 139, 114, 0.22)" : "none",
+            border: "none",
             cursor: learnedCount > 0 ? "pointer" : "default"
           }}
           onClick={() => {
@@ -120,10 +120,10 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20 }}>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, color: learnedCount > 0 ? "#fff" : "#aaa" }}>
               {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
             </div>
-            <div style={{ fontSize: 13, opacity: .85, marginTop: 2 }}>
+            <div style={{ fontSize: 13, opacity: .9, marginTop: 2, color: learnedCount > 0 ? "#fff" : "#aaa" }}>
               {learnedCount === 0 
                 ? "Сначала выучи слова 📚" 
                 : reviewWords.length > 0 
@@ -132,7 +132,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
               }
             </div>
           </div>
-          <span style={{ fontSize: 24, opacity: (reviewWords.length > 0 || learnedCount > 0) ? .8 : .3 }}>↺</span>
+          <span style={{ fontSize: 24, opacity: learnedCount > 0 ? .9 : .3, color: learnedCount > 0 ? "#fff" : "#aaa" }}>↺</span>
         </button>
 
         {recallInfo && reviewWords.length === 0 && learnedCount > 0 && (
