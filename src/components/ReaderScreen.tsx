@@ -87,11 +87,24 @@ export default function ReaderScreen({
   const handleWordClick = (word: string, e: React.MouseEvent) => {
     const clean = word.replace(/[^a-zA-Z'\-]/g, "").toLowerCase();
     if (clean.length < 2) return;
-    const rect = (e.target as HTMLElement).getBoundingClientRect();
-    const x = Math.min(rect.left, window.innerWidth - 290);
-    const y = rect.bottom + window.scrollY + 8;
+    
+    const target = e.target as HTMLElement;
+    const rect = target.getBoundingClientRect();
+    
+    // Find the relative parent .app to adjust coordinates for centered layouts on laptops/desktops
+    const appEl = document.querySelector(".app");
+    const appRect = appEl ? appEl.getBoundingClientRect() : { left: 0, top: 0, width: window.innerWidth };
+    
+    const relativeLeft = rect.left - appRect.left;
+    const relativeBottom = rect.bottom - appRect.top;
+    
+    // Max width of word popup is around 280px. Keep it inside the .app container.
+    const popupWidth = 280;
+    const x = Math.max(8, Math.min(relativeLeft, appRect.width - popupWidth - 8));
+    const y = relativeBottom + 8;
+    
     setPopupWord({ raw: word, clean });
-    setPopupPos({ x, y: Math.min(y, window.innerHeight + window.scrollY - 180) });
+    setPopupPos({ x, y });
   };
 
   const handleAddWordToDict = (word: string, translation: string) => {

@@ -6,6 +6,7 @@ import {
   GoogleAuthProvider 
 } from "firebase/auth";
 import { auth } from "../firebase";
+import firebaseConfig from "../../firebase-applet-config.json";
 
 interface AuthScreenProps {
   onGuestMode: () => void;
@@ -64,7 +65,15 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
       console.error(err);
       let errorDetail = "";
       if (err.code === "auth/unauthorized-domain") {
-        errorDetail = "Этот домен (например, vercel.app) не добавлен в список разрешенных в консоли Firebase. Перейдите в Firebase Console -> Authentication -> Settings -> Authorized domains и добавьте ваш домен.";
+        const currentDomain = window.location.hostname;
+        errorDetail = `Домен "${currentDomain}" не авторизован в вашем проекте Firebase "${firebaseConfig.projectId || "my-english-magazine7"}". 
+
+Чтобы исправить это:
+1. Откройте Firebase Console -> выберите проект "${firebaseConfig.projectId || "my-english-magazine7"}".
+2. Перейдите в Authentication -> вкладка Settings -> Authorized domains (Авторизованные домены).
+3. Нажмите кнопку "Add domain" (Добавить домен).
+4. Введите "${currentDomain}" и сохраните.
+После этого попробуйте войти снова через Google, или используйте вход по почте.`;
       } else if (err.code === "auth/popup-blocked") {
         errorDetail = "Всплывающее окно было заблокировано браузером. Пожалуйста, разрешите всплывающие окна для этого сайта в настройках браузера.";
       } else if (err.code === "auth/cancelled-popup-request") {
