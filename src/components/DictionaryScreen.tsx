@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { Word, UserProgress } from "../types";
 import { POS_DEFAULT, TOPICS_DEFAULT } from "../data";
-import { speak } from "../utils";
+import { speak, getLocalDateString } from "../utils";
 
 interface DictionaryScreenProps {
   words: Word[];
@@ -39,7 +39,7 @@ export default function DictionaryScreen({
   });
 
   const toggleLearn = (w: Word) => {
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     const updated: Word = {
       ...w,
       learned: !w.learned,

@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import { IrregularVerb, UserProgress } from "../types";
-import { speak } from "../utils";
+import { speak, getLocalDateString } from "../utils";
 
 interface IrregularVerbsScreenProps {
   irregular: IrregularVerb[];
@@ -162,7 +162,7 @@ export default function IrregularVerbsScreen({
   const toggleLearnVerb = (id: string) => {
     const verb = irregular.find(v => v.id === id);
     if (!verb) return;
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     const updated: IrregularVerb = {
       ...verb,
       learned: !verb.learned,

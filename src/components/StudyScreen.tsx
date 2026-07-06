@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Word, UserProgress } from "../types";
-import { speak } from "../utils";
+import { speak, getLocalDateString } from "../utils";
 
 interface StudyScreenProps {
   words: Word[];
@@ -139,7 +139,12 @@ export default function StudyScreen({
 
   const getPool = () => {
     if (sessionType === "learn") return words.filter(w => !w.learned);
-    if (sessionType === "review") return words.filter(w => w.learned && getNextReviewTimeMs(w) === 0);
+    if (sessionType === "review") {
+      const due = words.filter(w => w.learned && getNextReviewTimeMs(w) === 0);
+      if (due.length > 0) return due;
+      // Если запланированных нет, возвращаем все выученные слова для свободного повторения!
+      return words.filter(w => w.learned);
+    }
     return words.filter(w => w.learned);
   };
 
@@ -183,7 +188,7 @@ export default function StudyScreen({
       setWrongIds(prev => prev.includes(cur.id) ? prev : [...prev, cur.id]);
     }
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     const updatedWord: Word = {
       ...cur,
       correct: cur.correct + (correct ? 1 : 0),

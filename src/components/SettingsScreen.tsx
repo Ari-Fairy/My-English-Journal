@@ -3,6 +3,7 @@ import { Word, IrregularVerb, UserProgress } from "../types";
 import { wipeUserAccountData } from "../firebaseSync";
 import { auth } from "../firebase";
 import { signOut, deleteUser } from "firebase/auth";
+import { getLocalDateString } from "../utils";
 
 interface SettingsScreenProps {
   user: any; // Firebase user or "guest"
@@ -53,7 +54,7 @@ export default function SettingsScreen({
     const blob = new Blob([dataStr], { type: "application/json" });
     const url = URL.createObjectURL(blob);
     const a = document.createElement("a");
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     a.href = url;
     a.download = `my-english-progress-${today}.json`;
     a.click();

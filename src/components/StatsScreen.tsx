@@ -23,7 +23,12 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
     for (let i = 13; i >= 0; i--) {
       const d = new Date(today);
       d.setDate(d.getDate() - i);
-      const ds = d.toISOString().slice(0, 10);
+      
+      const year = d.getFullYear();
+      const month = String(d.getMonth() + 1).padStart(2, "0");
+      const day = String(d.getDate()).padStart(2, "0");
+      const ds = `${year}-${month}-${day}`;
+      
       const s = stats.daily?.[ds] || { learned: 0, reviewed: 0 };
       list.push({
         date: ds.slice(8), // Just Day portion

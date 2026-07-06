@@ -11,6 +11,7 @@ import {
 } from "./firebaseSync";
 import { Word, IrregularVerb, UserProgress } from "./types";
 import { checkAchievements, ACHIEVEMENTS_DEF, SEED_WORDS, SEED_IRREGULAR } from "./data";
+import { getLocalDateString } from "./utils";
 
 // Sub-screens imports
 import AuthScreen from "./components/AuthScreen";
@@ -243,7 +244,7 @@ export default function App() {
                   customPos: {}
                 }),
                 userId: firebaseUser.uid,
-                lastVisit: new Date().toISOString().slice(0, 10)
+                lastVisit: getLocalDateString()
               };
 
               try {
@@ -284,7 +285,7 @@ export default function App() {
                 userId: firebaseUser.uid,
                 streak: 1,
                 best: 1,
-                lastVisit: new Date().toISOString().slice(0, 10),
+                lastVisit: getLocalDateString(),
                 achievements: [],
                 booksRead: 0,
                 wordsFromBooks: 0,
@@ -359,7 +360,7 @@ export default function App() {
   useEffect(() => {
     if (!progress.userId) return;
 
-    const today = new Date().toISOString().slice(0, 10);
+    const today = getLocalDateString();
     const last = progress.lastVisit;
 
     if (last !== today) {
@@ -375,8 +376,7 @@ export default function App() {
       const updatedProgress: UserProgress = {
         ...progress,
         lastVisit: today,
-        daily: updatedDaily,
-        achievements: [] // Reset achievements on next day visit
+        daily: updatedDaily
       };
 
       if (last) {

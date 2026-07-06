@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { Word, UserProgress } from "../types";
+import { getLocalDateString } from "../utils";
 
 interface HomePageProps {
   words: Word[];
@@ -12,7 +13,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
   const [recallInfo, setRecallInfo] = useState(false);
 
   const learnedCount = words.filter(w => w.learned).length;
-  const today = new Date().toISOString().slice(0, 10);
+  const today = getLocalDateString();
   const todayLearned = words.filter(w => w.learnedDate === today).length;
   const newWords = words.filter(w => !w.learned);
 
@@ -104,27 +105,37 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             alignItems: "center", 
             borderRadius: "1.75rem", 
             fontSize: 15,
-            background: recallActive ? "var(--sage)" : "rgba(180,180,180,.14)",
-            color: recallActive ? "#fff" : "#aaa",
-            boxShadow: recallActive ? "0 4px 14px rgba(148,161,135,.3)" : "none",
-            border: recallActive ? "none" : "1.5px dashed rgba(180,180,180,.3)",
-            cursor: "pointer"
+            background: reviewWords.length > 0 ? "var(--sage)" : learnedCount > 0 ? "rgba(148,161,135,.15)" : "rgba(180,180,180,.14)",
+            color: reviewWords.length > 0 ? "#fff" : learnedCount > 0 ? "var(--text-dark)" : "#aaa",
+            boxShadow: reviewWords.length > 0 ? "0 4px 14px rgba(148,161,135,.3)" : "none",
+            border: reviewWords.length > 0 ? "none" : learnedCount > 0 ? "1.5px solid var(--sage)" : "1.5px dashed rgba(180,180,180,.3)",
+            cursor: learnedCount > 0 ? "pointer" : "default"
           }}
           onClick={() => {
-            if (recallActive) onStartStudy("review");
-            else setRecallInfo(r => !r);
+            if (reviewWords.length > 0 || learnedCount > 0) {
+              onStartStudy("review");
+            } else {
+              setRecallInfo(r => !r);
+            }
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20 }}>{recallActive ? "Recall ✨" : "Recall"}</div>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20 }}>
+              {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
+            </div>
             <div style={{ fontSize: 13, opacity: .85, marginTop: 2 }}>
-              {learnedCount === 0 ? "Сначала выучи слова 📚" : recallActive ? `${reviewWords.length} слов ждут` : upcoming ? `Следующее ${formatTimeLeft(getNextReviewTimeMs(upcoming))}` : "Повторение не нужно"}
+              {learnedCount === 0 
+                ? "Сначала выучи слова 📚" 
+                : reviewWords.length > 0 
+                  ? `${reviewWords.length} слов ждут` 
+                  : `Все ${learnedCount} слов повторены. Повторить вне очереди?`
+              }
             </div>
           </div>
-          <span style={{ fontSize: 24, opacity: recallActive ? .8 : .3 }}>↺</span>
+          <span style={{ fontSize: 24, opacity: (reviewWords.length > 0 || learnedCount > 0) ? .8 : .3 }}>↺</span>
         </button>
 
-        {recallInfo && !recallActive && learnedCount > 0 && (
+        {recallInfo && reviewWords.length === 0 && learnedCount > 0 && (
           <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>📅 Расписание повторений</div>
             {words.filter(w => w.learned).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b)).slice(0, 5).map(w => (

@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Word, UserProgress } from "../types";
 import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR } from "../data";
-import { speak } from "../utils";
+import { speak, getLocalDateString } from "../utils";
 
 interface ReaderScreenProps {
   words: Word[];
@@ -25,9 +25,64 @@ export default function ReaderScreen({
   const [addedWords, setAddedWords] = useState<{ [key: string]: boolean }>({});
   const [toast, setToast] = useState("");
 
-  const today = new Date().toISOString().slice(0, 10);
+  const [dailyStories, setDailyStories] = useState<{ [level: string]: { title: string; level: string; text: string } }>({});
+  const [loadingStory, setLoadingStory] = useState<{ [level: string]: boolean }>({});
+
+  const today = getLocalDateString();
   const dailyBooksRead = stats.dailyBooksRead || {};
   const todayReadLevels = dailyBooksRead[today] || [];
+
+  const fetchStory = async (level: string, date: string) => {
+    const cacheKey = `generated_story_${level}_${date}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const parsed = JSON.parse(cached);
+        if (parsed && parsed.title && parsed.text) {
+          setDailyStories(prev => ({ ...prev, [level]: parsed }));
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to parse cached story", e);
+      }
+    }
+
+    setLoadingStory(prev => ({ ...prev, [level]: true }));
+    try {
+      const res = await fetch("/api/generate-story", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ level, date })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data && data.title && data.text) {
+          localStorage.setItem(cacheKey, JSON.stringify(data));
+          setDailyStories(prev => ({ ...prev, [level]: data }));
+          setLoadingStory(prev => ({ ...prev, [level]: false }));
+          return;
+        }
+      }
+    } catch (e) {
+      console.error("Failed to fetch generated story, falling back to static stories", e);
+    }
+
+    // Fallback to static story
+    const stories = BOOK_STORIES[level] || [];
+    const dayIndex = new Date(date).getDate() % stories.length;
+    const staticStory = stories[dayIndex];
+    if (staticStory) {
+      setDailyStories(prev => ({ ...prev, [level]: staticStory }));
+    }
+    setLoadingStory(prev => ({ ...prev, [level]: false }));
+  };
+
+  useEffect(() => {
+    ["A1", "A2", "B1", "B2"].forEach(level => {
+      fetchStory(level, today);
+    });
+  }, [today]);
+
 
   const handleWordClick = (word: string, e: React.MouseEvent) => {
     const clean = word.replace(/[^a-zA-Z'\-]/g, "").toLowerCase();
@@ -102,18 +157,32 @@ export default function ReaderScreen({
         <p style={{ fontSize: 13, color: "#aaa", marginBottom: 16 }}>Нажми на любое слово, чтобы мгновенно перевести его и добавить в словарь!</p>
         
         {["A1", "A2", "B1", "B2"].map(level => {
-          const stories = BOOK_STORIES[level] || [];
-          const dayIndex = new Date().getDate() % stories.length;
-          const story = stories[dayIndex];
-          if (!story) return null;
+          const generatedStory = dailyStories[level];
+          const isLoading = loadingStory[level];
           const isReadToday = todayReadLevels.includes(level);
+
+          let title = "Загрузка...";
+          let wordCount = 0;
+          if (generatedStory) {
+            title = generatedStory.title;
+            wordCount = generatedStory.text.split(/\s+/).filter(Boolean).length;
+          } else if (!isLoading) {
+            const stories = BOOK_STORIES[level] || [];
+            const dayIndex = new Date().getDate() % stories.length;
+            const staticStory = stories[dayIndex];
+            if (staticStory) {
+              title = staticStory.title;
+              wordCount = staticStory.text.split(/\s+/).filter(Boolean).length;
+            }
+          }
+
           return (
             <div 
               key={level} 
               className="card" 
               style={{ marginBottom: 10, cursor: isReadToday ? "default" : "pointer", opacity: isReadToday ? 0.6 : 1 }}
               onClick={() => {
-                if (!isReadToday) {
+                if (!isReadToday && !isLoading) {
                   setSelectedLevel(level);
                   setAddedWords({});
                   setFinished(false);
@@ -126,8 +195,16 @@ export default function ReaderScreen({
                     <span className={`level-badge level-${level}`}>{level}</span>
                     {isReadToday && <span style={{ fontSize: 11, color: "var(--sage)" }}>✓ прочитано сегодня</span>}
                   </div>
-                  <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17 }}>{story.title}</div>
-                  <div style={{ fontSize: 12, color: "#aaa", marginTop: 3 }}>{story.text.split(" ").length} слов</div>
+                  <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17 }}>
+                    {isLoading ? (
+                      <span className="pulsing" style={{ color: "#888" }}>✍️ Пишем новую книгу...</span>
+                    ) : (
+                      title
+                    )}
+                  </div>
+                  <div style={{ fontSize: 12, color: "#aaa", marginTop: 3 }}>
+                    {isLoading ? "секунду..." : `${wordCount} слов`}
+                  </div>
                 </div>
                 <span style={{ fontSize: 22, opacity: isReadToday ? 0.2 : 0.4 }}>→</span>
               </div>
@@ -138,9 +215,8 @@ export default function ReaderScreen({
     );
   }
 
-  const levelStories = BOOK_STORIES[selectedLevel] || [];
-  const todayStoryIdx = new Date().getDate() % levelStories.length;
-  const story = levelStories[todayStoryIdx]!;
+  // Find the selected story (prefer generated, fallback to static)
+  const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
 
   if (finished) {
     const totalWordsAdded = Object.keys(addedWords).length;

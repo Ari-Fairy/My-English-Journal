@@ -130,11 +130,13 @@ export async function seedUserData(userId: string): Promise<{ words: Word[]; irr
     }
 
     // 3. Create user progress stats document
+    const d = new Date();
+    const localToday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
     const progress: UserProgress = {
       userId,
       streak: 1,
       best: 1,
-      lastVisit: new Date().toISOString().slice(0, 10),
+      lastVisit: localToday,
       achievements: [],
       booksRead: 0,
       wordsFromBooks: 0,

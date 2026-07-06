@@ -136,6 +136,63 @@ Return absolutely nothing else, no markdown formatting, no comments, just raw JS
   }
 });
 
+// Endpoint to generate a daily story dynamically based on CEFR level
+app.post("/api/generate-story", async (req, res) => {
+  try {
+    const { level, date } = req.body;
+    if (!level) {
+      res.status(400).json({ error: "Missing level field" });
+      return;
+    }
+
+    const ai = getAIClient();
+
+    const systemInstruction = `You are an expert English teacher who writes simple, highly engaging short stories for English language learners. 
+You must write a story specifically tailored to the English CEFR level ${level}.
+
+Guidelines:
+- Level A1: Extremely simple vocabulary, short sentences, present tense only, around 80-120 words.
+- Level A2: Simple vocabulary, simple past and present tenses, basic conjunctions, around 120-170 words.
+- Level B1: Moderate vocabulary, compound sentences, past/present/future/perfect tenses, interesting themes, around 170-240 words.
+- Level B2: Upper-intermediate vocabulary, complex sentences, sub-clauses, rich idioms, around 240-350 words.
+
+The story must have:
+1. A unique, beautiful, inspiring, or cozy title.
+2. An engaging and grammatically correct English text.
+3. It must feel like a genuine, high-quality literary story or diary entry.
+
+Return ONLY a valid JSON object in this exact shape:
+{
+  "title": "Story Title",
+  "level": "${level}",
+  "text": "The full text of the story..."
+}
+Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [
+        { text: systemInstruction },
+        { text: `Generate a brand new, unique story for level ${level} on date ${date || "today"}. Make it highly cozy, inspiring, and different from any other story.` }
+      ],
+    });
+
+    const text = response.text || "";
+    const cleanText = text.replace(/```json|```/g, "").trim();
+
+    try {
+      const parsedStory = JSON.parse(cleanText);
+      res.json(parsedStory);
+    } catch (parseError) {
+      console.error("Failed to parse story JSON. Raw response was:", text);
+      res.status(500).json({ error: "Failed to parse story JSON", raw: text });
+    }
+  } catch (error: any) {
+    console.error("Story Generation API error:", error);
+    res.status(500).json({ error: error?.message || "Internal server error during story generation" });
+  }
+});
+
 // Vite server setup & static serving middleware
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
