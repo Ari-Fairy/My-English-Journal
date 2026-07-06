@@ -13,6 +13,7 @@ interface SettingsScreenProps {
   theme: "light" | "dark";
   onToggleTheme: () => void;
   onResetProgress: () => Promise<void>;
+  onWipeData: () => Promise<void>;
   onLogout: () => void;
   onImportData: (data: { words: Word[]; irregular: IrregularVerb[]; progress: UserProgress }) => void;
   onBack: () => void;
@@ -26,6 +27,7 @@ export default function SettingsScreen({
   theme,
   onToggleTheme,
   onResetProgress,
+  onWipeData,
   onLogout,
   onBack,
   onImportData
@@ -33,6 +35,77 @@ export default function SettingsScreen({
   const [msg, setMsg] = useState("");
   const [isPersistent, setIsPersistent] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  const [notifPermission, setNotifPermission] = useState<string>(
+    typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported"
+  );
+  const [notifFrequency, setNotifFrequency] = useState<string>(
+    localStorage.getItem("my-eng-notif-freq") || "daily-20"
+  );
+
+  const sendImmediateNotification = (title: string, body: string) => {
+    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
+      try {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(title, {
+              body,
+              icon: "/favicon.ico",
+              badge: "/favicon.ico",
+              tag: "my-eng-reminder",
+              renotify: true
+            } as any);
+          }).catch(() => {
+            new Notification(title, { body, icon: "/favicon.ico" });
+          });
+        } else {
+          new Notification(title, { body, icon: "/favicon.ico" });
+        }
+      } catch (e) {
+        try {
+          new Notification(title, { body, icon: "/favicon.ico" });
+        } catch (err) {
+          console.error("Notification constructor failed:", err);
+        }
+      }
+    }
+  };
+
+  const handleRequestNotifPermission = async () => {
+    if (!("Notification" in window)) {
+      alert("К сожалению, ваш браузер или устройство не поддерживает системные уведомления.");
+      return;
+    }
+    try {
+      const permission = await Notification.requestPermission();
+      setNotifPermission(permission);
+      if (permission === "granted") {
+        notify("🎉 Уведомления успешно включены!");
+        sendImmediateNotification(
+          "🦉 Журнал английского",
+          "Привет! Уведомления настроены отлично. Мы напомним тебе заниматься, чтобы твоя серия дней не сгорела! 🔥"
+        );
+      } else if (permission === "denied") {
+        notify("🔕 Уведомления заблокированы. Вы можете разрешить их в настройках браузера.");
+      }
+    } catch (e) {
+      console.error("Failed to request notification permission:", e);
+    }
+  };
+
+  const handleFrequencyChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const val = e.target.value;
+    setNotifFrequency(val);
+    localStorage.setItem("my-eng-notif-freq", val);
+    notify("✅ Частота уведомлений успешно сохранена!");
+  };
+
+  const handleSendTestNotification = () => {
+    sendImmediateNotification(
+      "🦉 Время английского! (Тест)",
+      "Отлично! Твои уведомления работают. Не забудь заглянуть сегодня, чтобы продолжить обучение и сохранить свою серию дней! ✨"
+    );
+  };
 
   const notify = (text: string, persistent = false) => {
     setMsg(text);
@@ -106,16 +179,12 @@ export default function SettingsScreen({
   };
 
   const handleWipeData = async () => {
-    const ok = confirm("Вы уверены, что хотите УДАЛИТЬ все свои данные из облака? Это действие необратимо!");
+    const ok = confirm("Вы уверены, что хотите УДАЛИТЬ все свои данные (словарь, неправильные глаголы и прогресс)? Это действие абсолютно необратимо, списки будут полностью пустыми!");
     if (!ok) return;
 
     setLoading(true);
     try {
-      if (user !== "guest") {
-        await wipeUserAccountData(stats.userId);
-      }
-      // Reset local cache & refresh
-      localStorage.clear();
+      await onWipeData();
       notify("🔥 Все данные были удалены.");
       setTimeout(() => {
         window.location.reload();
@@ -136,7 +205,7 @@ export default function SettingsScreen({
     try {
       if (user !== "guest" && auth.currentUser) {
         // 1. Wipe data from cloud
-        await wipeUserAccountData(stats.userId);
+        await wipeUserAccountData(stats.userId, true);
 
         // 2. Delete Firebase auth user
         await deleteUser(auth.currentUser);
@@ -246,6 +315,83 @@ export default function SettingsScreen({
             {theme === "dark" ? "🌙 Тёмная тема" : "☀️ Светлая тема"}
           </button>
         </div>
+      </div>
+
+      {/* Push Notifications Settings */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🔔 Напоминания на устройство</h3>
+        
+        {notifPermission === "unsupported" ? (
+          <p style={{ fontSize: 12, color: "var(--muted)" }}>
+            ⚠️ К сожалению, ваш текущий браузер или устройство не поддерживает системные уведомления.
+          </p>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
+              Включите уведомления, чтобы получать напоминания о повторении слов и защитить свою серию дней от сгорания!
+            </p>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Статус разрешений:</span>
+              <span style={{ 
+                fontSize: 12, 
+                padding: "3px 8px", 
+                borderRadius: 999, 
+                fontWeight: 600,
+                background: notifPermission === "granted" ? "rgba(124, 139, 114, 0.12)" : "rgba(181, 93, 76, 0.08)",
+                color: notifPermission === "granted" ? "var(--sage)" : "var(--rose)"
+              }}>
+                {notifPermission === "granted" ? "✅ Разрешено" : notifPermission === "denied" ? "🚫 Заблокировано" : "🔕 Не настроено"}
+              </span>
+            </div>
+
+            {notifPermission !== "granted" && (
+              <button 
+                className="btn btn-primary btn-sm" 
+                style={{ width: "100%", padding: 10, fontSize: 13 }}
+                onClick={handleRequestNotifPermission}
+              >
+                🔔 Разрешить уведомления
+              </button>
+            )}
+
+            {notifPermission === "granted" && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label htmlFor="notif-freq-select" style={{ fontSize: 13, color: "var(--warm)" }}>Частота напоминаний</label>
+                  <select 
+                    id="notif-freq-select"
+                    className="select" 
+                    value={notifFrequency}
+                    onChange={handleFrequencyChange}
+                    style={{ fontSize: 13, padding: "6px 10px" }}
+                  >
+                    <option value="off">📴 Отключить</option>
+                    <option value="every-4h">🕒 Каждые 4 часа</option>
+                    <option value="every-12h">🕒 Каждые 12 часов</option>
+                    <option value="daily-12">☀️ Каждый день в 12:00</option>
+                    <option value="daily-18">🌇 Каждый день в 18:00</option>
+                    <option value="daily-20">🌃 Каждый день в 20:00</option>
+                  </select>
+                </div>
+
+                <button 
+                  className="btn btn-outline btn-sm" 
+                  style={{ width: "100%", padding: 8, fontSize: 12, borderColor: "var(--border)" }}
+                  onClick={handleSendTestNotification}
+                >
+                  🧪 Отправить тестовое уведомление
+                </button>
+              </div>
+            )}
+            
+            {notifPermission === "denied" && (
+              <p style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic", textAlign: "center" }}>
+                Уведомления заблокированы в браузере. Сбросьте настройки разрешений сайта в адресной строке, чтобы включить их обратно.
+              </p>
+            )}
+          </div>
+        )}
       </div>
 
       {/* Manual Import / Export */}

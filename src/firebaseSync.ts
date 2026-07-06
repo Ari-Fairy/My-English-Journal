@@ -269,7 +269,7 @@ export async function batchResetUserData(userId: string, resetWords: Word[], res
 }
 
 // Completely delete all data for a specific user ID (Settings wipeout feature!)
-export async function wipeUserAccountData(userId: string): Promise<void> {
+export async function wipeUserAccountData(userId: string, deleteProgressDoc: boolean = false): Promise<void> {
   const batch = writeBatch(db);
 
   // 1. Fetch user's words
@@ -300,11 +300,32 @@ export async function wipeUserAccountData(userId: string): Promise<void> {
     batch.delete(docSnap.ref);
   });
 
-  // 3. Add progress document to batch delete
+  // 3. Update or delete progress document
   try {
-    batch.delete(doc(usersCollection, userId));
+    const progressDocRef = doc(usersCollection, userId);
+    if (deleteProgressDoc) {
+      batch.delete(progressDocRef);
+    } else {
+      const d = new Date();
+      const localToday = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+      const freshProgress: UserProgress = {
+        userId,
+        streak: 1,
+        best: 1,
+        lastVisit: localToday,
+        achievements: [],
+        booksRead: 0,
+        wordsFromBooks: 0,
+        bestStreak: 0,
+        daily: {},
+        dailyBooksRead: {},
+        customTopics: {},
+        customPos: {}
+      };
+      batch.set(progressDocRef, freshProgress);
+    }
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}`);
     throw error;
   }
 

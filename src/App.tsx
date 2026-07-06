@@ -8,7 +8,8 @@ import {
   deleteWord, 
   saveIrregularVerb, 
   saveUserProgress,
-  batchResetUserData
+  batchResetUserData,
+  wipeUserAccountData
 } from "./firebaseSync";
 import { Word, IrregularVerb, UserProgress } from "./types";
 import { checkAchievements, ACHIEVEMENTS_DEF, SEED_WORDS, SEED_IRREGULAR } from "./data";
@@ -41,6 +42,87 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("my-eng-theme", theme);
   }, [theme]);
+
+  // System Notification Scheduler & Check
+  useEffect(() => {
+    const checkAndTriggerNotifications = () => {
+      if (typeof window === "undefined" || !("Notification" in window) || Notification.permission !== "granted") {
+        return;
+      }
+
+      const freq = localStorage.getItem("my-eng-notif-freq") || "daily-20";
+      if (freq === "off") return;
+
+      const now = Date.now();
+      const d = new Date();
+      const currentHour = d.getHours();
+      
+      // Get local YYYY-MM-DD string
+      const todayStr = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+
+      if (freq.startsWith("daily-")) {
+        const targetHour = parseInt(freq.split("-")[1], 10) || 20;
+        const lastTriggerDate = localStorage.getItem("my-eng-notif-last-trigger-date");
+        
+        // If we haven't triggered today and we are at/past the target hour, fire the reminder!
+        if (lastTriggerDate !== todayStr && currentHour >= targetHour) {
+          sendReminderNotification();
+          localStorage.setItem("my-eng-notif-last-trigger-date", todayStr);
+          localStorage.setItem("my-eng-notif-last-trigger-time", String(now));
+        }
+      } else if (freq.startsWith("every-")) {
+        const hours = freq === "every-4h" ? 4 : 12;
+        const lastTriggerTimeStr = localStorage.getItem("my-eng-notif-last-trigger-time");
+        const lastTriggerTime = lastTriggerTimeStr ? parseInt(lastTriggerTimeStr, 10) : 0;
+        
+        // If never triggered or triggered more than X hours ago
+        if (now - lastTriggerTime >= hours * 60 * 60 * 1000) {
+          sendReminderNotification();
+          localStorage.setItem("my-eng-notif-last-trigger-time", String(now));
+          localStorage.setItem("my-eng-notif-last-trigger-date", todayStr);
+        }
+      }
+    };
+
+    const sendReminderNotification = () => {
+      const title = "🦉 Журнал английского";
+      const body = "Пора повторить новые слова! Зайди в журнал сегодня, чтобы закрепить материал и сохранить свою серию занятий активной! 🔥";
+      
+      try {
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.ready.then((registration) => {
+            registration.showNotification(title, {
+              body,
+              icon: "/favicon.ico",
+              badge: "/favicon.ico",
+              tag: "my-eng-reminder",
+              renotify: true
+            } as any);
+          }).catch(() => {
+            new Notification(title, { body, icon: "/favicon.ico" });
+          });
+        } else {
+          new Notification(title, { body, icon: "/favicon.ico" });
+        }
+      } catch (e) {
+        try {
+          new Notification(title, { body, icon: "/favicon.ico" });
+        } catch (err) {
+          console.error("Reminder notification failed:", err);
+        }
+      }
+    };
+
+    // Run check on mount
+    checkAndTriggerNotifications();
+
+    // Check periodically every minute
+    const timer = setInterval(() => {
+      checkAndTriggerNotifications();
+    }, 60000);
+
+    return () => clearInterval(timer);
+  }, []);
 
   // Core app data (local state sync)
   const [words, setWords] = useState<Word[]>([]);
@@ -608,6 +690,45 @@ export default function App() {
     }
   };
 
+  const handleWipeAllData = async () => {
+    const userId = user && user !== "guest" ? user.uid : "guest";
+
+    if (user && user !== "guest") {
+      // Wipe cloud collections but write a fresh progress doc so we don't re-seed
+      await wipeUserAccountData(userId, false);
+    }
+
+    setWords([]);
+    setIrregular([]);
+    const freshProgress: UserProgress = {
+      userId,
+      streak: 1,
+      best: 1,
+      lastVisit: getLocalDateString(),
+      achievements: [],
+      booksRead: 0,
+      wordsFromBooks: 0,
+      bestStreak: 0,
+      daily: {},
+      dailyBooksRead: {},
+      customTopics: {},
+      customPos: {}
+    };
+    setProgress(freshProgress);
+
+    if (user && user !== "guest") {
+      saveUserData(userId, [], [], freshProgress);
+    } else {
+      saveGuestData([], [], freshProgress);
+    }
+
+    const mode = localStorage.getItem("my-eng-v3-mode");
+    localStorage.clear();
+    if (mode) {
+      localStorage.setItem("my-eng-v3-mode", mode);
+    }
+  };
+
   const handleLogout = () => {
     setUser(null);
     setWords([]);
@@ -838,6 +959,7 @@ export default function App() {
           theme={theme}
           onToggleTheme={() => setTheme(t => t === "light" ? "dark" : "light")}
           onResetProgress={handleResetProgress}
+          onWipeData={handleWipeAllData}
           onLogout={handleLogout}
           onImportData={handleImportBackup}
           onBack={() => setView("home")}
