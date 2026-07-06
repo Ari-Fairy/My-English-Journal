@@ -227,28 +227,49 @@ export async function saveUserProgress(progress: UserProgress): Promise<void> {
 
 // Completely delete all data for a specific user ID (Settings wipeout feature!)
 export async function wipeUserAccountData(userId: string): Promise<void> {
+  const batch = writeBatch(db);
+
+  // 1. Fetch user's words
+  let wordsSnap;
   try {
-    const batch = writeBatch(db);
-
-    // 1. Fetch and add all user's words to batch delete
     const wordsQuery = query(wordsCollection, where("userId", "==", userId));
-    const wordsSnap = await getDocs(wordsQuery);
-    wordsSnap.forEach(docSnap => {
-      batch.delete(docSnap.ref);
-    });
+    wordsSnap = await getDocs(wordsQuery);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `words (query for ${userId})`);
+    throw error;
+  }
 
-    // 2. Fetch and add all user's irregular verbs to batch delete
+  wordsSnap.forEach(docSnap => {
+    batch.delete(docSnap.ref);
+  });
+
+  // 2. Fetch user's irregular verbs
+  let irregularSnap;
+  try {
     const irregularQuery = query(irregularCollection, where("userId", "==", userId));
-    const irregularSnap = await getDocs(irregularQuery);
-    irregularSnap.forEach(docSnap => {
-      batch.delete(docSnap.ref);
-    });
+    irregularSnap = await getDocs(irregularQuery);
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `irregular (query for ${userId})`);
+    throw error;
+  }
 
-    // 3. Add progress document to batch delete
+  irregularSnap.forEach(docSnap => {
+    batch.delete(docSnap.ref);
+  });
+
+  // 3. Add progress document to batch delete
+  try {
     batch.delete(doc(usersCollection, userId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
+    throw error;
+  }
 
+  // 4. Commit batch
+  try {
     await batch.commit();
   } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `wipeUserAccountData/${userId}`);
+    handleFirestoreError(error, OperationType.DELETE, `batch.commit (wipe data for ${userId})`);
+    throw error;
   }
 }

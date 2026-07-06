@@ -62,8 +62,14 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && isValidWord(request.resource.data);
 
-      allow read, delete: if isSignedIn() 
+      allow get: if isSignedIn() 
         && resource.data.userId == request.auth.uid;
+
+      allow list: if isSignedIn() 
+        && resource.data.userId == request.auth.uid;
+
+      allow delete: if isSignedIn() 
+        && (resource == null || resource.data.userId == request.auth.uid);
 
       allow update: if isSignedIn()
         && resource.data.userId == request.auth.uid
@@ -78,8 +84,14 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && isValidIrregularVerb(request.resource.data);
 
-      allow read, delete: if isSignedIn()
+      allow get: if isSignedIn()
         && resource.data.userId == request.auth.uid;
+
+      allow list: if isSignedIn()
+        && resource.data.userId == request.auth.uid;
+
+      allow delete: if isSignedIn()
+        && (resource == null || resource.data.userId == request.auth.uid);
 
       allow update: if isSignedIn()
         && resource.data.userId == request.auth.uid
@@ -95,7 +107,10 @@ service cloud.firestore {
         && request.resource.data.userId == request.auth.uid
         && isValidUserProgress(request.resource.data);
 
-      allow read: if isSignedIn()
+      allow get: if isSignedIn()
+        && userId == request.auth.uid;
+
+      allow list: if isSignedIn()
         && userId == request.auth.uid;
 
       allow update: if isSignedIn()
