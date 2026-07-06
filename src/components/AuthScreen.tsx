@@ -44,6 +44,8 @@ export default function AuthScreen({ onGuestMode, onSuccess }: AuthScreenProps) 
         message = "Пароль должен быть не менее 6 символов.";
       } else if (err.code === "auth/invalid-email") {
         message = "Некорректный формат Email.";
+      } else if (err.code === "auth/operation-not-allowed") {
+        message = "Вход по почте и паролю отключен в консоли вашего проекта Firebase. Чтобы включить его, перейдите в Firebase Console -> Authentication -> вкладка 'Sign-in method' -> нажмите 'Add new provider' или выберите 'Электронная почта/пароль' (Email/Password), включите переключатель (Enable) и сохраните.";
       }
       setErrorMsg(message);
     } finally {
