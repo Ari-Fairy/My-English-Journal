@@ -98,10 +98,13 @@ service cloud.firestore {
       allow read: if isSignedIn()
         && userId == request.auth.uid;
 
-      allow update, delete: if isSignedIn()
+      allow update: if isSignedIn()
         && userId == request.auth.uid
         && request.resource.data.userId == request.auth.uid
         && isValidUserProgress(request.resource.data);
+
+      allow delete: if isSignedIn()
+        && userId == request.auth.uid;
     }
   }
 }

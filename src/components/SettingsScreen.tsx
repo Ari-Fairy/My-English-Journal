@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { Word, IrregularVerb, UserProgress } from "../types";
 import { wipeUserAccountData } from "../firebaseSync";
 import { auth } from "../firebase";
-import { signOut } from "firebase/auth";
+import { signOut, deleteUser } from "firebase/auth";
 
 interface SettingsScreenProps {
   user: any; // Firebase user or "guest"
@@ -99,6 +99,39 @@ export default function SettingsScreen({
     }
   };
 
+  const handleDeleteAccount = async () => {
+    const ok = confirm("ВНИМАНИЕ! Вы уверены, что хотите навсегда УДАЛИТЬ свой аккаунт и все связанные с ним данные? Это действие абсолютно необратимо!");
+    if (!ok) return;
+
+    setLoading(true);
+    try {
+      if (user !== "guest" && auth.currentUser) {
+        // 1. Wipe data from cloud
+        await wipeUserAccountData(stats.userId);
+
+        // 2. Delete Firebase auth user
+        await deleteUser(auth.currentUser);
+      }
+      
+      // Reset local cache, log out and notify
+      localStorage.clear();
+      onLogout();
+      notify("🔥 Ваш аккаунт и все данные были успешно и полностью удалены.");
+      setTimeout(() => {
+        window.location.reload();
+      }, 1500);
+    } catch (err: any) {
+      console.error(err);
+      if (err.code === "auth/requires-recent-login") {
+        notify("🔒 Для удаления аккаунта требуется повторный вход. Пожалуйста, выйдите из аккаунта, войдите заново и сразу же повторите удаление.");
+      } else {
+        notify("❌ Ошибка при удалении аккаунта: " + (err.message || err));
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className="fade-in max-w-md mx-auto">
       <button className="back-btn" onClick={onBack} style={{ marginBottom: 16 }}>← Назад</button>
@@ -158,14 +191,35 @@ export default function SettingsScreen({
       </div>
 
       {/* Danger Zone */}
-      <button 
-        className="btn" 
-        style={{ width: "100%", padding: 13, color: "var(--rose)", border: "1.5px solid rgba(212,165,165,.25)", borderRadius: "999px" }} 
-        onClick={handleWipeData}
-        disabled={loading}
-      >
-        🗑 Сбросить и УДАЛИТЬ все данные
-      </button>
+      <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+        <button 
+          className="btn" 
+          style={{ width: "100%", padding: 13, color: "var(--rose)", border: "1.5px solid rgba(212,165,165,.25)", borderRadius: "999px" }} 
+          onClick={handleWipeData}
+          disabled={loading}
+        >
+          🗑 Сбросить и УДАЛИТЬ все данные
+        </button>
+
+        {user !== "guest" && (
+          <button 
+            className="btn" 
+            style={{ 
+              width: "100%", 
+              padding: 13, 
+              color: "#fff", 
+              background: "var(--rose)", 
+              borderRadius: "999px",
+              fontWeight: 600,
+              boxShadow: "0 4px 14px rgba(181, 93, 76, 0.18)"
+            }} 
+            onClick={handleDeleteAccount}
+            disabled={loading}
+          >
+            🚨 Полностью УДАЛИТЬ этот аккаунт
+          </button>
+        )}
+      </div>
     </div>
   );
 }
