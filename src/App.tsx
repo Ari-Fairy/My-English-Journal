@@ -637,10 +637,9 @@ export default function App() {
 
     const resetVerbsList = irregular.map(v => ({
       ...v,
-      correct: 0,
-      wrong: 0,
-      streak: 0,
-      lastReviewed: null
+      learned: false,
+      learnedDate: null,
+      streak: 0
     }));
 
     const resetProgress: UserProgress = {
@@ -653,7 +652,9 @@ export default function App() {
       wordsFromBooks: 0,
       bestStreak: 0,
       daily: {},
-      dailyBooksRead: {}
+      dailyBooksRead: {},
+      customTopics: progress.customTopics || {},
+      customPos: progress.customPos || {}
     };
 
     setWords(resetWordsList);
