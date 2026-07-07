@@ -139,71 +139,134 @@ const getOfflineClassification = (
   } else if (adverbs.includes(word)) {
     guessedPos = "adverb";
     isGuess = false;
-  } else if (word.includes(" ") || ruWord.includes(" ")) {
-    guessedPos = "phrase";
-    isGuess = false;
   } else if (["hello", "hi", "bye", "please", "thanks", "thank you", "welcome"].includes(word)) {
     guessedPos = "phrase";
     isGuess = false;
-  } else if (word.endsWith("ly") && word.length > 4) {
-    guessedPos = "adverb";
-    isGuess = false;
-  } else if (
-    word.endsWith("able") ||
-    word.endsWith("ible") ||
-    word.endsWith("ful") ||
-    word.endsWith("less") ||
-    word.endsWith("ous") ||
-    word.endsWith("ive") ||
-    word.endsWith("ic") ||
-    (word.endsWith("ish") && word.length > 4) ||
-    (word.endsWith("al") && word.length > 4)
-  ) {
-    guessedPos = "adjective";
-    isGuess = false;
-  } else if (
-    word.endsWith("ize") ||
-    word.endsWith("ise") ||
-    word.endsWith("ify") ||
-    (word.endsWith("ate") && word.length > 4)
-  ) {
-    guessedPos = "verb";
-    isGuess = false;
-  } else if (
-    word.endsWith("tion") ||
-    word.endsWith("sion") ||
-    word.endsWith("ness") ||
-    word.endsWith("ment") ||
-    word.endsWith("ity") ||
-    word.endsWith("ship") ||
-    word.endsWith("ism")
-  ) {
-    guessedPos = "noun";
-    isGuess = false;
-  } else if (ruWord) {
-    // Check Russian suffix rules
-    if (ruWord.endsWith("ть") || ruWord.endsWith("ться") || ruWord.endsWith("ти") || ruWord.endsWith("уть") || ruWord.endsWith("ать") || ruWord.endsWith("ить") || ruWord.endsWith("еть")) {
-      guessedPos = "verb";
+  } else {
+    // Advanced parsing for phrases and alternative synonyms/translations
+    // Strip common leading helper words from English to check core part of speech
+    let cleanEn = word;
+    if (cleanEn.startsWith("to ")) {
+      cleanEn = cleanEn.substring(3).trim();
+    } else if (cleanEn.startsWith("a ")) {
+      cleanEn = cleanEn.substring(2).trim();
+    } else if (cleanEn.startsWith("an ")) {
+      cleanEn = cleanEn.substring(3).trim();
+    } else if (cleanEn.startsWith("the ")) {
+      cleanEn = cleanEn.substring(4).trim();
+    }
+
+    // Split options by slashes, commas, semicolons
+    const enParts = cleanEn.split(/[\/,;]/).map(x => x.trim()).filter(Boolean);
+    const ruParts = ruWord.split(/[\/,;]/).map(x => x.trim()).filter(Boolean);
+
+    // If English actually contains a multi-word phrase (after stripping "to", etc., and after splitting slashes)
+    // For example "take care" is a phrase. But "dust/clean" is not.
+    const isEnPhrase = enParts.some(p => p.includes(" "));
+
+    if (isEnPhrase) {
+      guessedPos = "phrase";
       isGuess = false;
-    } else if (
-      ruWord.endsWith("ый") ||
-      ruWord.endsWith("ий") ||
-      ruWord.endsWith("ое") ||
-      ruWord.endsWith("ая") ||
-      ruWord.endsWith("ые") ||
-      ruWord.endsWith("ие") ||
-      ruWord.endsWith("ой")
-    ) {
-      guessedPos = "adjective";
-      isGuess = false;
-    } else if (ruWord.endsWith("о") && ruWord.length > 3) {
-      const commonONouns = ["окно", "лицо", "молоко", "слово", "дело", "утро", "небо", "солнце", "пиво", "кино", "метро", "фото", "яблоко", "озеро"];
-      if (!commonONouns.includes(ruWord)) {
+    } else {
+      // Analyze parts to detect core grammatical markers
+      let foundVerb = false;
+      let foundAdjective = false;
+      let foundAdverb = false;
+
+      // Check Russian translations
+      for (const part of ruParts) {
+        const firstWord = part.split(/\s+/)[0] || "";
+        // Check standard verb suffixes
+        if (
+          part.endsWith("ть") || part.endsWith("ться") || part.endsWith("ти") || part.endsWith("уть") || part.endsWith("ать") || part.endsWith("ить") || part.endsWith("еть") ||
+          firstWord.endsWith("ть") || firstWord.endsWith("ться") || firstWord.endsWith("ти") || firstWord.endsWith("уть") || firstWord.endsWith("ать") || firstWord.endsWith("ить") || firstWord.endsWith("еть")
+        ) {
+          foundVerb = true;
+        }
+        // Check standard adjective suffixes
+        if (
+          part.endsWith("ый") || part.endsWith("ий") || part.endsWith("ая") || part.endsWith("ые") || part.endsWith("ие") || part.endsWith("ой") ||
+          firstWord.endsWith("ый") || firstWord.endsWith("ий") || firstWord.endsWith("ая") || firstWord.endsWith("ые") || firstWord.endsWith("ие") || firstWord.endsWith("ой")
+        ) {
+          foundAdjective = true;
+        }
+        // Check Russian adverb suffixes (ending in 'о', but not nouns)
+        if (part.endsWith("о") && part.length > 3) {
+          const commonONouns = ["окно", "лицо", "молоко", "слово", "дело", "утро", "небо", "солнце", "пиво", "кино", "метро", "фото", "яблоко", "озеро"];
+          if (!commonONouns.includes(part) && !commonONouns.includes(firstWord)) {
+            foundAdverb = true;
+          }
+        }
+      }
+
+      if (foundVerb) {
+        guessedPos = "verb";
+        isGuess = false;
+      } else if (foundAdjective) {
+        guessedPos = "adjective";
+        isGuess = false;
+      } else if (foundAdverb) {
         guessedPos = "adverb";
         isGuess = false;
       } else {
-        guessedPos = "noun";
-        isGuess = false;
+        // If Russian doesn't yield a clear hint, look at English suffixes for any of the parts
+        let hasAdverb = false;
+        let hasAdjective = false;
+        let hasVerb = false;
+        let hasNoun = false;
+
+        for (const p of enParts) {
+          if (p.endsWith("ly") && p.length > 4) {
+            hasAdverb = true;
+          } else if (
+            p.endsWith("able") ||
+            p.endsWith("ible") ||
+            p.endsWith("ful") ||
+            p.endsWith("less") ||
+            p.endsWith("ous") ||
+            p.endsWith("ive") ||
+            p.endsWith("ic") ||
+            (p.endsWith("ish") && p.length > 4) ||
+            (p.endsWith("al") && p.length > 4)
+          ) {
+            hasAdjective = true;
+          } else if (
+            p.endsWith("ize") ||
+            p.endsWith("ise") ||
+            p.endsWith("ify") ||
+            (p.endsWith("ate") && p.length > 4)
+          ) {
+            hasVerb = true;
+          } else if (
+            p.endsWith("tion") ||
+            p.endsWith("sion") ||
+            p.endsWith("ness") ||
+            p.endsWith("ment") ||
+            p.endsWith("ity") ||
+            p.endsWith("ship") ||
+            p.endsWith("ism")
+          ) {
+            hasNoun = true;
+          }
+        }
+
+        if (hasAdverb) {
+          guessedPos = "adverb";
+          isGuess = false;
+        } else if (hasAdjective) {
+          guessedPos = "adjective";
+          isGuess = false;
+        } else if (hasVerb) {
+          guessedPos = "verb";
+          isGuess = false;
+        } else if (hasNoun) {
+          guessedPos = "noun";
+          isGuess = false;
+        } else {
+          // Default guess is noun if no rules apply
+          guessedPos = "noun";
+          isGuess = true;
+        }
       }
     }
   }
@@ -408,6 +471,7 @@ app.post("/api/classify", async (req, res) => {
 You analyze an English word/phrase and its Russian translation to determine its part of speech (POS) and its vocabulary topic.
 
 Your classification MUST be highly accurate according to standard English and Russian grammar:
+- If the English input or Russian translation contains separators like slashes ("/"), commas (","), or semicolons (";"), it represents multiple synonym options (e.g. "dust / clean" -> "вытирать пыль", or "dust" -> "пыль, вытирать пыль"). Do NOT classify it as a "phrase" (Фраза) just because it has slashes, commas, or multiple words in the translation! A "phrase" is ONLY for actual multi-word English expressions or idioms (like "by the way", "take care", "good morning"). Single English words with multiple synonym choices or a multi-word translation (like "dust" -> "вытирать пыль") are NOT phrases. Determine their primary part of speech (e.g., "dust" as "вытирать пыль" is a "verb", "dust" as "пыль" is a "noun").
 - Pronouns like "I", "you", "he", "she", "it", "we", "they", "this", "that", "him", "her", "their", "me" should be classified as pronouns ("pronoun"). If "pronoun" is not in the list of available keys, you should invent it with the label "Местоимение".
 - Interrogative and relative adverbs like "how" (как), "where" (где), "when" (когда), "why" (почему) must be classified as adverbs ("adverb", Наречие), NOT nouns or phrases!
 - Prepositions like "in", "on", "at", "under", "with", "by", "for", "about", "near" are prepositions ("preposition", Предлог).

@@ -71,8 +71,8 @@ export default function ReaderScreen({
           return;
         }
       }
-    } catch (e) {
-      console.error("Failed to fetch generated story, falling back to static stories", e);
+    } catch (e: any) {
+      console.warn("Could not fetch generated story, falling back to static stories:", e?.message || e);
     }
 
     // Fallback to static story
@@ -218,8 +218,8 @@ export default function ReaderScreen({
           return;
         }
       }
-    } catch (e) {
-      console.error("Failed to generate quiz, using local fallback", e);
+    } catch (e: any) {
+      console.warn("Could not generate quiz, using local fallback:", e?.message || e);
     }
 
     // High fidelity offline fallback

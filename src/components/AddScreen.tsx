@@ -72,7 +72,7 @@ export default function AddScreen({
 
   const trimmedEn = en.trim().toLowerCase();
   const duplicateWord = trimmedEn
-    ? (words || []).find(w => w.en.trim().toLowerCase() === trimmedEn)
+    ? (words || []).find(w => w.en.trim().toLowerCase() === trimmedEn && w.partOfSpeech === pos)
     : undefined;
 
   const photoDuplicates = parsed.filter(p => {
@@ -222,71 +222,134 @@ export default function AddScreen({
     } else if (adverbs.includes(word)) {
       guessedPos = "adverb";
       isGuess = false;
-    } else if (word.includes(" ") || ruWord.includes(" ")) {
-      guessedPos = "phrase";
-      isGuess = false;
     } else if (["hello", "hi", "bye", "please", "thanks", "thank you", "welcome"].includes(word)) {
       guessedPos = "phrase";
       isGuess = false;
-    } else if (word.endsWith("ly") && word.length > 4) {
-      guessedPos = "adverb";
-      isGuess = false;
-    } else if (
-      word.endsWith("able") ||
-      word.endsWith("ible") ||
-      word.endsWith("ful") ||
-      word.endsWith("less") ||
-      word.endsWith("ous") ||
-      word.endsWith("ive") ||
-      word.endsWith("ic") ||
-      (word.endsWith("ish") && word.length > 4) ||
-      (word.endsWith("al") && word.length > 4)
-    ) {
-      guessedPos = "adjective";
-      isGuess = false;
-    } else if (
-      word.endsWith("ize") ||
-      word.endsWith("ise") ||
-      word.endsWith("ify") ||
-      (word.endsWith("ate") && word.length > 4)
-    ) {
-      guessedPos = "verb";
-      isGuess = false;
-    } else if (
-      word.endsWith("tion") ||
-      word.endsWith("sion") ||
-      word.endsWith("ness") ||
-      word.endsWith("ment") ||
-      word.endsWith("ity") ||
-      word.endsWith("ship") ||
-      word.endsWith("ism")
-    ) {
-      guessedPos = "noun";
-      isGuess = false;
-    } else if (ruWord) {
-      // Check Russian suffix rules
-      if (ruWord.endsWith("ть") || ruWord.endsWith("ться") || ruWord.endsWith("ти") || ruWord.endsWith("уть") || ruWord.endsWith("ать") || ruWord.endsWith("ить") || ruWord.endsWith("еть")) {
-        guessedPos = "verb";
+    } else {
+      // Advanced parsing for phrases and alternative synonyms/translations
+      // Strip common leading helper words from English to check core part of speech
+      let cleanEn = word;
+      if (cleanEn.startsWith("to ")) {
+        cleanEn = cleanEn.substring(3).trim();
+      } else if (cleanEn.startsWith("a ")) {
+        cleanEn = cleanEn.substring(2).trim();
+      } else if (cleanEn.startsWith("an ")) {
+        cleanEn = cleanEn.substring(3).trim();
+      } else if (cleanEn.startsWith("the ")) {
+        cleanEn = cleanEn.substring(4).trim();
+      }
+
+      // Split options by slashes, commas, semicolons
+      const enParts = cleanEn.split(/[\/,;]/).map(x => x.trim()).filter(Boolean);
+      const ruParts = ruWord.split(/[\/,;]/).map(x => x.trim()).filter(Boolean);
+
+      // If English actually contains a multi-word phrase (after stripping "to", etc., and after splitting slashes)
+      // For example "take care" is a phrase. But "dust/clean" is not.
+      const isEnPhrase = enParts.some(p => p.includes(" "));
+
+      if (isEnPhrase) {
+        guessedPos = "phrase";
         isGuess = false;
-      } else if (
-        ruWord.endsWith("ый") ||
-        ruWord.endsWith("ий") ||
-        ruWord.endsWith("ое") ||
-        ruWord.endsWith("ая") ||
-        ruWord.endsWith("ые") ||
-        ruWord.endsWith("ие") ||
-        ruWord.endsWith("ой")
-      ) {
-        guessedPos = "adjective";
-        isGuess = false;
-      } else if (ruWord.endsWith("о") && ruWord.length > 3) {
-        const commonONouns = ["окно", "лицо", "молоко", "слово", "дело", "утро", "небо", "солнце", "пиво", "кино", "метро", "фото", "яблоко", "озеро"];
-        if (!commonONouns.includes(ruWord)) {
+      } else {
+        // Analyze parts to detect core grammatical markers
+        let foundVerb = false;
+        let foundAdjective = false;
+        let foundAdverb = false;
+
+        // Check Russian translations
+        for (const part of ruParts) {
+          const firstWord = part.split(/\s+/)[0] || "";
+          // Check standard verb suffixes
+          if (
+            part.endsWith("ть") || part.endsWith("ться") || part.endsWith("ти") || part.endsWith("уть") || part.endsWith("ать") || part.endsWith("ить") || part.endsWith("еть") ||
+            firstWord.endsWith("ть") || firstWord.endsWith("ться") || firstWord.endsWith("ти") || firstWord.endsWith("уть") || firstWord.endsWith("ать") || firstWord.endsWith("ить") || firstWord.endsWith("еть")
+          ) {
+            foundVerb = true;
+          }
+          // Check standard adjective suffixes
+          if (
+            part.endsWith("ый") || part.endsWith("ий") || part.endsWith("ая") || part.endsWith("ые") || part.endsWith("ие") || part.endsWith("ой") ||
+            firstWord.endsWith("ый") || firstWord.endsWith("ий") || firstWord.endsWith("ая") || firstWord.endsWith("ые") || firstWord.endsWith("ие") || firstWord.endsWith("ой")
+          ) {
+            foundAdjective = true;
+          }
+          // Check Russian adverb suffixes (ending in 'о', but not nouns)
+          if (part.endsWith("о") && part.length > 3) {
+            const commonONouns = ["окно", "лицо", "молоко", "слово", "дело", "утро", "небо", "солнце", "пиво", "кино", "метро", "фото", "яблоко", "озеро"];
+            if (!commonONouns.includes(part) && !commonONouns.includes(firstWord)) {
+              foundAdverb = true;
+            }
+          }
+        }
+
+        if (foundVerb) {
+          guessedPos = "verb";
+          isGuess = false;
+        } else if (foundAdjective) {
+          guessedPos = "adjective";
+          isGuess = false;
+        } else if (foundAdverb) {
           guessedPos = "adverb";
           isGuess = false;
         } else {
-          guessedPos = "noun";
-          isGuess = false;
+          // If Russian doesn't yield a clear hint, look at English suffixes for any of the parts
+          let hasAdverb = false;
+          let hasAdjective = false;
+          let hasVerb = false;
+          let hasNoun = false;
+
+          for (const p of enParts) {
+            if (p.endsWith("ly") && p.length > 4) {
+              hasAdverb = true;
+            } else if (
+              p.endsWith("able") ||
+              p.endsWith("ible") ||
+              p.endsWith("ful") ||
+              p.endsWith("less") ||
+              p.endsWith("ous") ||
+              p.endsWith("ive") ||
+              p.endsWith("ic") ||
+              (p.endsWith("ish") && p.length > 4) ||
+              (p.endsWith("al") && p.length > 4)
+            ) {
+              hasAdjective = true;
+            } else if (
+              p.endsWith("ize") ||
+              p.endsWith("ise") ||
+              p.endsWith("ify") ||
+              (p.endsWith("ate") && p.length > 4)
+            ) {
+              hasVerb = true;
+            } else if (
+              p.endsWith("tion") ||
+              p.endsWith("sion") ||
+              p.endsWith("ness") ||
+              p.endsWith("ment") ||
+              p.endsWith("ity") ||
+              p.endsWith("ship") ||
+              p.endsWith("ism")
+            ) {
+              hasNoun = true;
+            }
+          }
+
+          if (hasAdverb) {
+            guessedPos = "adverb";
+            isGuess = false;
+          } else if (hasAdjective) {
+            guessedPos = "adjective";
+            isGuess = false;
+          } else if (hasVerb) {
+            guessedPos = "verb";
+            isGuess = false;
+          } else if (hasNoun) {
+            guessedPos = "noun";
+            isGuess = false;
+          } else {
+            // Default guess is noun if no rules apply
+            guessedPos = "noun";
+            isGuess = true;
+          }
         }
       }
     }
@@ -628,7 +691,7 @@ export default function AddScreen({
         console.warn("Failed to write to classification cache:", e);
       }
     } catch (err: any) {
-      console.error("Auto classification failed, using offline guess:", err);
+      console.warn("Auto classification fallback active, using offline guess:", err?.message || err);
       
       // When network fails or Gemini has quota issues, seamlessly use our rich client-side heuristics!
       if (offlineResult) {
@@ -829,7 +892,7 @@ export default function AddScreen({
           
           {duplicateWord && (
             <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "13px", marginTop: "-4px", marginBottom: "8px", fontWeight: "500", padding: "6px 10px", background: "rgba(255, 77, 77, 0.1)", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)" }}>
-              ⚠️ Слово "{duplicateWord.en}" уже есть в словаре с переводом "{duplicateWord.ru}"! (Тема: {allTopics[duplicateWord.topic] || duplicateWord.topic})
+              ⚠️ Слово "{duplicateWord.en}" ({allPos[duplicateWord.partOfSpeech] || duplicateWord.partOfSpeech}) уже есть в словаре с переводом "{duplicateWord.ru}"! (Тема: {allTopics[duplicateWord.topic] || duplicateWord.topic})
             </div>
           )}
 
