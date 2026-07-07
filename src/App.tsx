@@ -13,7 +13,7 @@ import {
 } from "./firebaseSync";
 import { Word, IrregularVerb, UserProgress } from "./types";
 import { checkAchievements, ACHIEVEMENTS_DEF, SEED_WORDS, SEED_IRREGULAR } from "./data";
-import { getLocalDateString } from "./utils";
+import { getLocalDateString, sendWebNotification } from "./utils";
 
 // Sub-screens imports
 import AuthScreen from "./components/AuthScreen";
@@ -87,47 +87,7 @@ export default function App() {
     const sendReminderNotification = () => {
       const title = "🦉 Журнал английского";
       const body = "Пора повторить новые слова! Зайди в журнал сегодня, чтобы закрепить материал и сохранить свою серию занятий активной! 🔥";
-      
-      try {
-        if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-          if ("serviceWorker" in navigator) {
-            navigator.serviceWorker.getRegistration().then((reg) => {
-              if (reg && reg.showNotification) {
-                reg.showNotification(title, {
-                  body,
-                  icon: "/favicon.ico",
-                  badge: "/favicon.ico",
-                  tag: "my-eng-reminder",
-                  renotify: true
-                } as any);
-              } else {
-                new Notification(title, {
-                  body,
-                  icon: "/favicon.ico",
-                  badge: "/favicon.ico",
-                  tag: "my-eng-reminder"
-                } as any);
-              }
-            }).catch(() => {
-              new Notification(title, {
-                body,
-                icon: "/favicon.ico",
-                badge: "/favicon.ico",
-                tag: "my-eng-reminder"
-              } as any);
-            });
-          } else {
-            new Notification(title, {
-              body,
-              icon: "/favicon.ico",
-              badge: "/favicon.ico",
-              tag: "my-eng-reminder"
-            } as any);
-          }
-        }
-      } catch (e) {
-        console.error("Reminder notification failed:", e);
-      }
+      sendWebNotification(title, body);
     };
 
     // Register Service Worker for mobile notification support

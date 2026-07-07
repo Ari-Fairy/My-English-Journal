@@ -86,10 +86,29 @@ export default function ReaderScreen({
   };
 
   useEffect(() => {
+    // Load cached stories on mount so they are instantly ready without API calls
     ["A1", "A2", "B1", "B2"].forEach(level => {
-      fetchStory(level, today);
+      const cacheKey = `generated_story_${level}_${today}`;
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.title && parsed.text) {
+            setDailyStories(prev => ({ ...prev, [level]: parsed }));
+          }
+        } catch (e) {
+          console.error("Failed to parse cached story", e);
+        }
+      }
     });
   }, [today]);
+
+  // Lazy-load/generate the story when a specific level is selected by the user
+  useEffect(() => {
+    if (selectedLevel && !dailyStories[selectedLevel]) {
+      fetchStory(selectedLevel, today);
+    }
+  }, [selectedLevel, today]);
 
 
   const handleWordClick = (word: string, e: React.MouseEvent) => {
@@ -320,6 +339,20 @@ export default function ReaderScreen({
 
   // Find the selected story (prefer generated, fallback to static)
   const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
+
+  if (selectedLevel && loadingStory[selectedLevel]) {
+    return (
+      <div className="fade-in" style={{ textAlign: "center", paddingTop: 60, paddingBottom: 60 }}>
+        <div style={{ fontSize: 56, animation: "bounce 2s infinite", display: "inline-block" }}>✍️</div>
+        <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, marginTop: 20, color: "var(--warm)" }}>
+          ИИ пишет новую книгу...
+        </h3>
+        <p className="sub-text" style={{ marginTop: 8, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
+          Создаем уникальный и уютный рассказ специально для твоего уровня {selectedLevel}! Это займет буквально пару секунд.
+        </p>
+      </div>
+    );
+  }
 
   if (quizLoading) {
     return (

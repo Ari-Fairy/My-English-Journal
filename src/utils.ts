@@ -20,3 +20,63 @@ export function getLocalDateString(): string {
   return `${year}-${month}-${day}`;
 }
 
+// Отправка веб-уведомлений с поддержкой мобильных устройств через Service Worker
+export function sendWebNotification(title: string, body: string) {
+  if (typeof window === "undefined" || !("Notification" in window)) {
+    console.warn("Notifications are not supported in this environment");
+    return;
+  }
+  if (Notification.permission !== "granted") {
+    console.warn("Notification permission is not granted");
+    return;
+  }
+
+  const options = {
+    body,
+    tag: "my-eng-reminder",
+    renotify: true,
+  };
+
+  if ("serviceWorker" in navigator) {
+    navigator.serviceWorker.register("/sw.js")
+      .then((reg) => {
+        if (reg && reg.showNotification) {
+          reg.showNotification(title, options);
+        } else {
+          navigator.serviceWorker.ready.then((readyReg) => {
+            if (readyReg && readyReg.showNotification) {
+              readyReg.showNotification(title, options);
+            } else {
+              try {
+                new Notification(title, options);
+              } catch (e) {
+                console.error("Fallback Notification failed:", e);
+              }
+            }
+          }).catch(() => {
+            try {
+              new Notification(title, options);
+            } catch (e) {
+              console.error("Fallback Notification failed after ready catch:", e);
+            }
+          });
+        }
+      })
+      .catch((err) => {
+        console.error("Service worker registration/get failed:", err);
+        try {
+          new Notification(title, options);
+        } catch (e) {
+          console.error("Fallback standard Notification failed:", e);
+        }
+      });
+  } else {
+    try {
+      new Notification(title, options);
+    } catch (e) {
+      console.error("Standard Notification constructor failed:", e);
+    }
+  }
+}
+
+

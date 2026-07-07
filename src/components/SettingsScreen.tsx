@@ -3,7 +3,7 @@ import { Word, IrregularVerb, UserProgress } from "../types";
 import { wipeUserAccountData } from "../firebaseSync";
 import { auth } from "../firebase";
 import { signOut, deleteUser } from "firebase/auth";
-import { getLocalDateString } from "../utils";
+import { getLocalDateString, sendWebNotification } from "../utils";
 
 interface SettingsScreenProps {
   user: any; // Firebase user or "guest"
@@ -44,46 +44,7 @@ export default function SettingsScreen({
   );
 
   const sendImmediateNotification = (title: string, body: string) => {
-    if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-      try {
-        if ("serviceWorker" in navigator) {
-          navigator.serviceWorker.getRegistration().then((reg) => {
-            if (reg && reg.showNotification) {
-              reg.showNotification(title, {
-                body,
-                icon: "/favicon.ico",
-                badge: "/favicon.ico",
-                tag: "my-eng-reminder",
-                renotify: true
-              } as any);
-            } else {
-              new Notification(title, {
-                body,
-                icon: "/favicon.ico",
-                badge: "/favicon.ico",
-                tag: "my-eng-reminder"
-              } as any);
-            }
-          }).catch(() => {
-            new Notification(title, {
-              body,
-              icon: "/favicon.ico",
-              badge: "/favicon.ico",
-              tag: "my-eng-reminder"
-            } as any);
-          });
-        } else {
-          new Notification(title, {
-            body,
-            icon: "/favicon.ico",
-            badge: "/favicon.ico",
-            tag: "my-eng-reminder"
-          } as any);
-        }
-      } catch (e) {
-        console.error("Notification constructor failed:", e);
-      }
-    }
+    sendWebNotification(title, body);
   };
 
   const handleRequestNotifPermission = async () => {
