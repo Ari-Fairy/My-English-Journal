@@ -90,17 +90,52 @@ export default function App() {
       
       try {
         if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
-          new Notification(title, {
-            body,
-            icon: "/favicon.ico",
-            badge: "/favicon.ico",
-            tag: "my-eng-reminder"
-          } as any);
+          if ("serviceWorker" in navigator) {
+            navigator.serviceWorker.getRegistration().then((reg) => {
+              if (reg && reg.showNotification) {
+                reg.showNotification(title, {
+                  body,
+                  icon: "/favicon.ico",
+                  badge: "/favicon.ico",
+                  tag: "my-eng-reminder",
+                  renotify: true
+                } as any);
+              } else {
+                new Notification(title, {
+                  body,
+                  icon: "/favicon.ico",
+                  badge: "/favicon.ico",
+                  tag: "my-eng-reminder"
+                } as any);
+              }
+            }).catch(() => {
+              new Notification(title, {
+                body,
+                icon: "/favicon.ico",
+                badge: "/favicon.ico",
+                tag: "my-eng-reminder"
+              } as any);
+            });
+          } else {
+            new Notification(title, {
+              body,
+              icon: "/favicon.ico",
+              badge: "/favicon.ico",
+              tag: "my-eng-reminder"
+            } as any);
+          }
         }
       } catch (e) {
         console.error("Reminder notification failed:", e);
       }
     };
+
+    // Register Service Worker for mobile notification support
+    if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+      navigator.serviceWorker.register("/sw.js")
+        .then(reg => console.log("Service Worker registered successfully:", reg.scope))
+        .catch(err => console.error("Service Worker registration failed:", err));
+    }
 
     // Run check on mount
     checkAndTriggerNotifications();

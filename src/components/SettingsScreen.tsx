@@ -46,12 +46,40 @@ export default function SettingsScreen({
   const sendImmediateNotification = (title: string, body: string) => {
     if (typeof window !== "undefined" && "Notification" in window && Notification.permission === "granted") {
       try {
-        new Notification(title, {
-          body,
-          icon: "/favicon.ico",
-          badge: "/favicon.ico",
-          tag: "my-eng-reminder"
-        } as any);
+        if ("serviceWorker" in navigator) {
+          navigator.serviceWorker.getRegistration().then((reg) => {
+            if (reg && reg.showNotification) {
+              reg.showNotification(title, {
+                body,
+                icon: "/favicon.ico",
+                badge: "/favicon.ico",
+                tag: "my-eng-reminder",
+                renotify: true
+              } as any);
+            } else {
+              new Notification(title, {
+                body,
+                icon: "/favicon.ico",
+                badge: "/favicon.ico",
+                tag: "my-eng-reminder"
+              } as any);
+            }
+          }).catch(() => {
+            new Notification(title, {
+              body,
+              icon: "/favicon.ico",
+              badge: "/favicon.ico",
+              tag: "my-eng-reminder"
+            } as any);
+          });
+        } else {
+          new Notification(title, {
+            body,
+            icon: "/favicon.ico",
+            badge: "/favicon.ico",
+            tag: "my-eng-reminder"
+          } as any);
+        }
       } catch (e) {
         console.error("Notification constructor failed:", e);
       }
@@ -379,15 +407,6 @@ export default function SettingsScreen({
                 >
                   🧪 Отправить тестовое уведомление
                 </button>
-
-                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4, background: "rgba(0,0,0,0.15)", padding: "10px 12px", borderRadius: 10, marginTop: 4 }}>
-                  ℹ️ <strong>Если тест не пришёл на ноутбуке / телефоне:</strong>
-                  <ul style={{ paddingLeft: 16, marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
-                    <li>Проверьте режим <strong>«Не беспокоить» / «Фокусирование» / «Режим сна»</strong> в Windows / macOS или на смартфоне — они блокируют всплывающие окна.</li>
-                    <li>В Windows зайдите в Параметры ➡️ Система ➡️ Уведомления ➡️ убедитесь, что включены уведомления для вашего браузера (Яндекс / Chrome).</li>
-                    <li>На мобильных телефонах вызов стандартных системных уведомлений из веб-страниц ограничен политиками ОС (например, на iOS они приходят только при добавлении сайта на экран «Домой» как PWA). Рекомендуется использовать ПК/ноутбук для гарантированного получения ежедневных напоминаний.</li>
-                  </ul>
-                </div>
               </div>
             )}
             

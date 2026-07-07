@@ -84,30 +84,41 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
       <div style={{ marginBottom: 20 }}>
         <button 
           className="btn btn-primary" 
-          style={{ width: "100%", padding: "18px 22px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "1.75rem", fontSize: 15, marginBottom: 10, cursor: "pointer" }}
+          style={{ 
+            width: "100%", 
+            padding: "16px 20px", 
+            textAlign: "left", 
+            display: "flex", 
+            justifyContent: "space-between", 
+            alignItems: "center", 
+            borderRadius: "1.5rem", 
+            fontSize: 15, 
+            marginBottom: 10, 
+            cursor: "pointer" 
+          }}
           onClick={() => onStartStudy("learn")} 
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, color: "#fff" }}>Study</div>
-            <div style={{ fontSize: 13, opacity: .9, color: "#eee" }}>Новые слова — {newWords.length}</div>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>Study ✨</div>
+            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>Новые слова для изучения — {newWords.length}</div>
           </div>
-          <span style={{ fontSize: 24, opacity: .8 }}>→</span>
+          <span style={{ fontSize: 22, opacity: .8 }}>→</span>
         </button>
 
         <button 
           className="btn" 
           style={{ 
             width: "100%", 
-            padding: "18px 22px", 
+            padding: "16px 20px", 
             textAlign: "left", 
             display: "flex", 
             justifyContent: "space-between", 
             alignItems: "center", 
-            borderRadius: "1.75rem", 
+            borderRadius: "1.5rem", 
             fontSize: 15,
             background: "var(--sage)",
             color: "#fff",
-            boxShadow: "0 4px 14px rgba(124, 139, 114, 0.22)",
+            boxShadow: "0 4px 12px rgba(148,161,135,.2)",
             border: "none",
             cursor: "pointer"
           }}
@@ -120,19 +131,19 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, color: "#fff" }}>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
               {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
             </div>
-            <div style={{ fontSize: 13, opacity: .9, marginTop: 2, color: "#eee" }}>
+            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
               {learnedCount === 0 
                 ? "Сначала выучи слова 📚" 
                 : reviewWords.length > 0 
-                  ? `${reviewWords.length} слов ждут` 
+                  ? `${reviewWords.length} слов ждут повторения` 
                   : `Все ${learnedCount} слов повторены! См. график 📅`
               }
             </div>
           </div>
-          <span style={{ fontSize: 24, opacity: .9, color: "#fff" }}>↺</span>
+          <span style={{ fontSize: 22, opacity: .9, color: "#fff" }}>↺</span>
         </button>
 
         {recallInfo && reviewWords.length === 0 && (
