@@ -1489,8 +1489,7 @@ export default function IrregularVerbsScreen({
 
       <div style={{ marginBottom: 20 }}>
         <button 
-          className="btn" 
-          disabled={irregular.filter(v => !v.learned).length === 0}
+          className="btn btn-primary" 
           style={{ 
             width: "100%", 
             padding: "16px 20px", 
@@ -1501,11 +1500,7 @@ export default function IrregularVerbsScreen({
             borderRadius: "1.5rem", 
             fontSize: 15, 
             marginBottom: 10,
-            background: irregular.filter(v => !v.learned).length > 0 ? "var(--rose)" : "rgba(180,180,180,.14)",
-            color: irregular.filter(v => !v.learned).length > 0 ? "#fff" : "#aaa",
-            boxShadow: irregular.filter(v => !v.learned).length > 0 ? "0 4px 12px rgba(181,93,76,.2)" : "none",
-            border: "none",
-            cursor: irregular.filter(v => !v.learned).length > 0 ? "pointer" : "default"
+            cursor: "pointer"
           }}
           onClick={() => {
             setSessionFlow("learn");
@@ -1513,15 +1508,14 @@ export default function IrregularVerbsScreen({
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: irregular.filter(v => !v.learned).length > 0 ? "#fff" : "#aaa", fontWeight: 600 }}>Учить глаголы ✨</div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: irregular.filter(v => !v.learned).length > 0 ? "#eee" : "#aaa" }}>Новые глаголы для изучения — {irregular.filter(v => !v.learned).length}</div>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>Учить глаголы ✨</div>
+            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>Новые глаголы для изучения — {irregular.filter(v => !v.learned).length}</div>
           </div>
-          <span style={{ fontSize: 22, opacity: irregular.filter(v => !v.learned).length > 0 ? .8 : .3 }}>→</span>
+          <span style={{ fontSize: 22, opacity: .8 }}>→</span>
         </button>
 
         <button 
           className="btn" 
-          disabled={irregular.filter(v => v.learned).length === 0}
           style={{ 
             width: "100%", 
             padding: "16px 20px", 
@@ -1531,11 +1525,11 @@ export default function IrregularVerbsScreen({
             alignItems: "center", 
             borderRadius: "1.5rem", 
             fontSize: 15,
-            background: irregular.filter(v => v.learned).length > 0 ? "var(--sage)" : "rgba(180,180,180,.14)",
-            color: irregular.filter(v => v.learned).length > 0 ? "#fff" : "#aaa",
-            boxShadow: irregular.filter(v => v.learned).length > 0 ? "0 4px 12px rgba(148,161,135,.2)" : "none",
+            background: "var(--sage)",
+            color: "#fff",
+            boxShadow: "0 4px 12px rgba(148,161,135,.2)",
             border: "none",
-            cursor: irregular.filter(v => v.learned).length > 0 ? "pointer" : "default"
+            cursor: "pointer"
           }}
           onClick={() => {
             setSessionFlow("review");
@@ -1543,14 +1537,14 @@ export default function IrregularVerbsScreen({
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: irregular.filter(v => v.learned).length > 0 ? "#fff" : "#aaa", fontWeight: 600 }}>Повторять глаголы ↺</div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: irregular.filter(v => v.learned).length > 0 ? "#eee" : "#aaa" }}>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>Повторять глаголы ↺</div>
+            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
               {irregular.filter(v => v.learned).length === 0 
                 ? "Сначала выучите глаголы (или повторите все)" 
                 : `Выучено — ${irregular.filter(v => v.learned).length}`}
             </div>
           </div>
-          <span style={{ fontSize: 22, opacity: irregular.filter(v => v.learned).length > 0 ? .8 : .3 }}>↺</span>
+          <span style={{ fontSize: 22, opacity: .8 }}>↺</span>
         </button>
       </div>
 

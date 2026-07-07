@@ -333,13 +333,23 @@ export default function SettingsScreen({
             </div>
 
             {notifPermission !== "granted" && (
-              <button 
-                className="btn btn-primary btn-sm" 
-                style={{ width: "100%", padding: 10, fontSize: 13 }}
-                onClick={handleRequestNotifPermission}
-              >
-                🔔 Разрешить уведомления
-              </button>
+              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+                <button 
+                  className="btn btn-primary btn-sm" 
+                  style={{ width: "100%", padding: 10, fontSize: 13 }}
+                  onClick={handleRequestNotifPermission}
+                >
+                  🔔 Разрешить уведомления
+                </button>
+                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4, background: "rgba(0,0,0,0.15)", padding: "10px 12px", borderRadius: 10 }}>
+                  💡 <strong>Инструкция по включению уведомлений:</strong>
+                  <ul style={{ paddingLeft: 16, marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
+                    <li><strong>Отдельная вкладка:</strong> Откройте приложение вне фрейма AI Studio в новой вкладке (например, на вашем домене Vercel), иначе браузер заблокирует запрос прав из соображений безопасности.</li>
+                    <li><strong>На телефоне (Яндекс / Chrome):</strong> Нажмите на значок настроек сайта в адресной строке (замочек или ползунки слева/справа от URL) ➡️ найдите пункт «Разрешения» или «Уведомления» и переключите на <strong>Разрешено</strong>.</li>
+                    <li><strong>В системе телефона (Android / iOS):</strong> Зайдите в системные Настройки устройства ➡️ «Приложения» ➡️ выберите ваш браузер (Яндекс / Chrome) ➡️ «Уведомления» ➡️ убедитесь, что переключатель <strong>«Разрешить уведомления»</strong> включен в самой системе.</li>
+                  </ul>
+                </div>
+              </div>
             )}
 
             {notifPermission === "granted" && (
@@ -369,13 +379,31 @@ export default function SettingsScreen({
                 >
                   🧪 Отправить тестовое уведомление
                 </button>
+
+                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4, background: "rgba(0,0,0,0.15)", padding: "10px 12px", borderRadius: 10, marginTop: 4 }}>
+                  ℹ️ <strong>Если тест не пришёл на ноутбуке / телефоне:</strong>
+                  <ul style={{ paddingLeft: 16, marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
+                    <li>Проверьте режим <strong>«Не беспокоить» / «Фокусирование» / «Режим сна»</strong> в Windows / macOS или на смартфоне — они блокируют всплывающие окна.</li>
+                    <li>В Windows зайдите в Параметры ➡️ Система ➡️ Уведомления ➡️ убедитесь, что включены уведомления для вашего браузера (Яндекс / Chrome).</li>
+                    <li>На мобильных телефонах вызов стандартных системных уведомлений из веб-страниц ограничен политиками ОС (например, на iOS они приходят только при добавлении сайта на экран «Домой» как PWA). Рекомендуется использовать ПК/ноутбук для гарантированного получения ежедневных напоминаний.</li>
+                  </ul>
+                </div>
               </div>
             )}
             
             {notifPermission === "denied" && (
-              <p style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic", textAlign: "center" }}>
-                Уведомления заблокированы в браузере. Сбросьте настройки разрешений сайта в адресной строке, чтобы включить их обратно.
-              </p>
+              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+                <p style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic", textAlign: "center" }}>
+                  Уведомления заблокированы в браузере. Сбросьте настройки разрешений сайта в адресной строке, чтобы включить их обратно.
+                </p>
+                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4, background: "rgba(0,0,0,0.15)", padding: "10px 12px", borderRadius: 10 }}>
+                  🔧 <strong>Как разблокировать:</strong>
+                  <ul style={{ paddingLeft: 16, marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
+                    <li><strong>На ПК (Яндекс / Chrome):</strong> Нажмите на иконку замочка или ползунков слева от адреса сайта ➡️ переведите ползунок «Уведомления» в положение <strong>Разрешено</strong> (или выберите «Настройки сайтов» ➡️ сбросьте разрешение).</li>
+                    <li><strong>На телефоне (Яндекс):</strong> Нажмите три точки в строке меню ➡️ найдите свойства страницы/разрешения и сбросьте блокировку уведомлений.</li>
+                  </ul>
+                </div>
+              </div>
             )}
           </div>
         )}

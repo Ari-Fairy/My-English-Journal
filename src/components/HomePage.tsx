@@ -84,13 +84,12 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
       <div style={{ marginBottom: 20 }}>
         <button 
           className="btn btn-primary" 
-          style={{ width: "100%", padding: "18px 22px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "1.75rem", fontSize: 15, marginBottom: 10 }}
+          style={{ width: "100%", padding: "18px 22px", textAlign: "left", display: "flex", justifyContent: "space-between", alignItems: "center", borderRadius: "1.75rem", fontSize: 15, marginBottom: 10, cursor: "pointer" }}
           onClick={() => onStartStudy("learn")} 
-          disabled={newWords.length === 0}
         >
           <div>
             <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, color: "#fff" }}>Study</div>
-            <div style={{ fontSize: 13, opacity: .9 }}>Новые слова — {newWords.length}</div>
+            <div style={{ fontSize: 13, opacity: .9, color: "#eee" }}>Новые слова — {newWords.length}</div>
           </div>
           <span style={{ fontSize: 24, opacity: .8 }}>→</span>
         </button>
@@ -106,25 +105,25 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             alignItems: "center", 
             borderRadius: "1.75rem", 
             fontSize: 15,
-            background: learnedCount > 0 ? "var(--sage)" : "rgba(180,180,180,.14)",
-            color: learnedCount > 0 ? "#fff" : "#aaa",
-            boxShadow: learnedCount > 0 ? "0 4px 14px rgba(124, 139, 114, 0.22)" : "none",
+            background: "var(--sage)",
+            color: "#fff",
+            boxShadow: "0 4px 14px rgba(124, 139, 114, 0.22)",
             border: "none",
-            cursor: learnedCount > 0 ? "pointer" : "default"
+            cursor: "pointer"
           }}
           onClick={() => {
             if (reviewWords.length > 0) {
               onStartStudy("review");
-            } else if (learnedCount > 0) {
+            } else {
               setRecallInfo(r => !r);
             }
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, color: learnedCount > 0 ? "#fff" : "#aaa" }}>
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, color: "#fff" }}>
               {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
             </div>
-            <div style={{ fontSize: 13, opacity: .9, marginTop: 2, color: learnedCount > 0 ? "#fff" : "#aaa" }}>
+            <div style={{ fontSize: 13, opacity: .9, marginTop: 2, color: "#eee" }}>
               {learnedCount === 0 
                 ? "Сначала выучи слова 📚" 
                 : reviewWords.length > 0 
@@ -133,18 +132,26 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
               }
             </div>
           </div>
-          <span style={{ fontSize: 24, opacity: learnedCount > 0 ? .9 : .3, color: learnedCount > 0 ? "#fff" : "#aaa" }}>↺</span>
+          <span style={{ fontSize: 24, opacity: .9, color: "#fff" }}>↺</span>
         </button>
 
-        {recallInfo && reviewWords.length === 0 && learnedCount > 0 && (
+        {recallInfo && reviewWords.length === 0 && (
           <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>📅 Расписание повторений</div>
-            {words.filter(w => w.learned).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b)).slice(0, 5).map(w => (
-              <div key={w.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
-                <span style={{ fontWeight: 500 }}>{w.en}</span>
-                <span style={{ color: "var(--muted)" }}>{formatTimeLeft(getNextReviewTimeMs(w))}</span>
-              </div>
-            ))}
+            <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>
+              {learnedCount === 0 ? "📝 Как начать повторение" : "📅 Расписание повторений"}
+            </div>
+            {learnedCount === 0 ? (
+              <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: 0 }}>
+                У вас пока нет выученных слов. Нажмите на кнопку <strong>Study</strong> выше или добавьте слова в разделе <strong>Dictionary</strong>, чтобы начать обучение! 🚀
+              </p>
+            ) : (
+              words.filter(w => w.learned).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b)).slice(0, 5).map(w => (
+                <div key={w.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
+                  <span style={{ fontWeight: 500 }}>{w.en}</span>
+                  <span style={{ color: "var(--muted)" }}>{formatTimeLeft(getNextReviewTimeMs(w))}</span>
+                </div>
+              ))
+            )}
           </div>
         )}
       </div>
