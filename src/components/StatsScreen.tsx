@@ -53,7 +53,16 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
     }
   });
 
-  const allTopics = { ...TOPICS_DEFAULT, ...(stats.customTopics || {}) };
+  const deletedTopics = stats.deletedTopics || [];
+  const allTopics: { [key: string]: string } = {};
+  Object.entries(TOPICS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedTopics.includes(k)) {
+      allTopics[k] = v;
+    }
+  });
+  Object.entries(stats.customTopics || {}).forEach(([k, v]) => {
+    allTopics[k] = v;
+  });
 
   return (
     <div className="fade-in">

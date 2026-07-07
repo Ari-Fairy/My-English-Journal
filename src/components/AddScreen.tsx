@@ -44,8 +44,28 @@ export default function AddScreen({
   const [showTopicForm, setShowTopicForm] = useState(false);
   const [showPosForm, setShowPosForm] = useState(false);
 
-  const allPos = { ...POS_DEFAULT, ...(stats.customPos || {}) };
-  const allTopics = { ...TOPICS_DEFAULT, ...(stats.customTopics || {}) };
+  const deletedTopics = stats.deletedTopics || [];
+  const deletedPos = stats.deletedPos || [];
+
+  const allTopics: { [key: string]: string } = {};
+  Object.entries(TOPICS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedTopics.includes(k)) {
+      allTopics[k] = v;
+    }
+  });
+  Object.entries(stats.customTopics || {}).forEach(([k, v]) => {
+    allTopics[k] = v;
+  });
+
+  const allPos: { [key: string]: string } = {};
+  Object.entries(POS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedPos.includes(k)) {
+      allPos[k] = v;
+    }
+  });
+  Object.entries(stats.customPos || {}).forEach(([k, v]) => {
+    allPos[k] = v;
+  });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
@@ -422,13 +442,16 @@ export default function AddScreen({
               {Object.entries(allTopics).map(([k, v]) => (
                 <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,230,211,.3)", borderRadius: 999, padding: "4px 10px", fontSize: 12 }}>
                   {v}
-                  {stats.customTopics?.[k] && (
-                    <button style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 4 }} onClick={() => {
+                  <button style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 4 }} onClick={() => {
+                    if (stats.customTopics?.[k]) {
                       const ct = { ...stats.customTopics };
                       delete ct[k];
                       onSaveProgress({ ...stats, customTopics: ct });
-                    }}>✕</button>
-                  )}
+                    } else {
+                      const dt = [...(stats.deletedTopics || []), k];
+                      onSaveProgress({ ...stats, deletedTopics: dt });
+                    }
+                  }}>✕</button>
                 </span>
               ))}
             </div>
@@ -454,13 +477,16 @@ export default function AddScreen({
               {Object.entries(allPos).map(([k, v]) => (
                 <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,230,211,.3)", borderRadius: 999, padding: "4px 10px", fontSize: 12 }}>
                   {v}
-                  {stats.customPos?.[k] && (
-                    <button style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 4 }} onClick={() => {
+                  <button style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 4 }} onClick={() => {
+                    if (stats.customPos?.[k]) {
                       const cp = { ...stats.customPos };
                       delete cp[k];
                       onSaveProgress({ ...stats, customPos: cp });
-                    }}>✕</button>
-                  )}
+                    } else {
+                      const dp = [...(stats.deletedPos || []), k];
+                      onSaveProgress({ ...stats, deletedPos: dp });
+                    }
+                  }}>✕</button>
                 </span>
               ))}
             </div>

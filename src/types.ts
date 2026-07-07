@@ -50,4 +50,6 @@ export interface UserProgress {
   };
   customTopics?: { [id: string]: string };
   customPos?: { [id: string]: string };
+  deletedTopics?: string[];
+  deletedPos?: string[];
 }

@@ -144,7 +144,9 @@ export async function seedUserData(userId: string): Promise<{ words: Word[]; irr
       daily: {},
       dailyBooksRead: {},
       customTopics: {},
-      customPos: {}
+      customPos: {},
+      deletedTopics: [],
+      deletedPos: []
     };
     batch.set(doc(usersCollection, userId), progress);
 
@@ -320,7 +322,9 @@ export async function wipeUserAccountData(userId: string, deleteProgressDoc: boo
         daily: {},
         dailyBooksRead: {},
         customTopics: {},
-        customPos: {}
+        customPos: {},
+        deletedTopics: [],
+        deletedPos: []
       };
       batch.set(progressDocRef, freshProgress);
     }

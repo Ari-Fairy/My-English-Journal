@@ -25,8 +25,28 @@ export default function DictionaryScreen({
   const [editForm, setEditForm] = useState<Partial<Word>>({});
   const [toast, setToast] = useState("");
 
-  const allPos = { ...POS_DEFAULT, ...(stats.customPos || {}) };
-  const allTopics = { ...TOPICS_DEFAULT, ...(stats.customTopics || {}) };
+  const deletedTopics = stats.deletedTopics || [];
+  const deletedPos = stats.deletedPos || [];
+
+  const allTopics: { [key: string]: string } = {};
+  Object.entries(TOPICS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedTopics.includes(k)) {
+      allTopics[k] = v;
+    }
+  });
+  Object.entries(stats.customTopics || {}).forEach(([k, v]) => {
+    allTopics[k] = v;
+  });
+
+  const allPos: { [key: string]: string } = {};
+  Object.entries(POS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedPos.includes(k)) {
+      allPos[k] = v;
+    }
+  });
+  Object.entries(stats.customPos || {}).forEach(([k, v]) => {
+    allPos[k] = v;
+  });
 
   const filtered = words.filter(w => {
     if (fPos !== "all" && w.partOfSpeech !== fPos) return false;

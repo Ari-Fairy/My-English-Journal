@@ -317,7 +317,9 @@ export default function App() {
                   daily: {},
                   dailyBooksRead: {},
                   customTopics: {},
-                  customPos: {}
+                  customPos: {},
+                  deletedTopics: [],
+                  deletedPos: []
                 }),
                 userId: firebaseUser.uid,
                 lastVisit: getLocalDateString()
@@ -369,7 +371,9 @@ export default function App() {
                 daily: {},
                 dailyBooksRead: {},
                 customTopics: {},
-                customPos: {}
+                customPos: {},
+                deletedTopics: [],
+                deletedPos: []
               };
               
               const seededWords: Word[] = SEED_WORDS.map((w, idx) => ({
@@ -654,7 +658,9 @@ export default function App() {
       daily: {},
       dailyBooksRead: {},
       customTopics: progress.customTopics || {},
-      customPos: progress.customPos || {}
+      customPos: progress.customPos || {},
+      deletedTopics: progress.deletedTopics || [],
+      deletedPos: progress.deletedPos || []
     };
 
     setWords(resetWordsList);
@@ -697,7 +703,9 @@ export default function App() {
       daily: {},
       dailyBooksRead: {},
       customTopics: {},
-      customPos: {}
+      customPos: {},
+      deletedTopics: [],
+      deletedPos: []
     };
     setProgress(freshProgress);
 
