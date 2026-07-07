@@ -161,11 +161,109 @@ export default function AddScreen({
     setTimeout(() => setMsg(""), 3000);
   };
 
+  // Local heuristic offline classifier for common grammatical words to avoid network hits or API errors
+  const getOfflineClassification = (enVal: string) => {
+    const word = enVal.trim().toLowerCase();
+    
+    // 1. Pronouns
+    const pronouns = [
+      "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", 
+      "my", "your", "his", "their", "our", "this", "that", "these", "those", 
+      "who", "what", "which", "someone", "somebody", "something", "anyone", 
+      "anybody", "anything", "everyone", "everybody", "everything", "nobody", "nothing",
+      "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", 
+      "whose", "whom", "each", "both", "some", "any", "all", "few", "many", "several"
+    ];
+    if (pronouns.includes(word)) {
+      return {
+        pos: "pronoun",
+        topic: "general",
+        newPos: { key: "pronoun", label: "Местоимение" }
+      };
+    }
+
+    // 2. Adverbs
+    const adverbs = [
+      "how", "where", "when", "why", "now", "today", "tomorrow", "yesterday", 
+      "always", "never", "sometimes", "often", "usually", "seldom", "quickly", 
+      "slowly", "easily", "happily", "really", "suddenly", "softly", "outside", 
+      "below", "over", "near", "above", "already", "yet", "still", "just", 
+      "then", "there", "here", "quite", "very", "too", "almost", "enough", 
+      "hardly", "scarcely", "everywhere", "nowhere", "somewhere"
+    ];
+    if (adverbs.includes(word) || (word.endsWith("ly") && word.length > 4)) {
+      return { pos: "adverb", topic: "general" };
+    }
+
+    // 3. Prepositions
+    const prepositions = [
+      "in", "on", "at", "under", "over", "with", "by", "for", "about", "near", 
+      "to", "from", "of", "into", "through", "during", "before", "after", 
+      "between", "among", "without", "against", "behind", "below", "beside", 
+      "beyond", "except", "inside", "like", "outside", "since", "throughout", 
+      "toward", "towards", "upon", "within"
+    ];
+    if (prepositions.includes(word)) {
+      return {
+        pos: "preposition",
+        topic: "general",
+        newPos: { key: "preposition", label: "Предлог" }
+      };
+    }
+
+    // 4. Conjunctions
+    const conjunctions = [
+      "and", "but", "or", "because", "if", "although", "though", "since", 
+      "unless", "while", "whereas", "so", "for", "yet", "nor", "as", "once", 
+      "until", "whenever", "wherever"
+    ];
+    if (conjunctions.includes(word)) {
+      return {
+        pos: "conjunction",
+        topic: "general",
+        newPos: { key: "conjunction", label: "Союз" }
+      };
+    }
+
+    return null;
+  };
+
   // Auto classify word and update form selection live
   const autoClassify = async (targetEn = en, targetRu = ru) => {
     const trimmedEn = targetEn.trim();
     const trimmedRu = targetRu.trim();
     if (!trimmedEn || !trimmedRu) return;
+
+    // Check offline dictionary first for common grammatical words
+    const offlineResult = getOfflineClassification(trimmedEn);
+    if (offlineResult) {
+      let finalPos = offlineResult.pos;
+      let finalTopic = offlineResult.topic;
+      let customPos = { ...(stats.customPos || {}) };
+      let updatedStats = { ...stats };
+      let hasUpdates = false;
+
+      if (offlineResult.newPos?.key && offlineResult.newPos?.label) {
+        // Automatically register newly discovered POS (like pronoun, preposition, conjunction)
+        customPos[offlineResult.newPos.key] = offlineResult.newPos.label;
+        finalPos = offlineResult.newPos.key;
+        updatedStats.customPos = customPos;
+        hasUpdates = true;
+      }
+
+      setPos(finalPos);
+      setTopic(finalTopic);
+
+      if (hasUpdates) {
+        onSaveProgress(updatedStats);
+      }
+
+      const posLabel = allPos[finalPos] || offlineResult.newPos?.label || finalPos;
+      const topicLabel = allTopics[finalTopic] || finalTopic;
+      setMsg(`✨ Определено: ${posLabel}, Тема: ${topicLabel}`);
+      setTimeout(() => setMsg(""), 4000);
+      return;
+    }
 
     setIsClassifying(true);
     try {
@@ -180,7 +278,15 @@ export default function AddScreen({
         })
       });
       
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Ошибка сервера (Код ${res.status})`);
+      }
+      
       const classification = await res.json();
+      if (classification.error) {
+        throw new Error(classification.error);
+      }
       
       let finalPos = classification.pos || pos;
       let finalTopic = classification.topic || topic;
@@ -213,8 +319,10 @@ export default function AddScreen({
       const topicLabel = allTopics[finalTopic] || classification.newTopic?.label || finalTopic;
       setMsg(`🤖 ИИ определил: ${posLabel}, Тема: ${topicLabel}`);
       setTimeout(() => setMsg(""), 4000);
-    } catch (err) {
+    } catch (err: any) {
       console.error("Auto classification failed:", err);
+      setMsg(`⚠️ Не удалось подключиться к ИИ (${err?.message || "ошибка сети"}). Выберите часть речи вручную.`);
+      setTimeout(() => setMsg(""), 6000);
     } finally {
       setIsClassifying(false);
     }
