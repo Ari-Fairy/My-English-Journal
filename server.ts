@@ -1,7 +1,7 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 
 dotenv.config();
@@ -114,11 +114,12 @@ Only if it strictly does not fit any existing keys, you can invent a new lowerca
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
-      contents: [
-        { text: systemInstruction },
-        { text: `Word: "${en}" -> Translation: "${ru}"` }
-      ],
+      contents: `Word: "${en}" -> Translation: "${ru}"`,
       config: {
+        systemInstruction: systemInstruction,
+        thinkingConfig: {
+          thinkingLevel: ThinkingLevel.MINIMAL
+        },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,
