@@ -162,11 +162,17 @@ export default function AddScreen({
   };
 
   // Local heuristic offline classifier for common grammatical words to avoid network hits or API errors
-  const getOfflineClassification = (enVal: string, ruVal?: string) => {
+  const getOfflineClassification = (
+    enVal: string,
+    ruVal: string,
+    availablePos: { [key: string]: string } = {},
+    availableTopics: { [key: string]: string } = {}
+  ) => {
     const word = enVal.trim().toLowerCase();
     const ruWord = ruVal ? ruVal.trim().toLowerCase() : "";
     
-    // 1. Pronouns
+    // 1. Identify parts of speech first
+    // Standard list of pronouns, prepositions, conjunctions
     const pronouns = [
       "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", 
       "my", "your", "his", "their", "our", "this", "that", "these", "those", 
@@ -175,16 +181,18 @@ export default function AddScreen({
       "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", 
       "whose", "whom", "each", "both", "some", "any", "all", "few", "many", "several"
     ];
-    if (pronouns.includes(word)) {
-      return {
-        pos: "pronoun",
-        topic: "general",
-        newPos: { key: "pronoun", label: "Местоимение" },
-        isGuess: false
-      };
-    }
-
-    // 2. Adverbs (Confident matches)
+    const prepositions = [
+      "in", "on", "at", "under", "over", "with", "by", "for", "about", "near", 
+      "to", "from", "of", "into", "through", "during", "before", "after", 
+      "between", "among", "without", "against", "behind", "below", "beside", 
+      "beyond", "except", "inside", "like", "outside", "since", "throughout", 
+      "toward", "towards", "upon", "within"
+    ];
+    const conjunctions = [
+      "and", "but", "or", "because", "if", "although", "though", "since", 
+      "unless", "while", "whereas", "so", "for", "yet", "nor", "as", "once", 
+      "until", "whenever", "wherever"
+    ];
     const adverbs = [
       "how", "where", "when", "why", "now", "today", "tomorrow", "yesterday", 
       "always", "never", "sometimes", "often", "usually", "seldom", "quickly", 
@@ -193,58 +201,36 @@ export default function AddScreen({
       "then", "there", "here", "quite", "very", "too", "almost", "enough", 
       "hardly", "scarcely", "everywhere", "nowhere", "somewhere"
     ];
-    if (adverbs.includes(word)) {
-      return { pos: "adverb", topic: "general", isGuess: false };
-    }
 
-    // 3. Prepositions
-    const prepositions = [
-      "in", "on", "at", "under", "over", "with", "by", "for", "about", "near", 
-      "to", "from", "of", "into", "through", "during", "before", "after", 
-      "between", "among", "without", "against", "behind", "below", "beside", 
-      "beyond", "except", "inside", "like", "outside", "since", "throughout", 
-      "toward", "towards", "upon", "within"
-    ];
-    if (prepositions.includes(word)) {
-      return {
-        pos: "preposition",
-        topic: "general",
-        newPos: { key: "preposition", label: "Предлог" },
-        isGuess: false
-      };
-    }
-
-    // 4. Conjunctions
-    const conjunctions = [
-      "and", "but", "or", "because", "if", "although", "though", "since", 
-      "unless", "while", "whereas", "so", "for", "yet", "nor", "as", "once", 
-      "until", "whenever", "wherever"
-    ];
-    if (conjunctions.includes(word)) {
-      return {
-        pos: "conjunction",
-        topic: "general",
-        newPos: { key: "conjunction", label: "Союз" },
-        isGuess: false
-      };
-    }
-
-    // 5. Basic phrases
-    if (word.includes(" ") || ["hello", "hi", "bye", "please", "thanks", "thank you", "welcome"].includes(word)) {
-      return { pos: "phrase", topic: "general", isGuess: false };
-    }
-
-    // --- HEURISTICS / GUESSES ---
-    let guessedPos = "noun"; // Default guess
+    let guessedPos = "noun";
     let isGuess = true;
+    let newPos = undefined;
 
-    // Space-separated is likely a phrase
-    if (word.includes(" ") || ruWord.includes(" ")) {
-      guessedPos = "phrase";
-    }
-    // Check English suffixes
-    else if (word.endsWith("ly") && word.length > 4) {
+    // Exact grammatical categories mapping
+    if (pronouns.includes(word)) {
+      guessedPos = "pronoun";
+      isGuess = false;
+      newPos = { key: "pronoun", label: "Местоимение" };
+    } else if (prepositions.includes(word)) {
+      guessedPos = "preposition";
+      isGuess = false;
+      newPos = { key: "preposition", label: "Предлог" };
+    } else if (conjunctions.includes(word)) {
+      guessedPos = "conjunction";
+      isGuess = false;
+      newPos = { key: "conjunction", label: "Союз" };
+    } else if (adverbs.includes(word)) {
       guessedPos = "adverb";
+      isGuess = false;
+    } else if (word.includes(" ") || ruWord.includes(" ")) {
+      guessedPos = "phrase";
+      isGuess = false;
+    } else if (["hello", "hi", "bye", "please", "thanks", "thank you", "welcome"].includes(word)) {
+      guessedPos = "phrase";
+      isGuess = false;
+    } else if (word.endsWith("ly") && word.length > 4) {
+      guessedPos = "adverb";
+      isGuess = false;
     } else if (
       word.endsWith("able") ||
       word.endsWith("ible") ||
@@ -257,6 +243,7 @@ export default function AddScreen({
       (word.endsWith("al") && word.length > 4)
     ) {
       guessedPos = "adjective";
+      isGuess = false;
     } else if (
       word.endsWith("ize") ||
       word.endsWith("ise") ||
@@ -264,6 +251,7 @@ export default function AddScreen({
       (word.endsWith("ate") && word.length > 4)
     ) {
       guessedPos = "verb";
+      isGuess = false;
     } else if (
       word.endsWith("tion") ||
       word.endsWith("sion") ||
@@ -274,53 +262,196 @@ export default function AddScreen({
       word.endsWith("ism")
     ) {
       guessedPos = "noun";
-    }
-    // Check Russian translations for endings
-    else if (ruWord) {
-      if (ruWord.endsWith("ть") || ruWord.endsWith("ться") || ruWord.endsWith("ти") || ruWord.endsWith("уть")) {
+      isGuess = false;
+    } else if (ruWord) {
+      // Check Russian suffix rules
+      if (ruWord.endsWith("ть") || ruWord.endsWith("ться") || ruWord.endsWith("ти") || ruWord.endsWith("уть") || ruWord.endsWith("ать") || ruWord.endsWith("ить") || ruWord.endsWith("еть")) {
         guessedPos = "verb";
+        isGuess = false;
       } else if (
         ruWord.endsWith("ый") ||
         ruWord.endsWith("ий") ||
         ruWord.endsWith("ое") ||
         ruWord.endsWith("ая") ||
         ruWord.endsWith("ые") ||
-        ruWord.endsWith("ие")
+        ruWord.endsWith("ие") ||
+        ruWord.endsWith("ой")
       ) {
         guessedPos = "adjective";
+        isGuess = false;
       } else if (ruWord.endsWith("о") && ruWord.length > 3) {
         const commonONouns = ["окно", "лицо", "молоко", "слово", "дело", "утро", "небо", "солнце", "пиво", "кино", "метро", "фото", "яблоко", "озеро"];
         if (!commonONouns.includes(ruWord)) {
           guessedPos = "adverb";
+          isGuess = false;
+        } else {
+          guessedPos = "noun";
+          isGuess = false;
         }
       }
     }
 
-    // Map topic based on keywords in English or Russian
-    let guessedTopic = "general";
-    const topicKeywords: { [key: string]: string[] } = {
-      home: ["home", "house", "room", "door", "window", "kitchen", "bed", "chair", "table", "дом", "комната", "дверь", "окно", "кухня", "кровать", "стол", "стул"],
-      hobby: ["play", "sport", "game", "music", "song", "dance", "read", "book", "film", "movie", "хобби", "игра", "спорт", "музыка", "книга", "фильм", "читать", "петь"],
-      weather: ["weather", "sun", "rain", "snow", "wind", "cold", "hot", "cloud", "sky", "погода", "солнце", "дождь", "снег", "ветер", "холод", "небо"],
-      study: ["study", "learn", "school", "class", "teacher", "student", "book", "pen", "write", "учеба", "школа", "класс", "учитель", "ученик", "ручка", "писать"],
-      work: ["work", "job", "office", "boss", "colleague", "money", "salary", "business", "работа", "офис", "деньги", "бизнес", "коллега", "зарплата"],
-      food: ["food", "eat", "drink", "apple", "bread", "water", "meat", "milk", "tea", "coffee", "еда", "пить", "яблоко", "хлеб", "вода", "чай", "кофе", "молоко"],
-      time: ["time", "day", "night", "morning", "evening", "hour", "minute", "week", "month", "year", "время", "день", "ночь", "утро", "вечер", "час", "минута", "неделя", "месяц", "год"],
-      family: ["family", "mother", "father", "son", "daughter", "brother", "sister", "friend", "семья", "мама", "папа", "сын", "дочь", "брат", "сестра", "друг"],
-      travel: ["travel", "trip", "journey", "car", "plane", "train", "bus", "hotel", "road", "city", "путешествие", "машина", "самолет", "поезд", "отель", "город"]
-    };
+    // If the guessed POS is not in availablePos, offer to register it
+    if (guessedPos && !availablePos[guessedPos]) {
+      const posLabels: { [key: string]: string } = {
+        pronoun: "Местоимение",
+        preposition: "Предлог",
+        conjunction: "Союз",
+        participle: "Причастие",
+        phrasal_verb: "Фразовый глагол",
+        phrase: "Фраза",
+        noun: "Существительное",
+        verb: "Глагол",
+        adjective: "Прилагательное",
+        adverb: "Наречие"
+      };
+      if (posLabels[guessedPos]) {
+        newPos = { key: guessedPos, label: posLabels[guessedPos] };
+      }
+    }
 
-    for (const [topicKey, keywords] of Object.entries(topicKeywords)) {
-      if (keywords.some(kw => word.includes(kw) || ruWord.includes(kw))) {
-        guessedTopic = topicKey;
-        break;
+    // 2. Identify the dynamic Topic based on rich keyword directory mapping!
+    const categories = [
+      {
+        id: "clothes",
+        matchPatterns: ["clothe", "cloth", "wear", "одежд", "вещ", "гардероб", "wardrobe"],
+        enKeywords: ["shirt", "t-shirt", "pants", "trousers", "dress", "skirt", "jacket", "coat", "sweater", "hoodie", "suit", "jeans", "shorts", "socks", "glove", "scarf", "hat", "cap", "tie", "pajamas", "underwear", "wear", "blouse", "belt", "outfit"],
+        ruKeywords: ["одежда", "рубашка", "футболка", "брюки", "штаны", "платье", "юбка", "куртка", "пальто", "свитер", "худи", "костюм", "джинсы", "шорты", "носки", "перчатки", "шарф", "шапка", "кепка", "галстук", "пижама", "белье", "блузка", "ремень", "вещи"]
+      },
+      {
+        id: "shoes",
+        matchPatterns: ["shoe", "boot", "обув", "footwear"],
+        enKeywords: ["shoes", "boot", "boots", "sneakers", "trainers", "sandals", "slippers", "heels", "footwear", "shoe", "clog"],
+        ruKeywords: ["обувь", "ботинки", "сапоги", "кроссовки", "кеды", "сандалии", "тапочки", "туфли", "каблуки", "полуботинки"]
+      },
+      {
+        id: "nature",
+        matchPatterns: ["nature", "природ", "environment", "animal", "животн", "beast", "pet", "ecology", "world", "дерев", "forest"],
+        enKeywords: ["nature", "tree", "forest", "wood", "river", "lake", "sea", "ocean", "mountain", "flower", "grass", "plant", "animal", "bird", "fish", "insect", "dog", "cat", "horse", "cow", "sheep", "lion", "tiger", "bear", "fox", "wolf", "sun", "moon", "star", "sky", "stone", "rock", "earth", "land", "wind", "rain", "snow", "pet", "leaf", "leaves", "woodlands"],
+        ruKeywords: ["природа", "дерево", "лес", "река", "озеро", "море", "океан", "гора", "цветок", "трава", "растение", "животное", "птица", "рыба", "насекомое", "собака", "кошка", "лошадь", "корова", "лев", "тигр", "медведь", "лиса", "волк", "солнце", "луна", "звезда", "небо", "камень", "земля", "ветер", "дождь", "снег", "питомец", "лист", "листья"]
+      },
+      {
+        id: "mood",
+        matchPatterns: ["mood", "настроен", "emotion", "feeling", "чувств", "эмоци", "state", "радост", "груст"],
+        enKeywords: ["mood", "emotion", "feeling", "happy", "sad", "angry", "scared", "excited", "tired", "bored", "surprised", "nervous", "proud", "jealous", "calm", "peaceful", "lonely", "love", "hate", "joy", "sorrow", "fear", "anger", "laugh", "cry", "smile", "worry", "shock", "stress", "glad", "delighted", "afraid"],
+        ruKeywords: ["настроение", "эмоция", "чувство", "счастливый", "грустный", "злой", "испуганный", "уставший", "скучный", "удивленный", "нервный", "гордый", "спокойный", "одинокий", "любовь", "ненависть", "радость", "горе", "страх", "гнев", "смеяться", "плакать", "улыбка", "беспокоиться", "шок", "стресс", "рад", "испуг"]
+      },
+      {
+        id: "colors",
+        matchPatterns: ["color", "colour", "цвет", "краск"],
+        enKeywords: ["color", "colour", "red", "blue", "green", "yellow", "black", "white", "pink", "purple", "orange", "brown", "grey", "gray", "violet", "gold", "silver", "beige", "rainbow", "shade", "bright", "dark"],
+        ruKeywords: ["цвет", "красный", "синий", "зеленый", "желтый", "черный", "белый", "розовый", "фиолетовый", "оранжевый", "коричневый", "серый", "золотой", "серебряный", "бежевый", "радуга", "оттенок", "яркий", "темный", "голубой"]
+      },
+      {
+        id: "drinks",
+        matchPatterns: ["drink", "beverage", "напит", "liquid", "чай", "кофе"],
+        enKeywords: ["drink", "beverage", "water", "tea", "coffee", "juice", "milk", "beer", "wine", "soda", "lemonade", "alcohol", "cocktail", "vodka", "whiskey", "champagne", "mug", "cup", "bottle", "coke"],
+        ruKeywords: ["напиток", "напитки", "вода", "чай", "кофе", "сок", "молоко", "пиво", "вино", "газировка", "лимонад", "алкоголь", "коктейль", "водка", "виски", "шампанское", "кружка", "чашка", "бутылка"]
+      },
+      {
+        id: "home",
+        matchPatterns: ["home", "house", "room", "дом", "квартир", "комнат", "мебель", "furniture"],
+        enKeywords: ["home", "house", "room", "door", "window", "kitchen", "bed", "chair", "table", "sofa", "desk", "floor", "wall", "ceiling", "roof", "apartment", "flat", "bathroom", "toilet", "shower", "sink", "mirror", "wardrobe", "key", "pillow", "blanket", "lamp", "tv"],
+        ruKeywords: ["дом", "комната", "дверь", "окно", "кухня", "кровать", "стул", "стол", "диван", "пол", "стена", "потолок", "крыша", "квартира", "ванная", "туалет", "душ", "раковина", "зеркало", "шкаф", "ключ", "подушка", "одеяло", "лампа", "телевизор"]
+      },
+      {
+        id: "hobby",
+        matchPatterns: ["hobby", "хобб", "sport", "спорт", "game", "игр", "music", "музык"],
+        enKeywords: ["hobby", "play", "sport", "game", "music", "song", "dance", "read", "book", "film", "movie", "paint", "draw", "guitar", "piano", "chess", "tennis", "football", "soccer", "gym", "run", "swim", "climb", "photo", "camera", "guitar", "instrument", "bicycle", "bike"],
+        ruKeywords: ["хобби", "игра", "спорт", "музыка", "песня", "танец", "читать", "книга", "фильм", "рисовать", "гитара", "пианино", "шахматы", "теннис", "футбол", "бегать", "плавать", "фото", "камера", "инструмент", "велосипед"]
+      },
+      {
+        id: "weather",
+        matchPatterns: ["weather", "погод", "climate", "climat"],
+        enKeywords: ["weather", "sun", "rain", "snow", "wind", "cold", "hot", "cloud", "sky", "fog", "mist", "storm", "lightning", "thunder", "forecast", "temperature", "warm", "freezing", "icy", "wet", "dry", "climate"],
+        ruKeywords: ["погода", "солнце", "дождь", "снег", "ветер", "холод", "тепло", "облако", "туча", "небо", "туман", "гроза", "молния", "гром", "прогноз", "температура", "теплый", "мороз", "лед", "влажный", "сухой", "климат"]
+      },
+      {
+        id: "study",
+        matchPatterns: ["study", "learn", "учёб", "учеб", "школ", "school", "education", "образован"],
+        enKeywords: ["study", "learn", "school", "class", "teacher", "student", "book", "pen", "write", "pencil", "notebook", "desk", "exam", "test", "subject", "language", "history", "math", "science", "lesson", "homework", "college", "university"],
+        ruKeywords: ["учеба", "учить", "школа", "класс", "учитель", "ученик", "книга", "ручка", "писать", "карандаш", "тетрадь", "парта", "экзамен", "тест", "предмет", "язык", "история", "математика", "урок", "домашнее задание", "колледж", "университет"]
+      },
+      {
+        id: "work",
+        matchPatterns: ["work", "job", "работ", "бизнес", "business", "career", "карьер"],
+        enKeywords: ["work", "job", "office", "boss", "colleague", "money", "salary", "business", "project", "client", "manager", "meeting", "report", "contract", "company", "employ", "worker", "trade", "career"],
+        ruKeywords: ["работа", "офис", "босс", "коллега", "деньги", "зарплата", "бизнес", "проект", "клиент", "менеджер", "встреча", "отчет", "контракт", "компания", "нанимать", "рабочий", "торговля", "карьера"]
+      },
+      {
+        id: "food",
+        matchPatterns: ["food", "eat", "еда", "пищ", "meal", "продукт"],
+        enKeywords: ["food", "eat", "bread", "butter", "cheese", "meat", "fish", "chicken", "egg", "rice", "pasta", "vegetable", "fruit", "apple", "banana", "orange", "sugar", "salt", "pepper", "soup", "salad", "breakfast", "lunch", "dinner", "meal", "cook", "kitchen", "taste", "delicious", "pancakes"],
+        ruKeywords: ["еда", "кушать", "есть", "хлеб", "масло", "сыр", "мясо", "рыба", "курица", "яйцо", "рис", "макароны", "овощи", "фрукты", "яблоко", "банан", "сахар", "соль", "перец", "суп", "салат", "завтрак", "обед", "ужин", "готовить", "вкусно", "блины"]
+      },
+      {
+        id: "time",
+        matchPatterns: ["time", "время", "date", "дат", "calendar", "календар"],
+        enKeywords: ["time", "day", "night", "morning", "evening", "hour", "minute", "second", "week", "month", "year", "today", "yesterday", "tomorrow", "monday", "tuesday", "wednesday", "thursday", "friday", "saturday", "sunday", "january", "february", "calendar", "clock", "watch", "season", "spring", "summer", "autumn", "winter"],
+        ruKeywords: ["время", "день", "ночь", "утро", "вечер", "час", "минута", "секунда", "неделя", "месяц", "год", "сегодня", "вчера", "завтра", "понедельник", "вторник", "среда", "четверг", "пятница", "суббота", "воскресенье", "январь", "февраль", "календарь", "часы", "сезон", "весна", "лето", "осень", "зима"]
+      },
+      {
+        id: "family",
+        matchPatterns: ["family", "семь", "friend", "друг", "people", "люд"],
+        enKeywords: ["family", "mother", "father", "son", "daughter", "brother", "sister", "friend", "parent", "husband", "wife", "child", "children", "baby", "uncle", "aunt", "cousin", "grandfather", "grandmother", "people", "person", "man", "woman", "boy", "girl"],
+        ruKeywords: ["семья", "мама", "папа", "сын", "дочь", "брат", "сестра", "друг", "родители", "муж", "жена", "ребенок", "дети", "младенец", "дядя", "тетя", "дедушка", "бабушка", "люди", "человек", "мужчина", "женщина", "мальчик", "девочка"]
+      },
+      {
+        id: "travel",
+        matchPatterns: ["travel", "путешеств", "trip", "поездк", "transport", "транспорт"],
+        enKeywords: ["travel", "trip", "journey", "car", "plane", "train", "bus", "bike", "taxi", "bicycle", "boat", "ship", "flight", "ticket", "hotel", "luggage", "bag", "suitcase", "map", "guide", "border", "country", "city", "town", "road", "street", "station", "airport"],
+        ruKeywords: ["путешествие", "поездка", "машина", "самолет", "поезд", "автобус", "таксо", "велосипед", "лодка", "корабль", "полет", "билет", "отель", "гостиница", "багаж", "сумка", "чемодан", "карта", "гид", "граница", "страна", "город", "дорога", "улица", "станция", "аэропорт"]
+      }
+    ];
+
+    let matchedTopicKey = "general";
+
+    // Look for any of the categories matching keywords
+    for (const cat of categories) {
+      const wordMatches = cat.enKeywords.some(kw => word === kw || word.includes(kw)) ||
+                          cat.ruKeywords.some(kw => ruWord === kw || ruWord.includes(kw));
+      
+      if (wordMatches) {
+        // Find if we have a matching key or label in availableTopics
+        let foundKey = Object.keys(availableTopics).find(k => k.toLowerCase() === cat.id);
+        
+        if (!foundKey) {
+          // Try searching availableTopics for key matching patterns
+          foundKey = Object.keys(availableTopics).find(k => 
+            cat.matchPatterns.some(p => k.toLowerCase().includes(p))
+          );
+        }
+
+        if (!foundKey) {
+          // Try searching availableTopics for labels containing patterns
+          foundKey = Object.keys(availableTopics).find(k => {
+            const label = availableTopics[k].toLowerCase();
+            return cat.matchPatterns.some(p => label.includes(p));
+          });
+        }
+
+        if (foundKey) {
+          matchedTopicKey = foundKey;
+          break;
+        }
+      }
+    }
+
+    // Fallback to direct name match if still general
+    if (matchedTopicKey === "general") {
+      const foundDirectKey = Object.keys(availableTopics).find(k => 
+        word.includes(k.toLowerCase()) || k.toLowerCase().includes(word)
+      );
+      if (foundDirectKey && foundDirectKey !== "general") {
+        matchedTopicKey = foundDirectKey;
       }
     }
 
     return {
       pos: guessedPos,
-      topic: guessedTopic,
-      isGuess: isGuess
+      topic: matchedTopicKey,
+      isGuess: isGuess,
+      newPos: newPos
     };
   };
 
@@ -380,7 +511,7 @@ export default function AddScreen({
     }
 
     // Check offline dictionary first for common grammatical words (Pronoun, Adverbs, Prepositions, Conjunctions)
-    const offlineResult = getOfflineClassification(trimmedEn, trimmedRu);
+    const offlineResult = getOfflineClassification(trimmedEn, trimmedRu, allPos, allTopics);
     if (offlineResult && !offlineResult.isGuess) {
       let finalPos = offlineResult.pos;
       let finalTopic = offlineResult.topic;
@@ -429,7 +560,9 @@ export default function AddScreen({
           en: trimmedEn,
           ru: trimmedRu,
           existingPos: Object.entries(allPos).map(([k, v]) => `${k}:${v}`).join(", "),
-          existingTopics: Object.entries(allTopics).map(([k, v]) => `${k}:${v}`).join(", ")
+          existingTopics: Object.entries(allTopics).map(([k, v]) => `${k}:${v}`).join(", "),
+          allPos: allPos,
+          allTopics: allTopics
         })
       });
       
