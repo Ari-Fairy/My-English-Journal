@@ -317,8 +317,12 @@ export default function AddScreen({
 
       const posLabel = allPos[finalPos] || classification.newPos?.label || finalPos;
       const topicLabel = allTopics[finalTopic] || classification.newTopic?.label || finalTopic;
-      setMsg(`🤖 ИИ определил: ${posLabel}, Тема: ${topicLabel}`);
-      setTimeout(() => setMsg(""), 4000);
+      if (classification.isGuess) {
+        setMsg("💡 Использовано авто-определение (ИИ временно занят). Вы можете скорректировать выбор вручную.");
+      } else {
+        setMsg(`🤖 ИИ определил: ${posLabel}, Тема: ${topicLabel}`);
+      }
+      setTimeout(() => setMsg(""), 5000);
     } catch (err: any) {
       console.error("Auto classification failed:", err);
       const isVercel = window.location.hostname.includes("vercel.app");
