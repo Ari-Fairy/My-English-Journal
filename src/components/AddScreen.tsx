@@ -162,8 +162,9 @@ export default function AddScreen({
   };
 
   // Local heuristic offline classifier for common grammatical words to avoid network hits or API errors
-  const getOfflineClassification = (enVal: string) => {
+  const getOfflineClassification = (enVal: string, ruVal?: string) => {
     const word = enVal.trim().toLowerCase();
+    const ruWord = ruVal ? ruVal.trim().toLowerCase() : "";
     
     // 1. Pronouns
     const pronouns = [
@@ -178,11 +179,12 @@ export default function AddScreen({
       return {
         pos: "pronoun",
         topic: "general",
-        newPos: { key: "pronoun", label: "Местоимение" }
+        newPos: { key: "pronoun", label: "Местоимение" },
+        isGuess: false
       };
     }
 
-    // 2. Adverbs
+    // 2. Adverbs (Confident matches)
     const adverbs = [
       "how", "where", "when", "why", "now", "today", "tomorrow", "yesterday", 
       "always", "never", "sometimes", "often", "usually", "seldom", "quickly", 
@@ -191,8 +193,8 @@ export default function AddScreen({
       "then", "there", "here", "quite", "very", "too", "almost", "enough", 
       "hardly", "scarcely", "everywhere", "nowhere", "somewhere"
     ];
-    if (adverbs.includes(word) || (word.endsWith("ly") && word.length > 4)) {
-      return { pos: "adverb", topic: "general" };
+    if (adverbs.includes(word)) {
+      return { pos: "adverb", topic: "general", isGuess: false };
     }
 
     // 3. Prepositions
@@ -207,7 +209,8 @@ export default function AddScreen({
       return {
         pos: "preposition",
         topic: "general",
-        newPos: { key: "preposition", label: "Предлог" }
+        newPos: { key: "preposition", label: "Предлог" },
+        isGuess: false
       };
     }
 
@@ -221,11 +224,104 @@ export default function AddScreen({
       return {
         pos: "conjunction",
         topic: "general",
-        newPos: { key: "conjunction", label: "Союз" }
+        newPos: { key: "conjunction", label: "Союз" },
+        isGuess: false
       };
     }
 
-    return null;
+    // 5. Basic phrases
+    if (word.includes(" ") || ["hello", "hi", "bye", "please", "thanks", "thank you", "welcome"].includes(word)) {
+      return { pos: "phrase", topic: "general", isGuess: false };
+    }
+
+    // --- HEURISTICS / GUESSES ---
+    let guessedPos = "noun"; // Default guess
+    let isGuess = true;
+
+    // Space-separated is likely a phrase
+    if (word.includes(" ") || ruWord.includes(" ")) {
+      guessedPos = "phrase";
+    }
+    // Check English suffixes
+    else if (word.endsWith("ly") && word.length > 4) {
+      guessedPos = "adverb";
+    } else if (
+      word.endsWith("able") ||
+      word.endsWith("ible") ||
+      word.endsWith("ful") ||
+      word.endsWith("less") ||
+      word.endsWith("ous") ||
+      word.endsWith("ive") ||
+      word.endsWith("ic") ||
+      (word.endsWith("ish") && word.length > 4) ||
+      (word.endsWith("al") && word.length > 4)
+    ) {
+      guessedPos = "adjective";
+    } else if (
+      word.endsWith("ize") ||
+      word.endsWith("ise") ||
+      word.endsWith("ify") ||
+      (word.endsWith("ate") && word.length > 4)
+    ) {
+      guessedPos = "verb";
+    } else if (
+      word.endsWith("tion") ||
+      word.endsWith("sion") ||
+      word.endsWith("ness") ||
+      word.endsWith("ment") ||
+      word.endsWith("ity") ||
+      word.endsWith("ship") ||
+      word.endsWith("ism")
+    ) {
+      guessedPos = "noun";
+    }
+    // Check Russian translations for endings
+    else if (ruWord) {
+      if (ruWord.endsWith("ть") || ruWord.endsWith("ться") || ruWord.endsWith("ти") || ruWord.endsWith("уть")) {
+        guessedPos = "verb";
+      } else if (
+        ruWord.endsWith("ый") ||
+        ruWord.endsWith("ий") ||
+        ruWord.endsWith("ое") ||
+        ruWord.endsWith("ая") ||
+        ruWord.endsWith("ые") ||
+        ruWord.endsWith("ие")
+      ) {
+        guessedPos = "adjective";
+      } else if (ruWord.endsWith("о") && ruWord.length > 3) {
+        const commonONouns = ["окно", "лицо", "молоко", "слово", "дело", "утро", "небо", "солнце", "пиво", "кино", "метро", "фото", "яблоко", "озеро"];
+        if (!commonONouns.includes(ruWord)) {
+          guessedPos = "adverb";
+        }
+      }
+    }
+
+    // Map topic based on keywords in English or Russian
+    let guessedTopic = "general";
+    const topicKeywords: { [key: string]: string[] } = {
+      home: ["home", "house", "room", "door", "window", "kitchen", "bed", "chair", "table", "дом", "комната", "дверь", "окно", "кухня", "кровать", "стол", "стул"],
+      hobby: ["play", "sport", "game", "music", "song", "dance", "read", "book", "film", "movie", "хобби", "игра", "спорт", "музыка", "книга", "фильм", "читать", "петь"],
+      weather: ["weather", "sun", "rain", "snow", "wind", "cold", "hot", "cloud", "sky", "погода", "солнце", "дождь", "снег", "ветер", "холод", "небо"],
+      study: ["study", "learn", "school", "class", "teacher", "student", "book", "pen", "write", "учеба", "школа", "класс", "учитель", "ученик", "ручка", "писать"],
+      work: ["work", "job", "office", "boss", "colleague", "money", "salary", "business", "работа", "офис", "деньги", "бизнес", "коллега", "зарплата"],
+      food: ["food", "eat", "drink", "apple", "bread", "water", "meat", "milk", "tea", "coffee", "еда", "пить", "яблоко", "хлеб", "вода", "чай", "кофе", "молоко"],
+      time: ["time", "day", "night", "morning", "evening", "hour", "minute", "week", "month", "year", "время", "день", "ночь", "утро", "вечер", "час", "минута", "неделя", "месяц", "год"],
+      family: ["family", "mother", "father", "son", "daughter", "brother", "sister", "friend", "семья", "мама", "папа", "сын", "дочь", "брат", "сестра", "друг"],
+      travel: ["travel", "trip", "journey", "car", "plane", "train", "bus", "hotel", "road", "city", "путешествие", "машина", "самолет", "поезд", "отель", "город"]
+    };
+
+    for (const [topicKey, keywords] of Object.entries(topicKeywords)) {
+      if (keywords.some(kw => word.includes(kw) || ruWord.includes(kw))) {
+        guessedTopic = topicKey;
+        break;
+      }
+    }
+
+    return {
+      pos: guessedPos,
+      topic: guessedTopic,
+      isGuess: isGuess
+    };
   };
 
   // Auto classify word and update form selection live
@@ -234,9 +330,9 @@ export default function AddScreen({
     const trimmedRu = targetRu.trim();
     if (!trimmedEn || !trimmedRu) return;
 
-    // Check offline dictionary first for common grammatical words
-    const offlineResult = getOfflineClassification(trimmedEn);
-    if (offlineResult) {
+    // Check offline dictionary first for common grammatical words (Pronoun, Adverbs, Prepositions, Conjunctions)
+    const offlineResult = getOfflineClassification(trimmedEn, trimmedRu);
+    if (offlineResult && !offlineResult.isGuess) {
       let finalPos = offlineResult.pos;
       let finalTopic = offlineResult.topic;
       let customPos = { ...(stats.customPos || {}) };
@@ -260,7 +356,7 @@ export default function AddScreen({
 
       const posLabel = allPos[finalPos] || offlineResult.newPos?.label || finalPos;
       const topicLabel = allTopics[finalTopic] || finalTopic;
-      setMsg(`✨ Определено: ${posLabel}, Тема: ${topicLabel}`);
+      setMsg(`✨ Определено автоматически: ${posLabel}, Тема: ${topicLabel}`);
       setTimeout(() => setMsg(""), 4000);
       return;
     }
@@ -324,14 +420,40 @@ export default function AddScreen({
       }
       setTimeout(() => setMsg(""), 5000);
     } catch (err: any) {
-      console.error("Auto classification failed:", err);
-      const isVercel = window.location.hostname.includes("vercel.app");
-      if (isVercel) {
-        setMsg("⚠️ На Vercel отсутствует бэкенд для ИИ (код 404). Пожалуйста, выберите значения вручную или используйте стандартные слова.");
-      } else if (err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("demand")) {
-        setMsg("⚠️ ИИ временно перегружен (ошибка 503). Пожалуйста, попробуйте еще раз или выберите часть речи вручную.");
+      console.error("Auto classification failed, using offline guess:", err);
+      
+      // When network fails or Gemini has quota issues, seamlessly use our rich client-side heuristics!
+      if (offlineResult) {
+        let finalPos = offlineResult.pos;
+        let finalTopic = offlineResult.topic;
+        let customPos = { ...(stats.customPos || {}) };
+        let updatedStats = { ...stats };
+        let hasUpdates = false;
+
+        if (offlineResult.newPos?.key && offlineResult.newPos?.label) {
+          customPos[offlineResult.newPos.key] = offlineResult.newPos.label;
+          finalPos = offlineResult.newPos.key;
+          updatedStats.customPos = customPos;
+          hasUpdates = true;
+        }
+
+        setPos(finalPos);
+        setTopic(finalTopic);
+
+        if (hasUpdates) {
+          onSaveProgress(updatedStats);
+        }
+
+        const posLabel = allPos[finalPos] || offlineResult.newPos?.label || finalPos;
+        const topicLabel = allTopics[finalTopic] || finalTopic;
+        setMsg(`💡 Использовано локальное авто-определение (ИИ временно занят или недоступен). Ч.речи: ${posLabel}, Тема: ${topicLabel}`);
       } else {
-        setMsg(`⚠️ Ошибка связи с ИИ (${err?.message || "ошибка сети"}). Пожалуйста, выберите часть речи вручную.`);
+        const isVercel = window.location.hostname.includes("vercel.app");
+        if (isVercel) {
+          setMsg("⚠️ На Vercel отсутствует бэкенд для ИИ (код 404). Пожалуйста, выберите значения вручную.");
+        } else {
+          setMsg(`⚠️ Ошибка связи с ИИ (${err?.message || "ошибка сети"}). Пожалуйста, выберите значения вручную.`);
+        }
       }
       setTimeout(() => setMsg(""), 8000);
     } finally {
