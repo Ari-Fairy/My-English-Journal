@@ -25,6 +25,7 @@ export default function AddScreen({
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
+  const [isClassifying, setIsClassifying] = useState(false);
 
   // Bulk state
   const [bulkText, setBulkText] = useState("");
@@ -160,7 +161,66 @@ export default function AddScreen({
     setTimeout(() => setMsg(""), 3000);
   };
 
-  // Add One Word - performs AI auto-classification using server API
+  // Auto classify word and update form selection live
+  const autoClassify = async (targetEn = en, targetRu = ru) => {
+    const trimmedEn = targetEn.trim();
+    const trimmedRu = targetRu.trim();
+    if (!trimmedEn || !trimmedRu) return;
+
+    setIsClassifying(true);
+    try {
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          en: trimmedEn,
+          ru: trimmedRu,
+          existingPos: Object.entries(allPos).map(([k, v]) => `${k}:${v}`).join(", "),
+          existingTopics: Object.entries(allTopics).map(([k, v]) => `${k}:${v}`).join(", ")
+        })
+      });
+      
+      const classification = await res.json();
+      
+      let finalPos = classification.pos || pos;
+      let finalTopic = classification.topic || topic;
+      let customTopics = { ...(stats.customTopics || {}) };
+      let customPos = { ...(stats.customPos || {}) };
+      let updatedStats = { ...stats };
+      let hasUpdates = false;
+
+      if (classification.newTopic?.key && classification.newTopic?.label) {
+        customTopics[classification.newTopic.key] = classification.newTopic.label;
+        finalTopic = classification.newTopic.key;
+        updatedStats.customTopics = customTopics;
+        hasUpdates = true;
+      }
+      if (classification.newPos?.key && classification.newPos?.label) {
+        customPos[classification.newPos.key] = classification.newPos.label;
+        finalPos = classification.newPos.key;
+        updatedStats.customPos = customPos;
+        hasUpdates = true;
+      }
+
+      setPos(finalPos);
+      setTopic(finalTopic);
+
+      if (hasUpdates) {
+        onSaveProgress(updatedStats);
+      }
+
+      const posLabel = allPos[finalPos] || classification.newPos?.label || finalPos;
+      const topicLabel = allTopics[finalTopic] || classification.newTopic?.label || finalTopic;
+      setMsg(`🤖 ИИ определил: ${posLabel}, Тема: ${topicLabel}`);
+      setTimeout(() => setMsg(""), 4000);
+    } catch (err) {
+      console.error("Auto classification failed:", err);
+    } finally {
+      setIsClassifying(false);
+    }
+  };
+
+  // Add One Word - saves using form states directly
   const handleAddOneWord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!en.trim() || !ru.trim()) return;
@@ -173,75 +233,13 @@ export default function AddScreen({
     setMsg("");
 
     try {
-      // Ask Gemini server-side to guess part of speech and topic
-      const res = await fetch("/api/classify", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          en: en.trim(),
-          ru: ru.trim(),
-          existingPos: Object.entries(allPos).map(([k, v]) => `${k}:${v}`).join(", "),
-          existingTopics: Object.entries(allTopics).map(([k, v]) => `${k}:${v}`).join(", ")
-        })
-      });
-      
-      const classification = await res.json();
-      
-      let finalPos = classification.pos || pos;
-      let finalTopic = classification.topic || topic;
-      let customTopics = { ...(stats.customTopics || {}) };
-      let customPos = { ...(stats.customPos || {}) };
-
-      if (classification.newTopic?.key && classification.newTopic?.label) {
-        customTopics[classification.newTopic.key] = classification.newTopic.label;
-        finalTopic = classification.newTopic.key;
-      }
-      if (classification.newPos?.key && classification.newPos?.label) {
-        customPos[classification.newPos.key] = classification.newPos.label;
-        finalPos = classification.newPos.key;
-      }
-
-      const w: Word = {
-        id: Math.random().toString(36).slice(2),
-        userId: stats.userId,
-        en: en.trim(),
-        ru: ru.trim(),
-        partOfSpeech: finalPos,
-        topic: finalTopic,
-        note: note.trim(),
-        learned: false,
-        learnedDate: null,
-        lastReviewed: null,
-        correct: 0,
-        wrong: 0,
-        streak: 0,
-        created: new Date().toISOString()
-      };
-
-      onSaveWord(w);
-
-      if (classification.newTopic || classification.newPos) {
-        onSaveProgress({
-          ...stats,
-          customTopics,
-          customPos
-        });
-      }
-
-      setMsg(`✨ Добавлено: "${w.en}" [Тема: ${allTopics[finalTopic] || finalTopic}]`);
-      setEn("");
-      setRu("");
-      setNote("");
-    } catch (err) {
-      console.error(err);
-      // Fallback to manually selected options if AI fails
       const w: Word = {
         id: Math.random().toString(36).slice(2),
         userId: stats.userId,
         en: en.trim(),
         ru: ru.trim(),
         partOfSpeech: pos,
-        topic,
+        topic: topic,
         note: note.trim(),
         learned: false,
         learnedDate: null,
@@ -251,11 +249,15 @@ export default function AddScreen({
         streak: 0,
         created: new Date().toISOString()
       };
+
       onSaveWord(w);
-      setMsg(`✅ Добавлено: "${w.en}"`);
+      setMsg(`✨ Добавлено: "${w.en}" [Тема: ${allTopics[topic] || topic}]`);
       setEn("");
       setRu("");
       setNote("");
+    } catch (err) {
+      console.error(err);
+      setMsg("❌ Ошибка при добавлении слова.");
     } finally {
       setLoading(false);
       setTimeout(() => setMsg(""), 3500);
@@ -351,10 +353,20 @@ export default function AddScreen({
       {/* Tab: One Word */}
       {tab === "one" && (
         <form onSubmit={handleAddOneWord} className="card">
-          <p style={{ fontSize: 12, color: "#aaa", marginBottom: 12 }}>
-            💡 Gemini автоматически определит тему и часть речи слова!
-          </p>
-          <input className="input" value={en} onChange={e => setEn(e.target.value)} placeholder="English Word" style={{ marginBottom: 8 }} required />
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
+            <p style={{ fontSize: 12, color: "#aaa", margin: 0 }}>
+              💡 Введите слово и перевод, ИИ автоматически подберет тему и часть речи!
+            </p>
+          </div>
+          <input 
+            className="input" 
+            value={en} 
+            onChange={e => setEn(e.target.value)} 
+            onBlur={() => { if (en.trim() && ru.trim()) autoClassify(en, ru); }}
+            placeholder="English Word (например: family)" 
+            style={{ marginBottom: 8 }} 
+            required 
+          />
           
           {duplicateWord && (
             <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "13px", marginTop: "-4px", marginBottom: "8px", fontWeight: "500", padding: "6px 10px", background: "rgba(255, 77, 77, 0.1)", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)" }}>
@@ -362,7 +374,30 @@ export default function AddScreen({
             </div>
           )}
 
-          <input className="input" value={ru} onChange={e => setRu(e.target.value)} placeholder="Перевод" style={{ marginBottom: 8 }} required />
+          <input 
+            className="input" 
+            value={ru} 
+            onChange={e => setRu(e.target.value)} 
+            onBlur={() => { if (en.trim() && ru.trim()) autoClassify(en, ru); }}
+            placeholder="Перевод (например: семья)" 
+            style={{ marginBottom: 8 }} 
+            required 
+          />
+
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+            <span style={{ fontSize: 12, color: "#aaa" }}>Часть речи и Тема:</span>
+            {en.trim() && ru.trim() && (
+              <button 
+                type="button" 
+                onClick={() => autoClassify(en, ru)} 
+                disabled={isClassifying}
+                style={{ background: "none", border: "none", color: "var(--rose, #ff4d4d)", fontSize: 12, cursor: "pointer", display: "flex", alignItems: "center", gap: 4, padding: 0, textDecoration: "underline" }}
+              >
+                {isClassifying ? "⏳ Определяем..." : "🤖 Переопределить по ИИ"}
+              </button>
+            )}
+          </div>
+
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <select className="select" style={{ flex: 1 }} value={pos} onChange={e => setPos(e.target.value)}>
               {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -371,9 +406,17 @@ export default function AddScreen({
               {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
+          
+          {isClassifying && (
+            <div style={{ fontSize: "12px", color: "var(--rose, #ff4d4d)", marginBottom: "8px", display: "flex", alignItems: "center", gap: "6px" }}>
+              ⏳ ИИ анализирует контекст слова для подбора темы...
+            </div>
+          )}
+
           <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Заметка (необязательно)" style={{ marginBottom: 12 }} />
+          
           <button type="submit" className="btn btn-primary" style={{ width: "100%", padding: 14 }} disabled={loading || !!duplicateWord}>
-            {loading ? "⏳ Искусственный интеллект думает..." : "Добавить в журнал"}
+            {loading ? "⏳ Добавление..." : "Добавить в журнал"}
           </button>
         </form>
       )}

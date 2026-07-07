@@ -64,8 +64,47 @@ export default function StudyScreen({
 
   const isCorrect = (ansStr: string, expStr: string) => {
     const a = normalize(ansStr);
-    const v = expStr.split(/[,/;]|\s\(|\)/g).map(normalize).filter(Boolean);
-    return v.some(x => x === a || a.includes(x) || x.includes(a));
+    if (!a) return false;
+
+    const getAlternatives = (str: string): string[] => {
+      const parts = str.split(/[,/;|]|\s+или\s+|\s+и\s+/i);
+      const alts: string[] = [];
+      
+      parts.forEach(p => {
+        const trimmed = p.trim();
+        if (!trimmed) return;
+        
+        const normalizedPart = normalize(trimmed);
+        if (normalizedPart) {
+          alts.push(normalizedPart);
+        }
+        
+        if (trimmed.includes("(") && trimmed.includes(")")) {
+          const stripped = trimmed.replace(/\(.*?\)/g, "").trim();
+          const normalizedStripped = normalize(stripped);
+          if (normalizedStripped) {
+            alts.push(normalizedStripped);
+          }
+        }
+      });
+      
+      return alts;
+    };
+
+    const expectedAlts = getAlternatives(expStr);
+    const userAlts = getAlternatives(ansStr);
+
+    return userAlts.some(u => 
+      expectedAlts.some(e => {
+        if (u === e) return true;
+        
+        if (e.includes(" ") || u.includes(" ")) {
+          return e.includes(u) || u.includes(e);
+        }
+        
+        return false;
+      })
+    );
   };
 
   const startTestRecog = (expectedWord: string, lang: string) => {
