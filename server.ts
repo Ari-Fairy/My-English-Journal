@@ -89,10 +89,19 @@ app.post("/api/classify", async (req, res) => {
 
     const ai = getAIClient();
 
-    const systemInstruction = `You classify English vocabulary entries. 
-You must analyze the given English word and its Russian translation, and decide:
-1. Which Part of Speech (POS) it belongs to.
-2. Which Topic it fits.
+    const systemInstruction = `You are an expert lexicographer and English-Russian linguist.
+You analyze an English word/phrase and its Russian translation to determine its part of speech (POS) and its vocabulary topic.
+
+Your classification MUST be highly accurate according to standard English and Russian grammar:
+- Pronouns like "I", "you", "he", "she", "it", "we", "they", "this", "that", "him", "her", "their", "me" should be classified as pronouns ("pronoun"). If "pronoun" is not in the list of available keys, you should invent it with the label "Местоимение".
+- Interrogative and relative adverbs like "how" (как), "where" (где), "when" (когда), "why" (почему) must be classified as adverbs ("adverb", Наречие), NOT nouns or phrases!
+- Prepositions like "in", "on", "at", "under", "with", "by", "for", "about", "near" are prepositions ("preposition", Предлог).
+- Conjunctions like "and", "but", "or", "because", "if" are conjunctions ("conjunction", Союз).
+- Normal verbs are "verb" (Глагол).
+- Multi-word verbs are "phrasal_verb" (Фразовый глагол).
+- Adjectives are "adjective" (Прилагательное).
+- Nouns are "noun" (Существительное).
+- Set phrases, idioms, or sentences (e.g. "by the way", "at the moment", "good morning") are "phrase" (Фраза).
 
 Available Parts of Speech keys:
 ${existingPos || "verb, noun, adjective, adverb, participle, phrase"}
@@ -100,17 +109,8 @@ ${existingPos || "verb, noun, adjective, adverb, participle, phrase"}
 Available Topic keys:
 ${existingTopics || "home, hobby, weather, study, work, food, time, family, travel, general, diary"}
 
-If the word fits an existing key, return its key exactly.
-Only if it strictly does not fit any existing keys, you can invent a new lowercase key for POS (e.g. "preposition") or Topic (e.g. "nature"). If you invent a new Topic, provide an appropriate emoji and a Russian label.
-
-Return ONLY a valid JSON object in this exact shape:
-{
-  "pos": "the_pos_key",
-  "topic": "the_topic_key",
-  "newTopic": { "key": "new_topic_key", "label": "emoji Russian_Label" } // (OPTIONAL, only if invented)
-  "newPos": { "key": "new_pos_key", "label": "Russian_Label" } // (OPTIONAL, only if invented)
-}
-Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
+If the word fits an existing key, return its key exactly (e.g. "adverb" for "how" -> "как").
+Only if it strictly does not fit any existing keys, you can invent a new lowercase key for POS (e.g. "pronoun", "preposition") or Topic (e.g. "nature"). If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа"). If you invent a new POS, provide a Russian label (e.g., "Местоимение").`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",
@@ -118,6 +118,31 @@ Return absolutely nothing else, no markdown formatting, no comments, just raw JS
         { text: systemInstruction },
         { text: `Word: "${en}" -> Translation: "${ru}"` }
       ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            pos: { type: Type.STRING, description: "The part of speech key (e.g. verb, noun, adverb, adjective, phrase, pronoun)" },
+            topic: { type: Type.STRING, description: "The topic key" },
+            newTopic: {
+              type: Type.OBJECT,
+              properties: {
+                key: { type: Type.STRING },
+                label: { type: Type.STRING, description: "emoji Russian_Label" }
+              }
+            },
+            newPos: {
+              type: Type.OBJECT,
+              properties: {
+                key: { type: Type.STRING },
+                label: { type: Type.STRING, description: "Russian_Label" }
+              }
+            }
+          },
+          required: ["pos", "topic"]
+        }
+      }
     });
 
     const text = response.text || "";
