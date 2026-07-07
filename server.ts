@@ -320,7 +320,18 @@ Only if it strictly does not fit any existing keys, you can invent a new lowerca
       res.status(500).json({ error: "Failed to parse classification JSON", raw: text });
     }
   } catch (error: any) {
-    console.warn("Classification API error, attempting local fallback:", error);
+    const errorMsg = error?.message || "";
+    const isQuotaError = errorMsg.includes("quota") || errorMsg.includes("429") || errorMsg.includes("RESOURCE_EXHAUSTED");
+    const isUnavailableError = errorMsg.includes("503") || errorMsg.includes("UNAVAILABLE") || errorMsg.includes("demand");
+
+    if (isQuotaError) {
+      console.warn(`[Gemini API Quota Exceeded] 429 Rate Limit hit for "${en}". Seamlessly using offline heuristic classifier.`);
+    } else if (isUnavailableError) {
+      console.warn(`[Gemini API Unavailable] 503 High Demand for "${en}". Seamlessly using offline heuristic classifier.`);
+    } else {
+      console.warn(`[Gemini API Error] "${en}": ${error?.message || error}. Using offline fallback.`);
+    }
+
     const fallback = getOfflineClassification(en, ru);
     res.json(fallback);
   }

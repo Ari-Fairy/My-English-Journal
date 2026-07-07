@@ -330,6 +330,55 @@ export default function AddScreen({
     const trimmedRu = targetRu.trim();
     if (!trimmedEn || !trimmedRu) return;
 
+    const cacheKey = `${trimmedEn.toLowerCase()}:${trimmedRu.toLowerCase()}`;
+    let cachedResult = null;
+    try {
+      const cacheRaw = localStorage.getItem("word_classifier_cache");
+      if (cacheRaw) {
+        const cache = JSON.parse(cacheRaw);
+        if (cache[cacheKey]) {
+          cachedResult = cache[cacheKey];
+        }
+      }
+    } catch (e) {
+      console.warn("Failed to read from classification cache:", e);
+    }
+
+    if (cachedResult) {
+      let finalPos = cachedResult.pos;
+      let finalTopic = cachedResult.topic;
+      let customPos = { ...(stats.customPos || {}) };
+      let customTopics = { ...(stats.customTopics || {}) };
+      let updatedStats = { ...stats };
+      let hasUpdates = false;
+
+      if (cachedResult.newPos?.key && cachedResult.newPos?.label) {
+        customPos[cachedResult.newPos.key] = cachedResult.newPos.label;
+        finalPos = cachedResult.newPos.key;
+        updatedStats.customPos = customPos;
+        hasUpdates = true;
+      }
+      if (cachedResult.newTopic?.key && cachedResult.newTopic?.label) {
+        customTopics[cachedResult.newTopic.key] = cachedResult.newTopic.label;
+        finalTopic = cachedResult.newTopic.key;
+        updatedStats.customTopics = customTopics;
+        hasUpdates = true;
+      }
+
+      setPos(finalPos);
+      setTopic(finalTopic);
+
+      if (hasUpdates) {
+        onSaveProgress(updatedStats);
+      }
+
+      const posLabel = allPos[finalPos] || cachedResult.newPos?.label || finalPos;
+      const topicLabel = allTopics[finalTopic] || cachedResult.newTopic?.label || finalTopic;
+      setMsg(`✨ Извлечено из истории: ${posLabel}, Тема: ${topicLabel}`);
+      setTimeout(() => setMsg(""), 4000);
+      return;
+    }
+
     // Check offline dictionary first for common grammatical words (Pronoun, Adverbs, Prepositions, Conjunctions)
     const offlineResult = getOfflineClassification(trimmedEn, trimmedRu);
     if (offlineResult && !offlineResult.isGuess) {
@@ -358,6 +407,16 @@ export default function AddScreen({
       const topicLabel = allTopics[finalTopic] || finalTopic;
       setMsg(`✨ Определено автоматически: ${posLabel}, Тема: ${topicLabel}`);
       setTimeout(() => setMsg(""), 4000);
+
+      // Cache this result
+      try {
+        const cacheRaw = localStorage.getItem("word_classifier_cache");
+        const cache = cacheRaw ? JSON.parse(cacheRaw) : {};
+        cache[cacheKey] = { pos: finalPos, topic: finalTopic, newPos: offlineResult.newPos };
+        localStorage.setItem("word_classifier_cache", JSON.stringify(cache));
+      } catch (e) {
+        console.warn("Failed to write to classification cache:", e);
+      }
       return;
     }
 
@@ -419,6 +478,22 @@ export default function AddScreen({
         setMsg(`🤖 ИИ определил: ${posLabel}, Тема: ${topicLabel}`);
       }
       setTimeout(() => setMsg(""), 5000);
+
+      // Save to localStorage cache for subsequent offline hits
+      try {
+        const cacheRaw = localStorage.getItem("word_classifier_cache");
+        const cache = cacheRaw ? JSON.parse(cacheRaw) : {};
+        cache[cacheKey] = {
+          pos: finalPos,
+          topic: finalTopic,
+          newPos: classification.newPos,
+          newTopic: classification.newTopic,
+          isGuess: classification.isGuess
+        };
+        localStorage.setItem("word_classifier_cache", JSON.stringify(cache));
+      } catch (e) {
+        console.warn("Failed to write to classification cache:", e);
+      }
     } catch (err: any) {
       console.error("Auto classification failed, using offline guess:", err);
       
@@ -447,6 +522,16 @@ export default function AddScreen({
         const posLabel = allPos[finalPos] || offlineResult.newPos?.label || finalPos;
         const topicLabel = allTopics[finalTopic] || finalTopic;
         setMsg(`💡 Использовано локальное авто-определение (ИИ временно занят или недоступен). Ч.речи: ${posLabel}, Тема: ${topicLabel}`);
+
+        // Cache this offline guess result too so we don't spam requests for it
+        try {
+          const cacheRaw = localStorage.getItem("word_classifier_cache");
+          const cache = cacheRaw ? JSON.parse(cacheRaw) : {};
+          cache[cacheKey] = { pos: finalPos, topic: finalTopic, newPos: offlineResult.newPos, isGuess: true };
+          localStorage.setItem("word_classifier_cache", JSON.stringify(cache));
+        } catch (e) {
+          console.warn("Failed to write to classification cache:", e);
+        }
       } else {
         const isVercel = window.location.hostname.includes("vercel.app");
         if (isVercel) {
