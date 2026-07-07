@@ -901,6 +901,7 @@ export default function App() {
 
       {view === "add" && (
         <AddScreen 
+          words={words}
           stats={progress}
           onSaveWord={handleSaveWord}
           onSaveProgress={handleSaveProgress}

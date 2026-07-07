@@ -3,6 +3,7 @@ import { Word, UserProgress } from "../types";
 import { POS_DEFAULT, TOPICS_DEFAULT } from "../data";
 
 interface AddScreenProps {
+  words: Word[];
   stats: UserProgress;
   onSaveWord: (word: Word) => void;
   onSaveProgress: (stats: UserProgress) => void;
@@ -10,6 +11,7 @@ interface AddScreenProps {
 }
 
 export default function AddScreen({
+  words,
   stats,
   onSaveWord,
   onSaveProgress,
@@ -65,6 +67,26 @@ export default function AddScreen({
   });
   Object.entries(stats.customPos || {}).forEach(([k, v]) => {
     allPos[k] = v;
+  });
+
+  const trimmedEn = en.trim().toLowerCase();
+  const duplicateWord = trimmedEn
+    ? (words || []).find(w => w.en.trim().toLowerCase() === trimmedEn)
+    : undefined;
+
+  const photoDuplicates = parsed.filter(p => {
+    const trimmed = p.en.trim().toLowerCase();
+    return trimmed && (words || []).some(w => w.en.trim().toLowerCase() === trimmed);
+  });
+
+  const bulkLinesParsed = bulkText.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
+    const match = l.match(/^(.+?)\s*[\u2014\u2013\-:]\s*(.+)$/);
+    return match ? { en: match[1]!.trim(), ru: match[2]!.trim() } : null;
+  }).filter(Boolean) as { en: string; ru: string }[];
+
+  const bulkDuplicates = bulkLinesParsed.filter(b => {
+    const trimmed = b.en.toLowerCase();
+    return trimmed && (words || []).some(w => w.en.trim().toLowerCase() === trimmed);
   });
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -142,6 +164,10 @@ export default function AddScreen({
   const handleAddOneWord = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!en.trim() || !ru.trim()) return;
+    if (duplicateWord) {
+      setMsg(`⚠️ Слово "${duplicateWord.en}" уже есть в словаре!`);
+      return;
+    }
 
     setLoading(true);
     setMsg("");
@@ -329,6 +355,13 @@ export default function AddScreen({
             💡 Gemini автоматически определит тему и часть речи слова!
           </p>
           <input className="input" value={en} onChange={e => setEn(e.target.value)} placeholder="English Word" style={{ marginBottom: 8 }} required />
+          
+          {duplicateWord && (
+            <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "13px", marginTop: "-4px", marginBottom: "8px", fontWeight: "500", padding: "6px 10px", background: "rgba(255, 77, 77, 0.1)", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)" }}>
+              ⚠️ Слово "{duplicateWord.en}" уже есть в словаре с переводом "{duplicateWord.ru}"! (Тема: {allTopics[duplicateWord.topic] || duplicateWord.topic})
+            </div>
+          )}
+
           <input className="input" value={ru} onChange={e => setRu(e.target.value)} placeholder="Перевод" style={{ marginBottom: 8 }} required />
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
             <select className="select" style={{ flex: 1 }} value={pos} onChange={e => setPos(e.target.value)}>
@@ -339,7 +372,7 @@ export default function AddScreen({
             </select>
           </div>
           <input className="input" value={note} onChange={e => setNote(e.target.value)} placeholder="Заметка (необязательно)" style={{ marginBottom: 12 }} />
-          <button type="submit" className="btn btn-primary" style={{ width: "100%", padding: 14 }} disabled={loading}>
+          <button type="submit" className="btn btn-primary" style={{ width: "100%", padding: 14 }} disabled={loading || !!duplicateWord}>
             {loading ? "⏳ Искусственный интеллект думает..." : "Добавить в журнал"}
           </button>
         </form>
@@ -384,17 +417,37 @@ export default function AddScreen({
               {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
+
+          {photoDuplicates.length > 0 && (
+            <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "13px", marginBottom: "12px", fontWeight: "500", background: "rgba(255, 77, 77, 0.1)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)", lineHeight: "1.4" }}>
+              ⚠️ Некоторые слова уже есть в словаре: {photoDuplicates.map(d => `"${d.en}"`).join(", ")}. Измените их или удалите (нажав на ✕), чтобы добавить остальные слова.
+            </div>
+          )}
+
           <div style={{ maxHeight: 250, overflowY: "auto", marginBottom: 12 }}>
-            {parsed.map((p, i) => (
-              <div key={i} className="word-row">
-                <input value={p.en} onChange={e => { const list = [...parsed]; list[i]!.en = e.target.value; setParsed(list); }} style={{ flex: 1, minWidth: 80 }} />
-                <span>—</span>
-                <input value={p.ru} onChange={e => { const list = [...parsed]; list[i]!.ru = e.target.value; setParsed(list); }} style={{ flex: 1, minWidth: 80 }} />
-                <button className="speak-btn" onClick={() => setParsed(parsed.filter((_, idx) => idx !== i))}>✕</button>
-              </div>
-            ))}
+            {parsed.map((p, i) => {
+              const isDup = p.en.trim() && (words || []).some(w => w.en.trim().toLowerCase() === p.en.trim().toLowerCase());
+              return (
+                <div key={i} className="word-row" style={isDup ? { border: "1px solid rgba(255, 77, 77, 0.4)", background: "rgba(255, 77, 77, 0.05)", padding: "6px", borderRadius: "8px", margin: "4px 0" } : {}}>
+                  <input 
+                    value={p.en} 
+                    onChange={e => { const list = [...parsed]; list[i]!.en = e.target.value; setParsed(list); }} 
+                    style={{ flex: 1, minWidth: 80, color: isDup ? "var(--rose, #ff4d4d)" : "inherit", fontWeight: isDup ? "600" : "normal" }} 
+                    placeholder="Слово"
+                  />
+                  <span>—</span>
+                  <input 
+                    value={p.ru} 
+                    onChange={e => { const list = [...parsed]; list[i]!.ru = e.target.value; setParsed(list); }} 
+                    style={{ flex: 1, minWidth: 80 }} 
+                    placeholder="Перевод"
+                  />
+                  <button className="speak-btn" onClick={() => setParsed(parsed.filter((_, idx) => idx !== i))}>✕</button>
+                </div>
+              );
+            })}
           </div>
-          <button className="btn btn-primary" style={{ width: "100%", padding: 14 }} onClick={handleAddPhotoWords}>
+          <button className="btn btn-primary" style={{ width: "100%", padding: 14 }} onClick={handleAddPhotoWords} disabled={photoDuplicates.length > 0}>
             Добавить все ({parsed.length})
           </button>
         </div>
@@ -405,6 +458,13 @@ export default function AddScreen({
         <div className="card">
           <p style={{ fontSize: 12, color: "#aaa", marginBottom: 10 }}>Формат ввода: английское_слово — русский_перевод (каждое слово на новой строчке)</p>
           <textarea className="textarea" value={bulkText} onChange={e => setBulkText(e.target.value)} rows={7} placeholder="such — такой&#10;genius — гений&#10;warm — теплый" style={{ marginBottom: 10 }} />
+          
+          {bulkDuplicates.length > 0 && (
+            <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "13px", marginBottom: "12px", fontWeight: "500", background: "rgba(255, 77, 77, 0.1)", padding: "10px 14px", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)", lineHeight: "1.4" }}>
+              ⚠️ Эти слова уже есть в словаре: {bulkDuplicates.map(d => `"${d.en}"`).join(", ")}. Измените или удалите эти строки из списка, чтобы продолжить.
+            </div>
+          )}
+
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
             <select className="select" style={{ flex: 1 }} value={bPos} onChange={e => setBPos(e.target.value)}>
               {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
@@ -413,7 +473,7 @@ export default function AddScreen({
               {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
-          <button className="btn btn-secondary" style={{ width: "100%", padding: 14 }} onClick={handleAddBulk}>Добавить список</button>
+          <button className="btn btn-secondary" style={{ width: "100%", padding: 14 }} onClick={handleAddBulk} disabled={bulkDuplicates.length > 0}>Добавить список</button>
         </div>
       )}
 
