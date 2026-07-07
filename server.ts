@@ -78,15 +78,87 @@ Return absolutely nothing else, no markdown wrapping, no explanation, just raw v
   }
 });
 
+// Heuristic offline classifier for common grammatical words used as fallback when Gemini is unavailable
+const getOfflineClassification = (enVal: string) => {
+  const word = enVal.trim().toLowerCase();
+  
+  // 1. Pronouns
+  const pronouns = [
+    "i", "you", "he", "she", "it", "we", "they", "me", "him", "her", "us", "them", 
+    "my", "your", "his", "their", "our", "this", "that", "these", "those", 
+    "who", "what", "which", "someone", "somebody", "something", "anyone", 
+    "anybody", "anything", "everyone", "everybody", "everything", "nobody", "nothing",
+    "myself", "yourself", "himself", "herself", "itself", "ourselves", "themselves", 
+    "whose", "whom", "each", "both", "some", "any", "all", "few", "many", "several"
+  ];
+  if (pronouns.includes(word)) {
+    return {
+      pos: "pronoun",
+      topic: "general",
+      newPos: { key: "pronoun", label: "Местоимение" }
+    };
+  }
+
+  // 2. Adverbs
+  const adverbs = [
+    "how", "where", "when", "why", "now", "today", "tomorrow", "yesterday", 
+    "always", "never", "sometimes", "often", "usually", "seldom", "quickly", 
+    "slowly", "easily", "happily", "really", "suddenly", "softly", "outside", 
+    "below", "over", "near", "above", "already", "yet", "still", "just", 
+    "then", "there", "here", "quite", "very", "too", "almost", "enough", 
+    "hardly", "scarcely", "everywhere", "nowhere", "somewhere"
+  ];
+  if (adverbs.includes(word) || (word.endsWith("ly") && word.length > 4)) {
+    return { pos: "adverb", topic: "general" };
+  }
+
+  // 3. Prepositions
+  const prepositions = [
+    "in", "on", "at", "under", "over", "with", "by", "for", "about", "near", 
+    "to", "from", "of", "into", "through", "during", "before", "after", 
+    "between", "among", "without", "against", "behind", "below", "beside", 
+    "beyond", "except", "inside", "like", "outside", "since", "throughout", 
+    "toward", "towards", "upon", "within"
+  ];
+  if (prepositions.includes(word)) {
+    return {
+      pos: "preposition",
+      topic: "general",
+      newPos: { key: "preposition", label: "Предлог" }
+    };
+  }
+
+  // 4. Conjunctions
+  const conjunctions = [
+    "and", "but", "or", "because", "if", "although", "though", "since", 
+    "unless", "while", "whereas", "so", "for", "yet", "nor", "as", "once", 
+    "until", "whenever", "wherever"
+  ];
+  if (conjunctions.includes(word)) {
+    return {
+      pos: "conjunction",
+      topic: "general",
+      newPos: { key: "conjunction", label: "Союз" }
+    };
+  }
+
+  // 5. Basic greetings and set phrases
+  if (word.includes(" ") || ["hello", "hi", "bye", "please", "thanks", "thank you", "welcome"].includes(word)) {
+    return { pos: "phrase", topic: "general" };
+  }
+
+  return null;
+};
+
 // Endpoint to automatically classify part of speech and topic for a word
 app.post("/api/classify", async (req, res) => {
-  try {
-    const { en, ru, existingPos, existingTopics } = req.body;
-    if (!en || !ru) {
-      res.status(400).json({ error: "Missing en or ru word fields" });
-      return;
-    }
+  const { en, ru, existingPos, existingTopics } = req.body || {};
+  if (!en || !ru) {
+    res.status(400).json({ error: "Missing en or ru word fields" });
+    return;
+  }
 
+  try {
     const ai = getAIClient();
 
     const systemInstruction = `You are an expert lexicographer and English-Russian linguist.
@@ -157,8 +229,13 @@ Only if it strictly does not fit any existing keys, you can invent a new lowerca
       res.status(500).json({ error: "Failed to parse classification JSON", raw: text });
     }
   } catch (error: any) {
-    console.error("Classification API error:", error);
-    res.status(500).json({ error: error?.message || "Internal server error during classification" });
+    console.warn("Classification API error, attempting local fallback:", error);
+    const fallback = getOfflineClassification(en);
+    if (fallback) {
+      res.json(fallback);
+    } else {
+      res.status(500).json({ error: error?.message || "Internal server error during classification" });
+    }
   }
 });
 

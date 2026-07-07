@@ -321,8 +321,15 @@ export default function AddScreen({
       setTimeout(() => setMsg(""), 4000);
     } catch (err: any) {
       console.error("Auto classification failed:", err);
-      setMsg(`⚠️ Не удалось подключиться к ИИ (${err?.message || "ошибка сети"}). Выберите часть речи вручную.`);
-      setTimeout(() => setMsg(""), 6000);
+      const isVercel = window.location.hostname.includes("vercel.app");
+      if (isVercel) {
+        setMsg("⚠️ На Vercel отсутствует бэкенд для ИИ (код 404). Пожалуйста, выберите значения вручную или используйте стандартные слова.");
+      } else if (err?.message?.includes("503") || err?.message?.includes("UNAVAILABLE") || err?.message?.includes("demand")) {
+        setMsg("⚠️ ИИ временно перегружен (ошибка 503). Пожалуйста, попробуйте еще раз или выберите часть речи вручную.");
+      } else {
+        setMsg(`⚠️ Ошибка связи с ИИ (${err?.message || "ошибка сети"}). Пожалуйста, выберите часть речи вручную.`);
+      }
+      setTimeout(() => setMsg(""), 8000);
     } finally {
       setIsClassifying(false);
     }
