@@ -520,12 +520,36 @@ export default function SettingsScreen({
                 </button>
 
                 {testEmailUrl && (
-                  <div style={{ marginTop: 8, padding: 10, background: "rgba(143,160,128,0.1)", border: "1px solid var(--sage)", borderRadius: 8, fontSize: 11, lineHeight: 1.4, textAlign: "left" }}>
-                    📬 <strong>Письмо готово!</strong> Поскольку SMTP-сервер в настройках проекта не задан, письмо отправлено в тестовую службу. Вы можете посмотреть его по этой ссылке:
-                    <div style={{ marginTop: 6, textAlign: "center" }}>
-                      <a href={testEmailUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--warm)", textDecoration: "underline", fontWeight: "bold" }}>
+                  <div style={{ marginTop: 12, padding: "14px 16px", background: "rgba(143,160,128,0.08)", border: "1px dashed var(--sage)", borderRadius: 10, fontSize: 12, lineHeight: 1.5, textAlign: "left" }}>
+                    <p style={{ margin: "0 0 8px 0", fontSize: 13, fontWeight: "bold", color: "var(--sage)" }}>
+                      📬 Письмо успешно сгенерировано!
+                    </p>
+                    <p style={{ margin: "0 0 12px 0", color: "var(--text)" }}>
+                      Поскольку вы ещё не подключили свой собственный почтовый сервер в настройках проекта, письмо отправлено на <strong>виртуальный тестовый ящик</strong>. Вы можете прямо сейчас посмотреть, как оно выглядит:
+                    </p>
+                    <div style={{ textAlign: "center", marginBottom: 16 }}>
+                      <a href={testEmailUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ background: "var(--sage)", color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
                         Открыть превью письма ↗
                       </a>
+                    </div>
+                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10 }}>
+                      <strong style={{ color: "var(--warm)" }}>🛠 Как сделать, чтобы письма приходили на вашу реальную почту?</strong>
+                      <p style={{ margin: "6px 0", color: "var(--muted)", fontSize: 11 }}>
+                        Для этого в AI Studio (где вы создавали проект) нужно настроить ваш личный SMTP-сервер. Например, для <strong>Gmail</strong>:
+                      </p>
+                      <ol style={{ margin: "4px 0 0 0", paddingLeft: 18, color: "var(--muted)", fontSize: 11, display: "flex", flexDirection: "column", gap: 4 }}>
+                        <li>Откройте меню <strong>Settings</strong> (значок шестерёнки вверху справа на панели AI Studio).</li>
+                        <li>Перейдите в подраздел <strong>Secrets / Environment Variables</strong>.</li>
+                        <li>Добавьте следующие переменные окружения:</li>
+                        <ul style={{ paddingLeft: 14, marginTop: 4, listStyleType: "circle" }}>
+                          <li><code style={{ color: "var(--warm)" }}>SMTP_HOST</code> = <code style={{ color: "var(--sage)" }}>smtp.gmail.com</code></li>
+                          <li><code style={{ color: "var(--warm)" }}>SMTP_PORT</code> = <code style={{ color: "var(--sage)" }}>465</code></li>
+                          <li><code style={{ color: "var(--warm)" }}>SMTP_SECURE</code> = <code style={{ color: "var(--sage)" }}>true</code></li>
+                          <li><code style={{ color: "var(--warm)" }}>SMTP_USER</code> = <code style={{ color: "var(--sage)" }}>ваша_почта@gmail.com</code></li>
+                          <li><code style={{ color: "var(--warm)" }}>SMTP_PASS</code> = <em style={{ color: "var(--sage)" }}>специальный пароль приложения Gmail (App Password)</em></li>
+                        </ul>
+                        <li>После добавления перезагрузите сервер (кнопка <strong>Restart Server</strong>). Письма будут мгновенно прилетать прямо в ваш настоящий почтовый ящик!</li>
+                      </ol>
                     </div>
                   </div>
                 )}
