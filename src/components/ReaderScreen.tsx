@@ -70,6 +70,28 @@ export default function ReaderScreen({
   const dailyBooksRead = stats.dailyBooksRead || {};
   const todayReadLevels = dailyBooksRead[today] || [];
 
+  const prefetchQuiz = async (level: string, title: string, text: string) => {
+    const cacheKey = `prefetched_quiz_${level}_${today}`;
+    if (localStorage.getItem(cacheKey)) return; // already cached
+
+    try {
+      const res = await fetch("/api/generate-quiz", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ title, text, level })
+      });
+      if (res.ok) {
+        const resText = await res.text();
+        const data = resText ? JSON.parse(resText) : null;
+        if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
+          localStorage.setItem(cacheKey, JSON.stringify(data.questions));
+        }
+      }
+    } catch (e) {
+      console.warn("Quiz background prefetch failed:", e);
+    }
+  };
+
   const fetchStory = async (level: string, date: string) => {
     const cacheKey = `generated_story_${level}_${date}`;
     const cached = localStorage.getItem(cacheKey);
@@ -93,7 +115,8 @@ export default function ReaderScreen({
         body: JSON.stringify({ level, date })
       });
       if (res.ok) {
-        const data = await res.json();
+        const resText = await res.text();
+        const data = resText ? JSON.parse(resText) : null;
         if (data && data.title && data.text) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
           setDailyStories(prev => ({ ...prev, [level]: data }));
@@ -116,7 +139,7 @@ export default function ReaderScreen({
   };
 
   useEffect(() => {
-    // Load cached stories on mount so they are instantly ready without API calls
+    // Only load already cached stories on mount to keep load instantaneous and avoid triggering parallel Gemini API requests
     ["A1", "A2", "B1", "B2"].forEach(level => {
       const cacheKey = `generated_story_${level}_${today}`;
       const cached = localStorage.getItem(cacheKey);
@@ -139,6 +162,16 @@ export default function ReaderScreen({
       fetchStory(selectedLevel, today);
     }
   }, [selectedLevel, today]);
+
+  // Prefetch the quiz ONLY for the currently selected level in the background once its story is available
+  useEffect(() => {
+    if (selectedLevel) {
+      const story = dailyStories[selectedLevel];
+      if (story && story.title && story.text) {
+        prefetchQuiz(selectedLevel, story.title, story.text);
+      }
+    }
+  }, [selectedLevel, dailyStories, today]);
 
 
   const handleWordClick = (word: string, e: React.MouseEvent) => {
@@ -187,7 +220,8 @@ export default function ReaderScreen({
       });
 
       if (res.ok) {
-        const classification = await res.json();
+        const resText = await res.text();
+        const classification = resText ? JSON.parse(resText) : {};
         if (classification.pos) setEditModalPos(classification.pos);
         if (classification.topic) setEditModalTopic(classification.topic);
 
@@ -277,7 +311,6 @@ export default function ReaderScreen({
 
   const handleStartQuiz = async () => {
     if (!selectedLevel) return;
-    setQuizLoading(true);
     setCurrentQuizIdx(0);
     setQuizQuestions([]);
     setSelectedOptionIdx(null);
@@ -286,6 +319,23 @@ export default function ReaderScreen({
 
     const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
 
+    // Try reading prefetched quiz from cache for instantaneous load
+    const cacheKey = `prefetched_quiz_${selectedLevel}_${today}`;
+    const cached = localStorage.getItem(cacheKey);
+    if (cached) {
+      try {
+        const questions = JSON.parse(cached);
+        if (Array.isArray(questions) && questions.length > 0) {
+          setQuizQuestions(questions);
+          setQuizLoading(false);
+          return;
+        }
+      } catch (e) {
+        console.error("Failed to parse cached prefetched quiz", e);
+      }
+    }
+
+    setQuizLoading(true);
     try {
       const res = await fetch("/api/generate-quiz", {
         method: "POST",
@@ -297,9 +347,11 @@ export default function ReaderScreen({
         })
       });
       if (res.ok) {
-        const data = await res.json();
+        const resText = await res.text();
+        const data = resText ? JSON.parse(resText) : null;
         if (data && data.questions && Array.isArray(data.questions) && data.questions.length > 0) {
           setQuizQuestions(data.questions);
+          localStorage.setItem(cacheKey, JSON.stringify(data.questions));
           setQuizLoading(false);
           return;
         }
@@ -428,28 +480,18 @@ export default function ReaderScreen({
 
   if (selectedLevel && loadingStory[selectedLevel]) {
     return (
-      <div className="fade-in" style={{ textAlign: "center", paddingTop: 60, paddingBottom: 60 }}>
-        <div style={{ fontSize: 56, animation: "bounce 2s infinite", display: "inline-block" }}>✍️</div>
-        <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, marginTop: 20, color: "var(--warm)" }}>
-          ИИ пишет новую книгу...
-        </h3>
-        <p className="sub-text" style={{ marginTop: 8, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
-          Создаем уникальный и уютный рассказ специально для твоего уровня {selectedLevel}! Это займет буквально пару секунд.
-        </p>
+      <div className="fade-in" style={{ textAlign: "center", paddingTop: 100, paddingBottom: 100 }}>
+        <div style={{ display: "inline-block", border: "3px solid var(--border)", borderTop: "3px solid var(--warm)", borderRadius: "50%", width: 32, height: 32, animation: "spin 1s linear infinite", marginBottom: 16 }}></div>
+        <p style={{ color: "var(--muted)", fontSize: 14 }}>Загрузка рассказа...</p>
       </div>
     );
   }
 
   if (quizLoading) {
     return (
-      <div className="fade-in" style={{ textAlign: "center", paddingTop: 48, paddingBottom: 48 }}>
-        <div style={{ fontSize: 56, animation: "spin 2s linear infinite" }} className="spinning-icon">🧠</div>
-        <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, marginTop: 20, color: "var(--warm)" }}>
-          ИИ придумывает вопросы...
-        </h3>
-        <p className="sub-text" style={{ marginTop: 8, color: "var(--muted)", fontSize: 13, lineHeight: 1.5 }}>
-          Пожалуйста, подождите. Мы готовим 3 интерактивных вопроса на английском языке, чтобы проверить ваше понимание прочитанного сюжета!
-        </p>
+      <div className="fade-in" style={{ textAlign: "center", paddingTop: 100, paddingBottom: 100 }}>
+        <div style={{ display: "inline-block", border: "3px solid var(--border)", borderTop: "3px solid var(--sage)", borderRadius: "50%", width: 32, height: 32, animation: "spin 1s linear infinite", marginBottom: 16 }}></div>
+        <p style={{ color: "var(--muted)", fontSize: 14 }}>Загрузка вопросов к книге...</p>
       </div>
     );
   }
@@ -850,7 +892,8 @@ function WordPopup({ word, pos, inDict, onAdd, onClose, words }: {
       // Step 2: Try MyMemory API with 2.5s timeout
       try {
         const r = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word.clean)}&langpair=en|ru`);
-        const d = await r.json();
+        const rText = await r.text();
+        const d = rText ? JSON.parse(rText) : null;
         const t = d?.responseData?.translatedText;
         if (active && t && t.toLowerCase() !== word.clean.toLowerCase() && t.length < 100 && !/^[A-Z0-9\s]+$/.test(t)) {
           setTranslation(t);
@@ -864,7 +907,8 @@ function WordPopup({ word, pos, inDict, onAdd, onClose, words }: {
       // Step 3: Try Lingva Translate fallback API with 2.5s timeout
       try {
         const r = await fetchWithTimeout(`https://lingva.ml/api/v1/en/ru/${encodeURIComponent(word.clean)}`);
-        const d = await r.json();
+        const rText = await r.text();
+        const d = rText ? JSON.parse(rText) : null;
         const t = d?.translation;
         if (active && t && t.toLowerCase() !== word.clean.toLowerCase()) {
           setTranslation(t);

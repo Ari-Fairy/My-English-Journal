@@ -53,4 +53,8 @@ export interface UserProgress {
   deletedTopics?: string[];
   deletedPos?: string[];
   notifFrequency?: string;
+  emailNotifEnabled?: boolean;
+  emailNotifHour?: number;
+  emailNotifOffset?: number;
+  email?: string;
 }

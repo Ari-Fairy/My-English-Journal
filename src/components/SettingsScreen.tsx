@@ -49,6 +49,62 @@ export default function SettingsScreen({
     sendWebNotification(title, body);
   };
 
+  const [emailSending, setEmailSending] = useState(false);
+
+  const handleToggleEmailNotifs = () => {
+    const isEnabled = !stats.emailNotifEnabled;
+    const offset = new Date().getTimezoneOffset(); // in minutes
+    onSaveProgress({
+      ...stats,
+      emailNotifEnabled: isEnabled,
+      emailNotifHour: stats.emailNotifHour ?? 12,
+      emailNotifOffset: offset,
+      email: user?.email || ""
+    });
+    notify(isEnabled ? "✅ Email-напоминания успешно включены!" : "🔕 Email-напоминания отключены.");
+  };
+
+  const handleEmailHourChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+    const hour = parseInt(e.target.value, 10);
+    const offset = new Date().getTimezoneOffset();
+    onSaveProgress({
+      ...stats,
+      emailNotifHour: hour,
+      emailNotifOffset: offset,
+      email: user?.email || ""
+    });
+    notify(`✅ Время отправки писем изменено на ${String(hour).padStart(2, '0')}:00!`);
+  };
+
+  const handleSendTestEmail = async () => {
+    if (user === "guest" || !user?.email) return;
+    setEmailSending(true);
+    try {
+      const response = await fetch("/api/send-test-email", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          email: user.email,
+          userId: stats.userId,
+          hour: stats.emailNotifHour ?? 12,
+          offset: stats.emailNotifOffset ?? new Date().getTimezoneOffset(),
+        })
+      });
+      const resText = await response.text();
+      const data = resText ? JSON.parse(resText) : {};
+      if (response.ok) {
+        notify("✉️ Тестовое письмо успешно отправлено! Проверьте вашу почту (и папку Спам).");
+      } else {
+        notify(`❌ Ошибка: ${data.error || "Не удалось отправить письмо"}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      notify("❌ Не удалось связаться с сервером для отправки письма.");
+    } finally {
+      setEmailSending(false);
+    }
+  };
+
   const handleRequestNotifPermission = async () => {
     if (!("Notification" in window)) {
       alert("К сожалению, ваш браузер или устройство не поддерживает системные уведомления.");
@@ -392,6 +448,69 @@ export default function SettingsScreen({
                     <li><strong>На телефоне (Яндекс):</strong> Нажмите три точки в строке меню ➡️ найдите свойства страницы/разрешения и сбросьте блокировку уведомлений.</li>
                   </ul>
                 </div>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+
+      {/* Email Notifications Settings */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📨 Напоминания на почту</h3>
+        {user === "guest" ? (
+          <div>
+            <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
+              ✉️ Email-напоминания доступны только для зарегистрированных пользователей. Пожалуйста, создайте аккаунт или войдите в него вверху страницы, чтобы мы могли отправлять вам письма.
+            </p>
+          </div>
+        ) : (
+          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+            <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
+              Будем присылать список слов на повторение и теплое напоминание заниматься прямо на ваш почтовый ящик <strong>{user?.email}</strong>.
+            </p>
+            
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+              <span style={{ fontSize: 13, fontWeight: 500 }}>Статус подписки:</span>
+              <button 
+                className={`btn ${stats.emailNotifEnabled ? 'btn-primary' : 'btn-outline'} btn-sm`}
+                onClick={handleToggleEmailNotifs}
+                style={{ fontSize: 12, padding: "5px 12px" }}
+              >
+                {stats.emailNotifEnabled ? "🟢 Включены" : "🔴 Выключены"}
+              </button>
+            </div>
+
+            {stats.emailNotifEnabled && (
+              <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 10, marginTop: 4 }}>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                  <label htmlFor="email-hour-select" style={{ fontSize: 13, color: "var(--warm)" }}>Время отправки (МСК/Местное):</label>
+                  <select 
+                    id="email-hour-select"
+                    className="select" 
+                    value={stats.emailNotifHour ?? 12}
+                    onChange={handleEmailHourChange}
+                    style={{ fontSize: 13, padding: "6px 10px" }}
+                  >
+                    {Array.from({ length: 24 }).map((_, i) => (
+                      <option key={i} value={i}>
+                        {String(i).padStart(2, '0')}:00
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.3 }}>
+                  💡 Письма будут приходить ежедневно в <strong>{String(stats.emailNotifHour ?? 12).padStart(2, '0')}:00</strong> по вашему часовому поясу.
+                </div>
+
+                <button 
+                  className="btn btn-outline btn-sm" 
+                  style={{ width: "100%", padding: 8, fontSize: 12, borderColor: "var(--border)", marginTop: 4 }}
+                  onClick={handleSendTestEmail}
+                  disabled={emailSending}
+                >
+                  {emailSending ? "⏳ Отправка..." : "🧪 Отправить тестовое письмо"}
+                </button>
               </div>
             )}
           </div>

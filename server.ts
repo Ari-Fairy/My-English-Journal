@@ -499,13 +499,10 @@ For example:
 Always prioritize mapping to the custom keys in the provided list based on their labels. Only if a word absolutely does not fit any of the provided keys or custom labels, you can invent a new lowercase key for POS or Topic. If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа").`;
 
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: `Word: "${en}" -> Translation: "${ru}"`,
       config: {
         systemInstruction: systemInstruction,
-        thinkingConfig: {
-          thinkingLevel: ThinkingLevel.MINIMAL
-        },
         responseMimeType: "application/json",
         responseSchema: {
           type: Type.OBJECT,

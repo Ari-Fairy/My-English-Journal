@@ -112,7 +112,8 @@ export default function AddScreen({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: img })
       });
-      const data = await res.json();
+      const resText = await res.text();
+      const data = resText ? JSON.parse(resText) : {};
       if (data.pairs && Array.isArray(data.pairs)) {
         setParsed(data.pairs);
         setReview(true);
