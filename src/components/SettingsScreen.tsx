@@ -17,6 +17,7 @@ interface SettingsScreenProps {
   onLogout: () => void;
   onImportData: (data: { words: Word[]; irregular: IrregularVerb[]; progress: UserProgress }) => void;
   onBack: () => void;
+  onSaveProgress: (updatedProgress: UserProgress) => void;
 }
 
 export default function SettingsScreen({
@@ -30,7 +31,8 @@ export default function SettingsScreen({
   onWipeData,
   onLogout,
   onBack,
-  onImportData
+  onImportData,
+  onSaveProgress
 }: SettingsScreenProps) {
   const [msg, setMsg] = useState("");
   const [isPersistent, setIsPersistent] = useState(false);
@@ -73,6 +75,13 @@ export default function SettingsScreen({
     const val = e.target.value;
     setNotifFrequency(val);
     localStorage.setItem("my-eng-notif-freq", val);
+    
+    // Sync notification setting to the progress stats in the database
+    onSaveProgress({
+      ...stats,
+      notifFrequency: val
+    });
+    
     notify("✅ Частота уведомлений успешно сохранена!");
   };
 

@@ -52,4 +52,5 @@ export interface UserProgress {
   customPos?: { [id: string]: string };
   deletedTopics?: string[];
   deletedPos?: string[];
+  notifFrequency?: string;
 }

@@ -201,6 +201,8 @@ body::before {
   outline: none;
   font-family: inherit;
   cursor: pointer;
+  min-width: 0;
+  max-width: 100%;
 }
 
 .tabs {
@@ -224,6 +226,13 @@ body::before {
   color: #8D8B84;
   transition: all 0.2s;
   font-family: inherit;
+}
+
+@media (max-width: 480px) {
+  .tab {
+    font-size: 11px;
+    padding: 8px 2px;
+  }
 }
 
 .tab.active {

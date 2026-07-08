@@ -238,6 +238,16 @@ export default function App() {
           if (pStats) {
             pStats.userId = firebaseUser.uid; // Enforce correct userId
 
+            // Sync notification frequency setting from database/local storage
+            if (pStats.notifFrequency) {
+              localStorage.setItem("my-eng-notif-freq", pStats.notifFrequency);
+            } else {
+              const localFreq = localStorage.getItem("my-eng-notif-freq");
+              if (localFreq) {
+                pStats.notifFrequency = localFreq;
+              }
+            }
+
             // Merge any guest data that is not in the user's Firestore data
             let mergedWords = [...wList];
             let mergedIrregular = [...iList];
@@ -957,6 +967,7 @@ export default function App() {
           onLogout={handleLogout}
           onImportData={handleImportBackup}
           onBack={() => setView("home")}
+          onSaveProgress={handleSaveProgress}
         />
       )}
     </div>

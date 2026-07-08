@@ -464,6 +464,24 @@ export default function AddScreen({
         matchPatterns: ["travel", "путешеств", "trip", "поездк", "transport", "транспорт"],
         enKeywords: ["travel", "trip", "journey", "car", "plane", "train", "bus", "bike", "taxi", "bicycle", "boat", "ship", "flight", "ticket", "hotel", "luggage", "bag", "suitcase", "map", "guide", "border", "country", "city", "town", "road", "street", "station", "airport"],
         ruKeywords: ["путешествие", "поездка", "машина", "самолет", "поезд", "автобус", "таксо", "велосипед", "лодка", "корабль", "полет", "билет", "отель", "гостиница", "багаж", "сумка", "чемодан", "карта", "гид", "граница", "страна", "город", "дорога", "улица", "станция", "аэропорт"]
+      },
+      {
+        id: "animals",
+        matchPatterns: ["animal", "животн", "птиц", "bird", "beast", "звер"],
+        enKeywords: ["lion", "tiger", "bear", "fox", "wolf", "dog", "cat", "horse", "cow", "sheep", "pig", "rabbit", "deer", "elephant", "monkey", "mouse", "rat", "bird", "eagle", "hawk", "pigeon", "duck", "chicken", "snake", "frog", "fish", "shark", "whale", "dolphin", "spider", "bee", "ant", "butterfly", "insect"],
+        ruKeywords: ["животное", "зверь", "животные", "собака", "кошка", "кот", "пес", "лошадь", "корова", "овца", "свинья", "кролик", "лев", "тигр", "медведь", "лиса", "волк", "слон", "обезьяна", "мышь", "крыса", "птица", "птицы", "орел", "ястреб", "голубь", "утка", "курица", "змея", "лягушка", "рыба", "акула", "кит", "дельфин", "паук", "пчела", "муравей", "бабочка", "насекомое"]
+      },
+      {
+        id: "body",
+        matchPatterns: ["body", "тело", "част", "organ"],
+        enKeywords: ["body", "head", "face", "hair", "eye", "ear", "nose", "mouth", "lip", "tooth", "teeth", "tongue", "neck", "shoulder", "arm", "hand", "finger", "thumb", "chest", "heart", "stomach", "leg", "knee", "foot", "feet", "toe", "skin", "bone", "brain", "blood"],
+        ruKeywords: ["тело", "голова", "лицо", "волосы", "глаз", "глаза", "ухо", "уши", "нос", "рот", "губа", "губы", "зуб", "зубы", "язык", "шея", "плечо", "рука", "руки", "палец", "пальцы", "грудь", "сердце", "живот", "нога", "ноги", "колено", "ступня", "кожа", "кость", "мозг", "кровь"]
+      },
+      {
+        id: "musical_instruments",
+        matchPatterns: ["instrument", "инструмент", "музык", "music", "musical"],
+        enKeywords: ["violin", "guitar", "piano", "drums", "flute", "trumpet", "sax", "saxophone", "cello", "harp", "accordion", "synthesizer", "clarinet", "oboe"],
+        ruKeywords: ["скрипка", "гитара", "пианино", "барабаны", "флейта", "труба", "саксофон", "виолончель", "арфа", "аккордеон", "синтезатор", "кларнет", "гобой"]
       }
     ];
 
@@ -921,10 +939,10 @@ export default function AddScreen({
           </div>
 
           <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <select className="select" style={{ flex: 1 }} value={pos} onChange={e => setPos(e.target.value)}>
+            <select className="select" style={{ flex: 1, minWidth: 0 }} value={pos} onChange={e => setPos(e.target.value)}>
               {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <select className="select" style={{ flex: 1 }} value={topic} onChange={e => setTopic(e.target.value)}>
+            <select className="select" style={{ flex: 1, minWidth: 0 }} value={topic} onChange={e => setTopic(e.target.value)}>
               {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>
@@ -1031,10 +1049,10 @@ export default function AddScreen({
           )}
 
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
-            <select className="select" style={{ flex: 1 }} value={bPos} onChange={e => setBPos(e.target.value)}>
+            <select className="select" style={{ flex: 1, minWidth: 0 }} value={bPos} onChange={e => setBPos(e.target.value)}>
               {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
-            <select className="select" style={{ flex: 1 }} value={bTopic} onChange={e => setBTopic(e.target.value)}>
+            <select className="select" style={{ flex: 1, minWidth: 0 }} value={bTopic} onChange={e => setBTopic(e.target.value)}>
               {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
           </div>

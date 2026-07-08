@@ -482,14 +482,21 @@ Your classification MUST be highly accurate according to standard English and Ru
 - Nouns are "noun" (Существительное).
 - Set phrases, idioms, or sentences (e.g. "by the way", "at the moment", "good morning") are "phrase" (Фраза).
 
-Available Parts of Speech keys:
-${existingPos || "verb, noun, adjective, adverb, participle, phrase"}
+Available Parts of Speech keys (format is key:label):
+${existingPos || "verb:Существительное, noun:Существительное, adjective:Прилагательное, adverb:Наречие, phrase:Фраза"}
 
-Available Topic keys:
-${existingTopics || "home, hobby, weather, study, work, food, time, family, travel, general, diary"}
+Available Topic keys (format is key:label):
+${existingTopics || "home:🏠 Дом, hobby:🎨 Хобби, weather:⛅ Погода, study:📚 Учеба, work:💼 Работа, food:🍎 Еда, time:🕒 Время, family:👨‍👩‍👧‍👦 Семья, travel:✈️ Путешествия, general:🌐 Общее, diary:📓 Личный дневник"}
 
-If the word fits an existing key, return its key exactly (e.g. "adverb" for "how" -> "как").
-Only if it strictly does not fit any existing keys, you can invent a new lowercase key for POS (e.g. "pronoun", "preposition") or Topic (e.g. "nature"). If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа"). If you invent a new POS, provide a Russian label (e.g., "Местоимение").`;
+CRITICAL REQUIREMENT:
+You MUST map the word/phrase to one of the provided "Available Parts of Speech keys" and "Available Topic keys" if it fits.
+The user can create custom topics and parts of speech which will have random keys (e.g., keys starting with "custom_" or some other code, like "custom_a3f8b9:🎸 Музыкальные инструменты" or "custom_j8f3d4:👕 Одежда").
+You MUST analyze the SEMANTIC MEANING of the Russian labels of these custom keys!
+For example:
+- If the word is "violin" (скрипка) and there is a key like "custom_a3f8b9:🎸 Музыкальные инструменты", you MUST return its key "custom_a3f8b9" because "Музыкальные инструменты" is the perfect semantic match for violin! Never map it to "animal", "body", "hobby", or "general" if a specific custom key's label matches perfectly.
+- If the word is "shirt" (рубашка) and there is a key like "custom_j8f3d4:👕 Одежда", you MUST return "custom_j8f3d4"!
+- If the word is "lion" (лев) and there is a key like "custom_xyz:🦁 Животные", you MUST return "custom_xyz"!
+Always prioritize mapping to the custom keys in the provided list based on their labels. Only if a word absolutely does not fit any of the provided keys or custom labels, you can invent a new lowercase key for POS or Topic. If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа").`;
 
     const response = await ai.models.generateContent({
       model: "gemini-3.5-flash",

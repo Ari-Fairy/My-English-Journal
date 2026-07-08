@@ -1,6 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Word, UserProgress } from "../types";
-import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR, STATIC_QUIZZES } from "../data";
+import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR, STATIC_QUIZZES, POS_DEFAULT, TOPICS_DEFAULT } from "../data";
 import { speak, getLocalDateString } from "../utils";
 
 interface ReaderScreenProps {
@@ -24,6 +24,36 @@ export default function ReaderScreen({
   const [popupPos, setPopupPos] = useState({ x: 0, y: 0 });
   const [addedWords, setAddedWords] = useState<{ [key: string]: boolean }>({});
   const [toast, setToast] = useState("");
+
+  // Edit / Add Modal state from Book
+  const [editModalWord, setEditModalWord] = useState<{ en: string; ru: string } | null>(null);
+  const [editModalPos, setEditModalPos] = useState("noun");
+  const [editModalTopic, setEditModalTopic] = useState("general");
+  const [editModalNote, setEditModalNote] = useState("");
+  const [isClassifying, setIsClassifying] = useState(false);
+
+  const deletedTopics = stats.deletedTopics || [];
+  const deletedPos = stats.deletedPos || [];
+
+  const allTopics: { [key: string]: string } = {};
+  Object.entries(TOPICS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedTopics.includes(k)) {
+      allTopics[k] = v;
+    }
+  });
+  Object.entries(stats.customTopics || {}).forEach(([k, v]) => {
+    allTopics[k] = v;
+  });
+
+  const allPos: { [key: string]: string } = {};
+  Object.entries(POS_DEFAULT).forEach(([k, v]) => {
+    if (!deletedPos.includes(k)) {
+      allPos[k] = v;
+    }
+  });
+  Object.entries(stats.customPos || {}).forEach(([k, v]) => {
+    allPos[k] = v;
+  });
 
   // Quiz interactive state
   const [quizQuestions, setQuizQuestions] = useState<any[]>([]);
@@ -134,22 +164,76 @@ export default function ReaderScreen({
     setPopupPos({ x, y });
   };
 
-  const handleAddWordToDict = (word: string, translation: string) => {
-    const existing = words.find(w => w.en.toLowerCase() === word.toLowerCase());
-    if (existing) {
-      setToast(`Слово "${word}" уже есть в словаре!`);
-      setTimeout(() => setToast(""), 2000);
-      return;
+  const openAddWordModal = async (word: string, translation: string) => {
+    setPopupWord(null); // close simple popup
+    setEditModalWord({ en: word, ru: translation });
+    setEditModalPos("noun");
+    setEditModalTopic("general");
+    setEditModalNote(`Из книги: ${selectedLevel || "Уровень A1"}`);
+    setIsClassifying(true);
+
+    try {
+      const res = await fetch("/api/classify", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          en: word,
+          ru: translation,
+          existingPos: Object.entries(allPos).map(([k, v]) => `${k}:${v}`).join(", "),
+          existingTopics: Object.entries(allTopics).map(([k, v]) => `${k}:${v}`).join(", "),
+          allPos,
+          allTopics
+        })
+      });
+
+      if (res.ok) {
+        const classification = await res.json();
+        if (classification.pos) setEditModalPos(classification.pos);
+        if (classification.topic) setEditModalTopic(classification.topic);
+
+        let customTopics = { ...(stats.customTopics || {}) };
+        let customPos = { ...(stats.customPos || {}) };
+        let hasUpdates = false;
+
+        if (classification.newTopic?.key && classification.newTopic?.label) {
+          customTopics[classification.newTopic.key] = classification.newTopic.label;
+          setEditModalTopic(classification.newTopic.key);
+          hasUpdates = true;
+        }
+
+        if (classification.newPos?.key && classification.newPos?.label) {
+          customPos[classification.newPos.key] = classification.newPos.label;
+          setEditModalPos(classification.newPos.key);
+          hasUpdates = true;
+        }
+
+        if (hasUpdates) {
+          onSaveProgress({
+            ...stats,
+            customTopics,
+            customPos
+          });
+        }
+      }
+    } catch (err) {
+      console.warn("AI classification failed, falling back to defaults", err);
+    } finally {
+      setIsClassifying(false);
     }
+  };
+
+  const handleSaveModalWord = () => {
+    if (!editModalWord) return;
+    const { en: wordEn, ru: wordRu } = editModalWord;
 
     const newWord: Word = {
       id: Math.random().toString(36).slice(2),
       userId: stats.userId,
-      en: word,
-      ru: translation || "—",
-      partOfSpeech: "noun", // Default, user can update in Dictionary
-      topic: "general",    // Default, user can update in Dictionary
-      note: "Из книги",
+      en: wordEn,
+      ru: wordRu || "—",
+      partOfSpeech: editModalPos,
+      topic: editModalTopic,
+      note: editModalNote.trim(),
       learned: false,
       learnedDate: null,
       lastReviewed: null,
@@ -160,8 +244,8 @@ export default function ReaderScreen({
     };
 
     onSaveWord(newWord);
-    setAddedWords(prev => ({ ...prev, [word]: true }));
-    setToast(`Добавлено: ${word} ✓`);
+    setAddedWords(prev => ({ ...prev, [wordEn]: true }));
+    setToast(`Добавлено: ${wordEn} ✓`);
     setTimeout(() => setToast(""), 2200);
 
     // Increment words from books stat
@@ -169,6 +253,8 @@ export default function ReaderScreen({
       ...stats,
       wordsFromBooks: (stats.wordsFromBooks || 0) + 1
     });
+
+    setEditModalWord(null);
   };
 
   const handleFinishBook = () => {
@@ -564,11 +650,93 @@ export default function ReaderScreen({
             word={popupWord} 
             pos={popupPos} 
             inDict={words.some(w => w.en.toLowerCase() === popupWord.clean)}
-            onAdd={handleAddWordToDict} 
+            onAdd={openAddWordModal} 
             onClose={() => setPopupWord(null)} 
             words={words}
           />
         </>
+      )}
+
+      {editModalWord && (
+        <div className="overlay" style={{ backdropFilter: "blur(4px)", display: "flex", alignItems: "center", justifyContent: "center", position: "fixed", inset: 0, backgroundColor: "rgba(0,0,0,0.5)", zIndex: 1000 }} onClick={() => setEditModalWord(null)}>
+          <div className="card overlay-card" style={{ width: "90%", maxWidth: "440px", margin: "20px", display: "flex", flexDirection: "column", gap: "12px", border: "1.5px solid rgba(212, 165, 165, 0.4)", boxShadow: "0 8px 32px rgba(0, 0, 0, 0.12)", maxHeight: "90vh", overflowY: "auto" }} onClick={e => e.stopPropagation()}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: "4px" }}>
+              <h3 className="section-title" style={{ margin: 0, fontSize: "18px" }}>Добавить слово из книги</h3>
+              <button style={{ background: "none", border: "none", cursor: "pointer", color: "#aaa", fontSize: "20px", padding: "0 4px" }} onClick={() => setEditModalWord(null)}>✕</button>
+            </div>
+            
+            <p style={{ fontSize: "12px", color: "#aaa", margin: 0, lineHeight: 1.4 }}>
+              Вы можете изменить перевод, заметку, часть речи или тему, определенные ИИ.
+            </p>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "10px" }}>
+              <div>
+                <label style={{ fontSize: "11px", color: "#aaa", display: "block", marginBottom: "4px" }}>Слово на английском:</label>
+                <input 
+                  className="input" 
+                  value={editModalWord.en} 
+                  onChange={e => setEditModalWord({ ...editModalWord, en: e.target.value })}
+                  style={{ width: "100%", marginBottom: 0 }}
+                  required
+                />
+              </div>
+
+              {words.some(w => w.en.toLowerCase() === editModalWord.en.toLowerCase() && w.partOfSpeech === editModalPos) && (
+                <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "12px", fontWeight: "500", padding: "6px 10px", background: "rgba(255, 77, 77, 0.1)", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)", lineHeight: "1.4" }}>
+                  ⚠️ Слово "{editModalWord.en}" ({allPos[editModalPos] || editModalPos}) уже есть в словаре!
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: "11px", color: "#aaa", display: "block", marginBottom: "4px" }}>Перевод на русский:</label>
+                <input 
+                  className="input" 
+                  value={editModalWord.ru} 
+                  onChange={e => setEditModalWord({ ...editModalWord, ru: e.target.value })}
+                  style={{ width: "100%", marginBottom: 0 }}
+                  required
+                />
+              </div>
+
+              <div>
+                <label style={{ fontSize: "11px", color: "#aaa", display: "block", marginBottom: "4px" }}>Часть речи и Тема:</label>
+                <div style={{ display: "flex", gap: "8px" }}>
+                  <select className="select" style={{ flex: 1, minWidth: 0 }} value={editModalPos} onChange={e => setEditModalPos(e.target.value)}>
+                    {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                  <select className="select" style={{ flex: 1, minWidth: 0 }} value={editModalTopic} onChange={e => setEditModalTopic(e.target.value)}>
+                    {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+                  </select>
+                </div>
+              </div>
+
+              {isClassifying && (
+                <div style={{ fontSize: "11px", color: "var(--rose, #ff4d4d)", display: "flex", alignItems: "center", gap: "6px", fontWeight: 500 }}>
+                  ⏳ ИИ определяет тему и часть речи...
+                </div>
+              )}
+
+              <div>
+                <label style={{ fontSize: "11px", color: "#aaa", display: "block", marginBottom: "4px" }}>Заметка:</label>
+                <input 
+                  className="input" 
+                  value={editModalNote} 
+                  onChange={e => setEditModalNote(e.target.value)}
+                  style={{ width: "100%", marginBottom: 0 }}
+                />
+              </div>
+            </div>
+
+            <button 
+              className="btn btn-primary" 
+              style={{ width: "100%", padding: "12px", marginTop: "12px" }} 
+              onClick={handleSaveModalWord}
+              disabled={!editModalWord.en.trim() || !editModalWord.ru.trim()}
+            >
+              Добавить в журнал
+            </button>
+          </div>
+        </div>
       )}
     </div>
   );
