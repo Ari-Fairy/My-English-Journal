@@ -1,6 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Word, UserProgress } from "../types";
 import { POS_DEFAULT, TOPICS_DEFAULT } from "../data";
+import { getApiUrl } from "../utils";
 
 interface AddScreenProps {
   words: Word[];
@@ -107,7 +108,7 @@ export default function AddScreen({
     setReview(false);
 
     try {
-      const res = await fetch("/api/ocr", {
+      const res = await fetch(getApiUrl("/api/ocr"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ image: img })
@@ -635,7 +636,7 @@ export default function AddScreen({
 
     setIsClassifying(true);
     try {
-      const res = await fetch("/api/classify", {
+      const res = await fetch(getApiUrl("/api/classify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

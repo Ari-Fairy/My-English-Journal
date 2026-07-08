@@ -3,7 +3,7 @@ import { Word, IrregularVerb, UserProgress } from "../types";
 import { wipeUserAccountData } from "../firebaseSync";
 import { auth } from "../firebase";
 import { signOut, deleteUser } from "firebase/auth";
-import { getLocalDateString, sendWebNotification } from "../utils";
+import { getLocalDateString, sendWebNotification, getApiUrl } from "../utils";
 
 interface SettingsScreenProps {
   user: any; // Firebase user or "guest"
@@ -82,7 +82,7 @@ export default function SettingsScreen({
     setEmailSending(true);
     setTestEmailUrl(null);
     try {
-      const response = await fetch("/api/send-test-email", {
+      const response = await fetch(getApiUrl("/api/send-test-email"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({

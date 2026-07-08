@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Word, UserProgress } from "../types";
 import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR, STATIC_QUIZZES, POS_DEFAULT, TOPICS_DEFAULT } from "../data";
-import { speak, getLocalDateString } from "../utils";
+import { speak, getLocalDateString, getApiUrl } from "../utils";
 
 interface ReaderScreenProps {
   words: Word[];
@@ -75,7 +75,7 @@ export default function ReaderScreen({
     if (localStorage.getItem(cacheKey)) return; // already cached
 
     try {
-      const res = await fetch("/api/generate-quiz", {
+      const res = await fetch(getApiUrl("/api/generate-quiz"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ title, text, level })
@@ -109,7 +109,7 @@ export default function ReaderScreen({
 
     setLoadingStory(prev => ({ ...prev, [level]: true }));
     try {
-      const res = await fetch("/api/generate-story", {
+      const res = await fetch(getApiUrl("/api/generate-story"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ level, date })
@@ -206,7 +206,7 @@ export default function ReaderScreen({
     setIsClassifying(true);
 
     try {
-      const res = await fetch("/api/classify", {
+      const res = await fetch(getApiUrl("/api/classify"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
@@ -337,7 +337,7 @@ export default function ReaderScreen({
 
     setQuizLoading(true);
     try {
-      const res = await fetch("/api/generate-quiz", {
+      const res = await fetch(getApiUrl("/api/generate-quiz"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ 

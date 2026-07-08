@@ -10,6 +10,18 @@ dotenv.config();
 const PORT = 3000;
 const app = express();
 
+// Custom CORS middleware to allow Vercel or local frontend to call this backend
+app.use((req, res, next) => {
+  res.header("Access-Control-Allow-Origin", "*");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
+  if (req.method === "OPTIONS") {
+    res.sendStatus(200);
+    return;
+  }
+  next();
+});
+
 // Set up JSON body parser with increased limit to handle base64 images
 app.use(express.json({ limit: "10mb" }));
 
