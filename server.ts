@@ -3,6 +3,7 @@ import path from "path";
 import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
+import nodemailer from "nodemailer";
 
 dotenv.config();
 
@@ -687,6 +688,119 @@ Provide a clear, brief explanation in Russian of why the correct answer is corre
   } catch (error: any) {
     console.error("Quiz Generation API error:", error);
     res.status(500).json({ error: error?.message || "Internal server error during quiz generation" });
+  }
+});
+
+// Endpoint to send a beautiful test notification email
+app.post("/api/send-test-email", async (req, res) => {
+  try {
+    const { email, userId, hour, offset } = req.body;
+    if (!email) {
+      res.status(400).json({ error: "Не указан email-адрес." });
+      return;
+    }
+
+    console.log(`Starting test email sending process to: ${email}`);
+
+    // Check if SMTP credentials are provided in the environment
+    const host = process.env.SMTP_HOST;
+    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const secure = process.env.SMTP_SECURE === "true";
+    const fromAddress = process.env.SMTP_FROM || '"My English Journal" <no-reply@englishjournal.app>';
+
+    let transporter;
+    let isFallback = false;
+    let previewUrl = null;
+
+    if (host && user && pass) {
+      console.log(`Using custom SMTP server: ${host}:${port}`);
+      transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+      });
+    } else {
+      console.log("No SMTP environment variables found. Using Ethereal fallback...");
+      const testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      isFallback = true;
+    }
+
+    const appUrl = process.env.APP_URL || "https://ai.studio/build";
+
+    const mailOptions = {
+      from: isFallback ? '"My English Journal (Test Mailer)" <no-reply@ethereal.email>' : fromAddress,
+      to: email,
+      subject: "My English Journal: Тестовое напоминание 📚",
+      html: `
+<div style="font-family: 'Georgia', serif; background-color: #f7f6f2; color: #2e2a25; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 12px; border: 1px solid #e1ded5;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="font-style: italic; font-weight: normal; font-size: 28px; color: #8fa080; margin: 0;">My English Journal 📚</h1>
+    <p style="color: #6a665d; font-size: 11px; margin-top: 4px; letter-spacing: 1px; text-transform: uppercase;">Твой уютный дневник английского</p>
+  </div>
+  
+  <div style="background-color: #ffffff; border-radius: 8px; padding: 24px; box-shadow: 0 4px 12px rgba(46, 42, 37, 0.03); border: 1px solid #eeece5;">
+    <h2 style="font-style: italic; font-weight: normal; font-size: 20px; color: #d68060; margin-top: 0; margin-bottom: 16px; border-bottom: 1px solid #f0eee8; padding-bottom: 10px;">
+      Теплое напоминание заниматься! ✨
+    </h2>
+    
+    <p style="font-size: 14px; line-height: 1.6; color: #4a463d; margin-bottom: 20px;">
+      Привет! Это твой ежедневный вестник знаний. Время уделить английскому всего 5 минут, чтобы закрепить прогресс и продлить твою серию занятий!
+    </p>
+
+    <div style="background-color: #fcfbfa; border-left: 3px solid #8fa080; padding: 12px 16px; margin-bottom: 24px; border-radius: 4px;">
+      <p style="font-size: 12px; font-weight: bold; color: #6a665d; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px;">СЛОВА НА СЕГОДНЯШНЕЕ ПОВТОРЕНИЕ:</p>
+      <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #2e2a25;">
+        <li><strong>serendipity</strong> — счастливая случайность</li>
+        <li><strong>exquisite</strong> — изысканный, утонченный</li>
+        <li><strong>cozy</strong> — уютный, теплый</li>
+      </ul>
+    </div>
+
+    <div style="text-align: center; margin-top: 28px; margin-bottom: 10px;">
+      <a href="${appUrl}" style="background-color: #8fa080; color: #ffffff; text-decoration: none; padding: 12px 28px; font-size: 15px; font-weight: 500; border-radius: 30px; display: inline-block;">
+        Открыть мой журнал и заниматься →
+      </a>
+    </div>
+  </div>
+
+  <div style="text-align: center; margin-top: 30px; font-size: 11px; color: #9c988f; line-height: 1.4;">
+    Вы получили это письмо, потому что включили email-напоминания в настройках My English Journal.<br>
+    Настройки времени отправки: ежедневно в ${String(hour).padStart(2, "0")}:00.<br>
+    Вы можете отключить подписку в любой момент в приложении.
+  </div>
+</div>
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log("Message sent successfully: %s", info.messageId);
+
+    if (isFallback) {
+      previewUrl = nodemailer.getTestMessageUrl(info);
+      console.log("Ethereal Preview URL: %s", previewUrl);
+    }
+
+    res.json({
+      success: true,
+      messageId: info.messageId,
+      previewUrl,
+      isFallback
+    });
+  } catch (error: any) {
+    console.error("Test email sending error:", error);
+    res.status(500).json({ error: error?.message || "Failed to send test email" });
   }
 });
 

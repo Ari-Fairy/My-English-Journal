@@ -50,6 +50,7 @@ export default function SettingsScreen({
   };
 
   const [emailSending, setEmailSending] = useState(false);
+  const [testEmailUrl, setTestEmailUrl] = useState<string | null>(null);
 
   const handleToggleEmailNotifs = () => {
     const isEnabled = !stats.emailNotifEnabled;
@@ -79,6 +80,7 @@ export default function SettingsScreen({
   const handleSendTestEmail = async () => {
     if (user === "guest" || !user?.email) return;
     setEmailSending(true);
+    setTestEmailUrl(null);
     try {
       const response = await fetch("/api/send-test-email", {
         method: "POST",
@@ -93,7 +95,12 @@ export default function SettingsScreen({
       const resText = await response.text();
       const data = resText ? JSON.parse(resText) : {};
       if (response.ok) {
-        notify("✉️ Тестовое письмо успешно отправлено! Проверьте вашу почту (и папку Спам).");
+        if (data.previewUrl) {
+          setTestEmailUrl(data.previewUrl);
+          notify("✉️ Тестовое письмо отправлено в тестовую службу! Ссылка на превью доступна ниже.");
+        } else {
+          notify("✉️ Тестовое письмо успешно отправлено на ваш почтовый ящик!");
+        }
       } else {
         notify(`❌ Ошибка: ${data.error || "Не удалось отправить письмо"}`);
       }
@@ -511,6 +518,17 @@ export default function SettingsScreen({
                 >
                   {emailSending ? "⏳ Отправка..." : "🧪 Отправить тестовое письмо"}
                 </button>
+
+                {testEmailUrl && (
+                  <div style={{ marginTop: 8, padding: 10, background: "rgba(143,160,128,0.1)", border: "1px solid var(--sage)", borderRadius: 8, fontSize: 11, lineHeight: 1.4, textAlign: "left" }}>
+                    📬 <strong>Письмо готово!</strong> Поскольку SMTP-сервер в настройках проекта не задан, письмо отправлено в тестовую службу. Вы можете посмотреть его по этой ссылке:
+                    <div style={{ marginTop: 6, textAlign: "center" }}>
+                      <a href={testEmailUrl} target="_blank" rel="noopener noreferrer" style={{ color: "var(--warm)", textDecoration: "underline", fontWeight: "bold" }}>
+                        Открыть превью письма ↗
+                      </a>
+                    </div>
+                  </div>
+                )}
               </div>
             )}
           </div>

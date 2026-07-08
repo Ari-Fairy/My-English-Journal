@@ -1,6 +1,51 @@
 import { useState } from "react";
 import { Word, UserProgress } from "../types";
-import { getLocalDateString } from "../utils";
+import { getLocalDateString, getCurrentWeekKey } from "../utils";
+
+const getWeeklyPreset = (weekKey: string) => {
+  let hash = 0;
+  for (let i = 0; i < weekKey.length; i++) {
+    hash += weekKey.charCodeAt(i);
+  }
+  const index = hash % 4;
+
+  const presets = [
+    {
+      title: "📚 Интенсивное накопление",
+      goals: [
+        { id: "words", text: "📚 Выучить 15 слов за неделю", target: 15, type: "words" },
+        { id: "books", text: "📖 Прочитать хотя бы 1 книгу в разделе Чтение", target: 1, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
+      ]
+    },
+    {
+      title: "📖 Читательский вызов",
+      goals: [
+        { id: "words", text: "📚 Выучить 10 слов за неделю", target: 10, type: "words" },
+        { id: "books", text: "📖 Прочитать 2 книги в Чтении", target: 2, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 5 дней подряд", target: 5, type: "streak" }
+      ]
+    },
+    {
+      title: "🚀 Лингвистический спринт",
+      goals: [
+        { id: "words", text: "📚 Выучить 20 слов за неделю", target: 20, type: "words" },
+        { id: "books", text: "📖 Прочитать 3 книги в Чтении", target: 3, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 7 дней подряд", target: 7, type: "streak" }
+      ]
+    },
+    {
+      title: "🧘🏽 Стабильный темп",
+      goals: [
+        { id: "words", text: "📚 Выучить 8 слов за неделю", target: 8, type: "words" },
+        { id: "books", text: "📖 Прочитать хотя бы 1 книгу в разделе Чтение", target: 1, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 4 дня подряд", target: 4, type: "streak" }
+      ]
+    }
+  ];
+
+  return presets[index];
+};
 
 interface HomePageProps {
   words: Word[];
@@ -17,6 +62,22 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
   const todayLearned = words.filter(w => w.learnedDate === today).length;
   const wordsThisWeek = words.filter(w => w.learned && w.learnedDate && (Date.now() - new Date(w.learnedDate).getTime() <= 7 * 24 * 3600 * 1000)).length;
   const newWords = words.filter(w => !w.learned);
+
+  const weekKey = getCurrentWeekKey();
+  const activePreset = getWeeklyPreset(weekKey);
+
+  const booksThisWeek = Object.entries(stats.dailyBooksRead || {}).reduce((count, [dateStr, levels]) => {
+    try {
+      const diffTime = Date.now() - new Date(dateStr).getTime();
+      const diffDays = diffTime / (1000 * 60 * 60 * 24);
+      if (diffDays <= 7 && levels && Array.isArray(levels)) {
+        return count + levels.length;
+      }
+    } catch (e) {
+      console.error(e);
+    }
+    return count;
+  }, 0);
 
   const getNextReviewTimeMs = (w: Word) => {
     if (!w.learned) return Infinity;
@@ -169,69 +230,49 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
 
       {/* 🎯 Мои цели и привычки */}
       <div className="card" style={{ marginBottom: 20, padding: "16px 18px", border: "1px solid var(--border)" }}>
-        <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, fontWeight: 600, marginBottom: 14, color: "var(--sage)", display: "flex", alignItems: "center", gap: 8 }}>
-          🎯 Мои цели и привычки
-        </h3>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+          <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, fontWeight: 600, color: "var(--sage)", display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
+            🎯 Мои цели и привычки
+          </h3>
+          <span style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
+            {activePreset.title}
+          </span>
+        </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
-          {/* Goal 1: Learn 15 words */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-              <span style={{ fontWeight: 500, color: "var(--warm)" }}>📚 Выучить 15 слов за неделю</span>
-              <span style={{ color: "var(--muted)", fontWeight: 600 }}>{wordsThisWeek}/15</span>
-            </div>
-            <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
-              <div 
-                className="progress-fill" 
-                style={{ 
-                  width: `${(Math.min(wordsThisWeek, 15) / 15) * 100}%`,
-                  background: wordsThisWeek >= 15 ? "var(--sage)" : "var(--rose)",
-                  height: "100%",
-                  transition: "width 0.3s ease",
-                  borderRadius: 4
-                }} 
-              />
-            </div>
-          </div>
+          {activePreset.goals.map(goal => {
+            let currentVal = 0;
+            if (goal.type === "words") currentVal = wordsThisWeek;
+            if (goal.type === "books") currentVal = booksThisWeek;
+            if (goal.type === "streak") currentVal = stats.streak || 0;
 
-          {/* Goal 2: Read 1 book */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-              <span style={{ fontWeight: 500, color: "var(--warm)" }}>📖 Прочитать хотя бы 1 книгу</span>
-              <span style={{ color: "var(--muted)", fontWeight: 600 }}>{Math.min(stats.booksRead || 0, 1)}/1</span>
-            </div>
-            <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
-              <div 
-                className="progress-fill" 
-                style={{ 
-                  width: `${(Math.min(stats.booksRead || 0, 1) / 1) * 100}%`,
-                  background: (stats.booksRead || 0) >= 1 ? "var(--sage)" : "var(--rose)",
-                  height: "100%",
-                  transition: "width 0.3s ease",
-                  borderRadius: 4
-                }} 
-              />
-            </div>
-          </div>
+            const percent = Math.min(Math.round((currentVal / goal.target) * 100), 100);
+            const isCompleted = currentVal >= goal.target;
 
-          {/* Goal 3: Study 3 days in a row */}
-          <div>
-            <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
-              <span style={{ fontWeight: 500, color: "var(--warm)" }}>🔥 Заниматься 3 дня подряд</span>
-              <span style={{ color: "var(--muted)", fontWeight: 600 }}>{stats.streak || 0}/3</span>
-            </div>
-            <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
-              <div 
-                className="progress-fill" 
-                style={{ 
-                  width: `${(Math.min(stats.streak || 0, 3) / 3) * 100}%`,
-                  background: (stats.streak || 0) >= 3 ? "var(--sage)" : "var(--rose)",
-                  height: "100%",
-                  transition: "width 0.3s ease",
-                  borderRadius: 4
-                }} 
-              />
-            </div>
-          </div>
+            return (
+              <div key={goal.id}>
+                <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 6 }}>
+                  <span style={{ fontWeight: 500, color: isCompleted ? "var(--sage)" : "var(--warm)" }}>
+                    {goal.text} {isCompleted && "✅"}
+                  </span>
+                  <span style={{ color: "var(--muted)", fontWeight: 600 }}>
+                    {currentVal}/{goal.target}
+                  </span>
+                </div>
+                <div className="progress-bar" style={{ height: 8, background: "rgba(255,255,255,0.05)", borderRadius: 4, overflow: "hidden" }}>
+                  <div 
+                    className="progress-fill" 
+                    style={{ 
+                      width: `${percent}%`,
+                      background: isCompleted ? "var(--sage)" : "var(--rose)",
+                      height: "100%",
+                      transition: "width 0.3s ease",
+                      borderRadius: 4
+                    }} 
+                  />
+                </div>
+              </div>
+            );
+          })}
         </div>
       </div>
 

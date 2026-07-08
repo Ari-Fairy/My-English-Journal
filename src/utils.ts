@@ -79,4 +79,15 @@ export function sendWebNotification(title: string, body: string) {
   }
 }
 
+// Получение идентификатора текущей недели (например, "2026-W28")
+export function getCurrentWeekKey(): string {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  // Начинаем с четверга текущей недели, чтобы рассчитать правильный номер недели ISO
+  d.setDate(d.getDate() + 4 - (d.getDay() || 7));
+  const yearStart = new Date(d.getFullYear(), 0, 1);
+  const weekNo = Math.ceil((((d.getTime() - yearStart.getTime()) / 86400000) + 1) / 7);
+  return `${d.getFullYear()}-W${weekNo}`;
+}
+
 
