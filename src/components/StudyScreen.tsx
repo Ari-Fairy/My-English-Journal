@@ -1,6 +1,6 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Word, UserProgress } from "../types";
-import { speak, getLocalDateString } from "../utils";
+import { speak, getLocalDateString, getEffectiveDueWords } from "../utils";
 
 interface StudyScreenProps {
   words: Word[];
@@ -31,6 +31,8 @@ export default function StudyScreen({
   const [queue, setQueue] = useState<Word[]>([]);
   const [idx, setIdx] = useState(0);
   const [wrongIds, setWrongIds] = useState<string[]>([]);
+  const [sessionMistakes, setSessionMistakes] = useState<string[]>([]);
+  const [sessionLearnedIds, setSessionLearnedIds] = useState<string[]>([]);
   const [isRepeatRound, setIsRepeatRound] = useState(false);
   const [testRecResult, setTestRecResult] = useState<string>("");
   const [testRecog, setTestRecog] = useState(false);
@@ -38,11 +40,31 @@ export default function StudyScreen({
   const [answered, setAnswered] = useState(false);
   const [ans, setAns] = useState("");
   const [ok, setOk] = useState<boolean | null>(null);
+  const okRef = useRef<boolean | null>(null);
+  const updateOk = (val: boolean | null) => {
+    setOk(val);
+    okRef.current = val;
+  };
   const [hint, setHint] = useState(false);
   const [score, setScore] = useState({ c: 0, w: 0 });
   const [recog, setRecog] = useState(false);
   const [recMsg, setRecMsg] = useState("");
   const inputRef = useRef<HTMLInputElement>(null);
+
+  const sessionSavedRef = useRef(false);
+
+  useEffect(() => {
+    if (stage === "done" && sessionType === "review" && !sessionSavedRef.current) {
+      sessionSavedRef.current = true;
+      const now = Date.now();
+      const updatedStats: UserProgress = {
+        ...stats,
+        secondLastReviewSessionTime: stats.lastReviewSessionTime || 0,
+        lastReviewSessionTime: now
+      };
+      onSaveProgress(updatedStats);
+    }
+  }, [stage, sessionType, stats, onSaveProgress]);
 
   const cur = queue[idx];
   const pDir = cur ? (dir === "mixed" ? (cur.id.charCodeAt(0) + idx) % 2 === 0 ? "en-ru" : "ru-en" : dir) : "en-ru";
@@ -67,7 +89,9 @@ export default function StudyScreen({
     if (!a) return false;
 
     const getAlternatives = (str: string): string[] => {
-      const parts = str.split(/[,/;|]|\s+или\s+|\s+и\s+/i);
+      // Replaces slash with comma so it treats '/' exactly like ','
+      const normalizedStr = str.replace(/\//g, ",");
+      const parts = normalizedStr.split(/[,;|]|\s+или\s+|\s+и\s+/i);
       const alts: string[] = [];
       
       parts.forEach(p => {
@@ -155,9 +179,85 @@ export default function StudyScreen({
   const choices = useMemo(() => {
     if (!cur) return [];
     if (mode !== "choice" && (mode !== "listening" || listeningSubMode !== "choice")) return [];
+    
     const exp = mode === "listening" ? cur.ru : expected;
-    const others = words.filter(w => w.id !== cur.id).map(w => mode === "listening" ? w.ru : (pDir === "en-ru" ? w.ru : w.en));
-    return shuffle([exp, ...shuffle(others).slice(0, 3)]);
+    const isRussianOptions = mode === "listening" ? true : (pDir === "en-ru");
+
+    const getDistractorScore = (w: Word, targetWord: Word, isRu: boolean) => {
+      let score = 0;
+      
+      // 1. Same part of speech is a huge distractor factor
+      if (w.partOfSpeech && targetWord.partOfSpeech && w.partOfSpeech.toLowerCase() === targetWord.partOfSpeech.toLowerCase()) {
+        score += 15;
+      }
+      
+      // 2. Same topic
+      if (w.topic && targetWord.topic && w.topic.toLowerCase() === targetWord.topic.toLowerCase()) {
+        score += 8;
+      }
+      
+      // Determine comparison strings safely
+      const str1 = (isRu ? targetWord.ru : targetWord.en || "").toLowerCase();
+      const str2 = (isRu ? w.ru : w.en || "").toLowerCase();
+      
+      if (!str1 || !str2) return 0;
+
+      // 3. Similar word length
+      const lenDiff = Math.abs(str1.length - str2.length);
+      if (lenDiff === 0) score += 6;
+      else if (lenDiff <= 2) score += 4;
+      else if (lenDiff <= 4) score += 2;
+      
+      // 4. Same first character
+      if (str1[0] && str2[0] && str1[0] === str2[0]) {
+        score += 8;
+      }
+      
+      // 5. Same last character
+      if (str1[str1.length - 1] && str2[str2.length - 1] && str1[str1.length - 1] === str2[str2.length - 1]) {
+        score += 4;
+      }
+      
+      // 6. Character overlap (intersection of unique letters)
+      const set1 = new Set(str1.split(""));
+      const set2 = new Set(str2.split(""));
+      let commonChars = 0;
+      set1.forEach(char => {
+        if (set2.has(char)) commonChars++;
+      });
+      score += commonChars * 1.5;
+
+      // Add a tiny bit of random noise (0 to 1) so it's not strictly deterministic
+      score += Math.random();
+      
+      return score;
+    };
+
+    // Filter other words that actually have translations for the target option language
+    const scoredOthers = words
+      .filter(w => w.id !== cur.id && (isRussianOptions ? w.ru : w.en))
+      .map(w => ({
+        word: w,
+        score: getDistractorScore(w, cur, isRussianOptions)
+      }))
+      .sort((a, b) => b.score - a.score);
+
+    // Take top 8 candidates, shuffle them and take 3
+    const poolSize = Math.min(scoredOthers.length, 8);
+    const topScored = scoredOthers.slice(0, poolSize);
+    
+    // Shuffle the top scored ones to have some variety
+    const selectedDistractors = shuffle(topScored).slice(0, 3).map(item => {
+      const w = item.word;
+      return mode === "listening" ? w.ru : (pDir === "en-ru" ? w.ru : w.en);
+    });
+
+    // If we don't have enough words, fallback to some basic placeholders or whatever words we can find
+    while (selectedDistractors.length < 3) {
+      selectedDistractors.push(isRussianOptions ? "слово" : "word");
+    }
+
+    return shuffle([exp, ...selectedDistractors]);
   }, [cur?.id, mode, listeningSubMode, pDir, expected, words]);
 
   useEffect(() => {
@@ -179,10 +279,11 @@ export default function StudyScreen({
 
   const getNextReviewTimeMs = (w: Word) => {
     if (!w.learned) return Infinity;
+    if (w.streak >= 10) return Infinity; // Полностью усвоено навсегда - больше не повторяем!
     const now = Date.now();
     const learnedAt = w.learnedDate ? new Date(w.learnedDate).getTime() : now;
     const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : learnedAt;
-    const iv = [24, 48, 96, 168, 336, 720]; // Review intervals in hours
+    const iv = [0.33, 1, 4, 12, 24, 48, 96, 168, 336]; 
     const hours = iv[Math.min(Math.max((w.streak || 1) - 1, 0), iv.length - 1)] || 24;
     const due = lastRev + (hours * 3600 * 1000);
     return Math.max(0, due - now);
@@ -191,7 +292,7 @@ export default function StudyScreen({
   const getPool = () => {
     if (sessionType === "learn") return words.filter(w => !w.learned);
     if (sessionType === "review") {
-      return words.filter(w => w.learned && getNextReviewTimeMs(w) === 0);
+      return getEffectiveDueWords(words, stats).dueWords;
     }
     return words.filter(w => w.learned);
   };
@@ -222,49 +323,87 @@ export default function StudyScreen({
     const correct = dontRemember ? false : isCorrect(a, exp);
     const finalAns = dontRemember ? exp : a;
 
-    setOk(correct);
+    updateOk(correct);
     setAnswered(true);
     setAns(finalAns);
+    
     beep(correct);
 
     if (mode !== "cards" && mode !== "voice" && mode !== "listening") {
       setTimeout(() => speak(cur.en), 400);
     }
 
-    setScore(s => ({ c: s.c + (correct ? 1 : 0), w: s.w + (correct ? 0 : 1) }));
+    setScore(s => ({ 
+      c: s.c + (correct ? 1 : 0), 
+      w: s.w + (correct ? 0 : 1) 
+    }));
+
+    const today = getLocalDateString();
+    const nowIso = new Date().toISOString();
 
     if (!correct) {
       setWrongIds(prev => prev.includes(cur.id) ? prev : [...prev, cur.id]);
+      setSessionMistakes(prev => prev.includes(cur.id) ? prev : [...prev, cur.id]);
+
+      const updatedWord: Word = {
+        ...cur,
+        wrong: cur.wrong + 1,
+        streak: 0,
+        lastReviewed: nowIso
+      };
+      onSaveWord(updatedWord);
+
+      // Update progress daily wrong count
+      const currentDaily = { ...(stats.daily || {}) };
+      const ds = { ...(currentDaily[today] || { date: today, learned: 0, reviewed: 0, correct: 0, wrong: 0 }) };
+      ds.wrong++;
+      currentDaily[today] = ds;
+      onSaveProgress({ ...stats, daily: currentDaily });
+
+    } else {
+      // Correct answer
+      const wasWrongAtLeastOnce = sessionMistakes.includes(cur.id);
+      let newStreak = cur.streak;
+      if (wasWrongAtLeastOnce) {
+        newStreak = 1; // 20 minutes interval
+      } else {
+        if (!cur.learned) {
+          newStreak = 2; // 1 hour interval
+        } else {
+          newStreak = Math.max(2, cur.streak + 1); // increment streak for subsequent repetitions
+        }
+      }
+
+      const updatedWord: Word = {
+        ...cur,
+        correct: cur.correct + 1,
+        streak: newStreak,
+        learned: true,
+        learnedDate: cur.learnedDate || today,
+        lastReviewed: nowIso
+      };
+      onSaveWord(updatedWord);
+
+      // Check if we already registered this word as learned/reviewed in this session
+      const alreadyRegistered = sessionLearnedIds.includes(cur.id);
+      if (!alreadyRegistered) {
+        setSessionLearnedIds(prev => [...prev, cur.id]);
+
+        const currentDaily = { ...(stats.daily || {}) };
+        const ds = { ...(currentDaily[today] || { date: today, learned: 0, reviewed: 0, correct: 0, wrong: 0 }) };
+        ds.correct++;
+
+        if (sessionType === "learn" && !cur.learned) {
+          ds.learned++;
+        }
+        if (sessionType !== "learn") {
+          ds.reviewed++;
+        }
+
+        currentDaily[today] = ds;
+        onSaveProgress({ ...stats, daily: currentDaily });
+      }
     }
-
-    const today = getLocalDateString();
-    const updatedWord: Word = {
-      ...cur,
-      correct: cur.correct + (correct ? 1 : 0),
-      wrong: cur.wrong + (correct ? 0 : 1),
-      streak: correct ? cur.streak + 1 : 0,
-      learned: correct ? (sessionType === "learn" || cur.learned) : cur.learned,
-      learnedDate: correct && sessionType === "learn" && !cur.learned ? today : cur.learnedDate,
-      lastReviewed: correct ? today : cur.lastReviewed
-    };
-
-    onSaveWord(updatedWord);
-
-    // Update progress
-    const currentDaily = { ...(stats.daily || {}) };
-    const ds = { ...(currentDaily[today] || { date: today, learned: 0, reviewed: 0, correct: 0, wrong: 0 }) };
-    if (correct) ds.correct++; else ds.wrong++;
-    if (sessionType === "learn" && correct && !cur.learned) ds.learned++;
-    if (sessionType !== "learn") ds.reviewed++;
-    
-    currentDaily[today] = ds;
-
-    const newProgress: UserProgress = {
-      ...stats,
-      daily: currentDaily
-    };
-
-    onSaveProgress(newProgress);
   };
 
   const next = () => {
@@ -272,28 +411,55 @@ export default function StudyScreen({
     setTestRecResult("");
     setTestRecError("");
 
-    if (idx + 1 >= queue.length) {
-      if (wrongIds.length > 0) {
-        // Repeat the wrong ones!
-        const wrongWords = queue.filter(w => wrongIds.includes(w.id));
-        setQueue(shuffle(wrongWords));
-        setWrongIds([]);
-        setIdx(0);
-        setAnswered(false);
-        setAns("");
-        setOk(null);
-        setHint(false);
-        setIsRepeatRound(true);
-      } else {
-        setStage("done");
-        setIsRepeatRound(false);
-      }
-    } else {
-      setIdx(idx + 1);
+    if (mode === "cards") {
+      // First, unflip/reset states so the card rotates back to the front
       setAnswered(false);
       setAns("");
-      setOk(null);
+      updateOk(null);
       setHint(false);
+
+      // Wait 600ms for the animation to completely flip back, then load the next word
+      setTimeout(() => {
+        if (idx + 1 >= queue.length) {
+          if (wrongIds.length > 0) {
+            // Repeat the wrong ones!
+            const wrongWords = queue.filter(w => wrongIds.includes(w.id));
+            setQueue(shuffle(wrongWords));
+            setWrongIds([]);
+            setIdx(0);
+            setIsRepeatRound(true);
+          } else {
+            setStage("done");
+            setIsRepeatRound(false);
+          }
+        } else {
+          setIdx(idx + 1);
+        }
+      }, 600);
+    } else {
+      if (idx + 1 >= queue.length) {
+        if (wrongIds.length > 0) {
+          // Repeat the wrong ones!
+          const wrongWords = queue.filter(w => wrongIds.includes(w.id));
+          setQueue(shuffle(wrongWords));
+          setWrongIds([]);
+          setIdx(0);
+          setAnswered(false);
+          setAns("");
+          updateOk(null);
+          setHint(false);
+          setIsRepeatRound(true);
+        } else {
+          setStage("done");
+          setIsRepeatRound(false);
+        }
+      } else {
+        setIdx(idx + 1);
+        setAnswered(false);
+        setAns("");
+        updateOk(null);
+        setHint(false);
+      }
     }
   };
 
@@ -369,7 +535,8 @@ export default function StudyScreen({
                   const pool = getPool();
                   const withErrors = shuffle(pool.filter(w => w.wrong > w.correct));
                   const rest = shuffle(pool.filter(w => w.wrong <= w.correct));
-                  setQueue([...withErrors, ...rest].slice(0, 15));
+                  const limit = stats.dailyWordsLimit ?? 15;
+                  setQueue([...withErrors, ...rest].slice(0, limit));
                   setIdx(0);
                   setWrongIds([]);
                   setIsRepeatRound(false);
@@ -429,9 +596,12 @@ export default function StudyScreen({
                 const pool = getPool();
                 const withErrors = shuffle(pool.filter(w => w.wrong > w.correct));
                 const rest = shuffle(pool.filter(w => w.wrong <= w.correct));
-                setQueue([...withErrors, ...rest].slice(0, 15));
+                const limit = stats.dailyWordsLimit ?? 15;
+                setQueue([...withErrors, ...rest].slice(0, limit));
                 setIdx(0);
                 setWrongIds([]);
+                setSessionMistakes([]);
+                setSessionLearnedIds([]);
                 setIsRepeatRound(false);
                 setAnswered(false);
                 setAns("");
@@ -474,7 +644,7 @@ export default function StudyScreen({
   }
 
   if (mode === "cards") {
-    const cardFlipped = ans === "flipped";
+    const cardFlipped = ans === "flipped" || (answered && !ok);
     return (
       <div className="fade-in">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
@@ -524,40 +694,56 @@ export default function StudyScreen({
                 <button className="btn btn-ghost" style={{ fontSize: 18, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.ru : cur.en, pDir === "en-ru" ? "ru-RU" : "en-US"); }}>🔊</button>
               </div>
               <div className="flip-back">
-                <div style={{ paddingTop: 20, paddingBottom: 20 }}>
-                  <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
-                  <div className="study-word">{pDir === "en-ru" ? cur.en : cur.ru}</div>
-                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 16 }}>← Нажми чтобы вернуться</div>
-                </div>
-                <button className="btn btn-ghost" style={{ fontSize: 18, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
+                {cardFlipped ? (
+                  <>
+                    <div style={{ paddingTop: 20, paddingBottom: 20 }}>
+                      <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
+                      <div className="study-word">{pDir === "en-ru" ? cur.en : cur.ru}</div>
+                      <div style={{ fontSize: 11, color: "#aaa", marginTop: 16 }}>← Нажми чтобы вернуться</div>
+                    </div>
+                    <button className="btn btn-ghost" style={{ fontSize: 18, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
+                  </>
+                ) : (
+                  <div style={{ height: "100%" }} />
+                )}
               </div>
             </div>
           </div>
         </div>
 
-        <div style={{ marginTop: 18, display: "flex", gap: 10 }}>
-          <button 
-            className="btn btn-outline" 
-            style={{ flex: 1, padding: 15 }} 
-            disabled={answered}
-            onClick={() => { 
-              handleAns("__dont_remember__"); 
-              setTimeout(next, 600); 
-            }}
-          >
-            👈 Не знаю
-          </button>
-          <button 
-            className="btn btn-primary" 
-            style={{ flex: 1, padding: 15 }} 
-            disabled={answered}
-            onClick={() => { 
-              handleAns(expected); 
-              setTimeout(next, 600); 
-            }}
-          >
-            👉 Знаю
-          </button>
+        <div style={{ marginTop: 18 }}>
+          {!answered ? (
+            <div style={{ display: "flex", gap: 10 }}>
+              <button 
+                className="btn btn-outline" 
+                style={{ flex: 1, padding: 15 }} 
+                onClick={() => { 
+                  handleAns("__dont_remember__"); 
+                }}
+              >
+                👈 Не знаю
+              </button>
+              <button 
+                className="btn btn-primary" 
+                style={{ flex: 1, padding: 15 }} 
+                onClick={() => { 
+                  handleAns(expected); 
+                }}
+              >
+                👉 Знаю
+              </button>
+            </div>
+          ) : (
+            <button 
+              className="btn btn-secondary animate-bounce-subtle" 
+              style={{ width: "100%", padding: 15 }} 
+              onClick={next}
+            >
+              {idx + 1 >= queue.length 
+                ? (wrongIds.length > 0 ? "Повторить ошибки 🔁" : "Завершить сессию ✨") 
+                : "Дальше →"}
+            </button>
+          )}
         </div>
       </div>
     );
@@ -570,6 +756,15 @@ export default function StudyScreen({
         <span className="badge">{idx + 1}/{queue.length}</span>
         <span style={{ fontSize: 12, color: "var(--sage)", fontWeight: 600 }}>{score.c}✓</span>
       </div>
+
+      {isRepeatRound && (
+        <div style={{ textAlign: "center", marginBottom: 8 }}>
+          <span className="badge" style={{ backgroundColor: "rgba(220, 95, 95, 0.08)", color: "var(--rose)", border: "1.5px solid rgba(220, 95, 95, 0.2)" }}>
+            🔁 Повторение ошибок в случайном порядке
+          </span>
+        </div>
+      )}
+
       <div className="progress-bar">
         <div className="progress-fill" style={{ width: `${(idx / queue.length) * 100}%` }} />
       </div>
@@ -700,7 +895,17 @@ export default function StudyScreen({
             )}
           </div>
         )}
-        {answered && <button className="btn btn-secondary" style={{ width: "100%", padding: 15, marginTop: 8 }} onClick={next}>{idx + 1 >= queue.length ? "Завершить" : "Дальше →"}</button>}
+        {answered && (
+          <button 
+            className="btn btn-secondary animate-bounce-subtle" 
+            style={{ width: "100%", padding: 15, marginTop: 8 }} 
+            onClick={next}
+          >
+            {idx + 1 >= queue.length 
+              ? (wrongIds.length > 0 ? "Повторить ошибки 🔁" : "Завершить сессию ✨") 
+              : "Дальше →"}
+          </button>
+        )}
       </div>
     </div>
   );

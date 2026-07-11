@@ -325,238 +325,57 @@ export default function SettingsScreen({
               Вы вошли как гость. Ваши данные хранятся локально в кэше браузера. Зарегистрируйтесь, чтобы получить доступ с телефона и ноутбука!
             </p>
             <button className="btn btn-primary btn-sm" style={{ width: "100%" }} onClick={onLogout}>
-              Создать аккаунт или Войти
+              Войти или зарегистрироваться
             </button>
           </div>
         ) : (
-          <div style={{ background: "rgba(148,161,135,.1)", border: "1.5px solid rgba(148,161,135,.25)", borderRadius: "1rem", padding: 14 }}>
-            <div style={{ fontSize: 13, fontWeight: 600, color: "var(--sage)", marginBottom: 8 }}>✓ Автоматическое сохранение включено</div>
-            <div style={{ fontSize: 12, color: "#888", marginBottom: 12 }}>Аккаунт: {user?.email}</div>
-            <button 
-              className="btn btn-outline btn-sm" 
-              style={{ width: "100%", borderColor: "rgba(148,161,135,.35)", color: "var(--sage)" }}
-              onClick={handleLogout}
-            >
+          <div>
+            <p style={{ fontSize: 12, color: "var(--sage)", fontWeight: 500, marginBottom: 4 }}>
+              ✓ Автоматическое сохранение включено
+            </p>
+            <p style={{ fontSize: 11, color: "var(--muted)", marginBottom: 12 }}>
+              Аккаунт: {user.email}
+            </p>
+            <button className="btn btn-outline btn-sm" style={{ width: "100%", color: "var(--rose)", borderColor: "rgba(212,165,165,.25)" }} onClick={handleLogout}>
               Выйти из аккаунта
             </button>
           </div>
         )}
       </div>
 
-      {/* Theme Settings */}
+      {/* Daily word limit Settings */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🎨 Оформление</h3>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-          <span style={{ fontSize: 13, color: "var(--warm)" }}>Режим отображения</span>
-          <button 
-            className="btn btn-outline btn-sm"
-            style={{ 
-              display: "flex", 
-              alignItems: "center", 
-              gap: 6,
-              fontSize: 13,
-              borderColor: "var(--border)",
-              background: "var(--card)"
-            }}
-            onClick={onToggleTheme}
-          >
-            {theme === "dark" ? "🌙 Тёмная тема" : "☀️ Светлая тема"}
-          </button>
-        </div>
-      </div>
-
-      {/* Push Notifications Settings */}
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🔔 Напоминания на устройство</h3>
-        
-        {notifPermission === "unsupported" ? (
-          <p style={{ fontSize: 12, color: "var(--muted)" }}>
-            ⚠️ К сожалению, ваш текущий браузер или устройство не поддерживает системные уведомления.
-          </p>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
-              Включите уведомления, чтобы получать напоминания о повторении слов и защитить свою серию дней от сгорания!
-            </p>
-            
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>Статус разрешений:</span>
-              <span style={{ 
-                fontSize: 12, 
-                padding: "3px 8px", 
-                borderRadius: 999, 
-                fontWeight: 600,
-                background: notifPermission === "granted" ? "rgba(124, 139, 114, 0.12)" : "rgba(181, 93, 76, 0.08)",
-                color: notifPermission === "granted" ? "var(--sage)" : "var(--rose)"
-              }}>
-                {notifPermission === "granted" ? "✅ Разрешено" : notifPermission === "denied" ? "🚫 Заблокировано" : "🔕 Не настроено"}
-              </span>
-            </div>
-
-            {notifPermission !== "granted" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
-                <button 
-                  className="btn btn-primary btn-sm" 
-                  style={{ width: "100%", padding: 10, fontSize: 13 }}
-                  onClick={handleRequestNotifPermission}
-                >
-                  🔔 Разрешить уведомления
-                </button>
-                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4, background: "rgba(0,0,0,0.15)", padding: "10px 12px", borderRadius: 10 }}>
-                  💡 <strong>Инструкция по включению уведомлений:</strong>
-                  <ul style={{ paddingLeft: 16, marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
-                    <li><strong>Отдельная вкладка:</strong> Откройте приложение вне фрейма AI Studio в новой вкладке (например, на вашем домене Vercel), иначе браузер заблокирует запрос прав из соображений безопасности.</li>
-                    <li><strong>На телефоне (Яндекс / Chrome):</strong> Нажмите на значок настроек сайта в адресной строке (замочек или ползунки слева/справа от URL) ➡️ найдите пункт «Разрешения» или «Уведомления» и переключите на <strong>Разрешено</strong>.</li>
-                    <li><strong>В системе телефона (Android / iOS):</strong> Зайдите в системные Настройки устройства ➡️ «Приложения» ➡️ выберите ваш браузер (Яндекс / Chrome) ➡️ «Уведомления» ➡️ убедитесь, что переключатель <strong>«Разрешить уведомления»</strong> включен в самой системе.</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-
-            {notifPermission === "granted" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 10 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <label htmlFor="notif-freq-select" style={{ fontSize: 13, color: "var(--warm)" }}>Частота напоминаний</label>
-                  <select 
-                    id="notif-freq-select"
-                    className="select" 
-                    value={notifFrequency}
-                    onChange={handleFrequencyChange}
-                    style={{ fontSize: 13, padding: "6px 10px" }}
-                  >
-                    <option value="off">📴 Отключить</option>
-                    <option value="every-4h">🕒 Каждые 4 часа</option>
-                    <option value="every-12h">🕒 Каждые 12 часов</option>
-                    <option value="daily-12">☀️ Каждый день в 12:00</option>
-                    <option value="daily-18">🌇 Каждый день в 18:00</option>
-                    <option value="daily-20">🌃 Каждый день в 20:00</option>
-                  </select>
-                </div>
-
-                <button 
-                  className="btn btn-outline btn-sm" 
-                  style={{ width: "100%", padding: 8, fontSize: 12, borderColor: "var(--border)" }}
-                  onClick={handleSendTestNotification}
-                >
-                  🧪 Отправить тестовое уведомление
-                </button>
-              </div>
-            )}
-            
-            {notifPermission === "denied" && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
-                <p style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic", textAlign: "center" }}>
-                  Уведомления заблокированы в браузере. Сбросьте настройки разрешений сайта в адресной строке, чтобы включить их обратно.
-                </p>
-                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.4, background: "rgba(0,0,0,0.15)", padding: "10px 12px", borderRadius: 10 }}>
-                  🔧 <strong>Как разблокировать:</strong>
-                  <ul style={{ paddingLeft: 16, marginTop: 5, display: "flex", flexDirection: "column", gap: 5 }}>
-                    <li><strong>На ПК (Яндекс / Chrome):</strong> Нажмите на иконку замочка или ползунков слева от адреса сайта ➡️ переведите ползунок «Уведомления» в положение <strong>Разрешено</strong> (или выберите «Настройки сайтов» ➡️ сбросьте разрешение).</li>
-                    <li><strong>На телефоне (Яндекс):</strong> Нажмите три точки в строке меню ➡️ найдите свойства страницы/разрешения и сбросьте блокировку уведомлений.</li>
-                  </ul>
-                </div>
-              </div>
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* Email Notifications Settings */}
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📨 Напоминания на почту</h3>
-        {user === "guest" ? (
-          <div>
-            <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
-              ✉️ Email-напоминания доступны только для зарегистрированных пользователей. Пожалуйста, создайте аккаунт или войдите в него вверху страницы, чтобы мы могли отправлять вам письма.
-            </p>
-          </div>
-        ) : (
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
-            <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4 }}>
-              Будем присылать список слов на повторение и теплое напоминание заниматься прямо на ваш почтовый ящик <strong>{user?.email}</strong>.
-            </p>
-            
-            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-              <span style={{ fontSize: 13, fontWeight: 500 }}>Статус подписки:</span>
-              <button 
-                className={`btn ${stats.emailNotifEnabled ? 'btn-primary' : 'btn-outline'} btn-sm`}
-                onClick={handleToggleEmailNotifs}
-                style={{ fontSize: 12, padding: "5px 12px" }}
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📖 Дневной лимит слов</h3>
+        <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 12 }}>
+          Выберите количество новых слов, которые вы хотите учить каждый день во время занятий.
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[5, 7, 15, 30].map(val => {
+            const isSelected = (stats.dailyWordsLimit ?? 15) === val;
+            return (
+              <button
+                key={val}
+                className={`btn ${isSelected ? "btn-primary" : "btn-outline"}`}
+                style={{ 
+                  flex: 1, 
+                  padding: "10px 0", 
+                  fontSize: 13, 
+                  fontWeight: 600,
+                  borderColor: isSelected ? "var(--sage)" : "var(--border)",
+                  color: isSelected ? "#fff" : "var(--text)"
+                }}
+                onClick={() => {
+                  onSaveProgress({
+                    ...stats,
+                    dailyWordsLimit: val
+                  });
+                }}
               >
-                {stats.emailNotifEnabled ? "🟢 Включены" : "🔴 Выключены"}
+                {val}
               </button>
-            </div>
-
-            {stats.emailNotifEnabled && (
-              <div style={{ display: "flex", flexDirection: "column", gap: 10, borderTop: "1px solid var(--border)", paddingTop: 10, marginTop: 4 }}>
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                  <label htmlFor="email-hour-select" style={{ fontSize: 13, color: "var(--warm)" }}>Время отправки (МСК/Местное):</label>
-                  <select 
-                    id="email-hour-select"
-                    className="select" 
-                    value={stats.emailNotifHour ?? 12}
-                    onChange={handleEmailHourChange}
-                    style={{ fontSize: 13, padding: "6px 10px" }}
-                  >
-                    {Array.from({ length: 24 }).map((_, i) => (
-                      <option key={i} value={i}>
-                        {String(i).padStart(2, '0')}:00
-                      </option>
-                    ))}
-                  </select>
-                </div>
-
-                <div style={{ fontSize: 11, color: "var(--muted)", lineHeight: 1.3 }}>
-                  💡 Письма будут приходить ежедневно в <strong>{String(stats.emailNotifHour ?? 12).padStart(2, '0')}:00</strong> по вашему часовому поясу.
-                </div>
-
-                <button 
-                  className="btn btn-outline btn-sm" 
-                  style={{ width: "100%", padding: 8, fontSize: 12, borderColor: "var(--border)", marginTop: 4 }}
-                  onClick={handleSendTestEmail}
-                  disabled={emailSending}
-                >
-                  {emailSending ? "⏳ Отправка..." : "🧪 Отправить тестовое письмо"}
-                </button>
-
-                {testEmailUrl && (
-                  <div style={{ marginTop: 12, padding: "14px 16px", background: "rgba(143,160,128,0.08)", border: "1px dashed var(--sage)", borderRadius: 10, fontSize: 12, lineHeight: 1.5, textAlign: "left" }}>
-                    <p style={{ margin: "0 0 8px 0", fontSize: 13, fontWeight: "bold", color: "var(--sage)" }}>
-                      📬 Письмо успешно сгенерировано!
-                    </p>
-                    <p style={{ margin: "0 0 12px 0", color: "var(--text)" }}>
-                      Поскольку вы ещё не подключили свой собственный почтовый сервер в настройках проекта, письмо отправлено на <strong>виртуальный тестовый ящик</strong>. Вы можете прямо сейчас посмотреть, как оно выглядит:
-                    </p>
-                    <div style={{ textAlign: "center", marginBottom: 16 }}>
-                      <a href={testEmailUrl} target="_blank" rel="noopener noreferrer" className="btn btn-sm" style={{ background: "var(--sage)", color: "#fff", display: "inline-flex", alignItems: "center", gap: 6 }}>
-                        Открыть превью письма ↗
-                      </a>
-                    </div>
-                    <div style={{ borderTop: "1px solid rgba(255,255,255,0.05)", paddingTop: 10 }}>
-                      <strong style={{ color: "var(--warm)" }}>🛠 Как сделать, чтобы письма приходили на вашу реальную почту?</strong>
-                      <p style={{ margin: "6px 0", color: "var(--muted)", fontSize: 11 }}>
-                        Для этого в AI Studio (где вы создавали проект) нужно настроить ваш личный SMTP-сервер. Например, для <strong>Gmail</strong>:
-                      </p>
-                      <ol style={{ margin: "4px 0 0 0", paddingLeft: 18, color: "var(--muted)", fontSize: 11, display: "flex", flexDirection: "column", gap: 4 }}>
-                        <li>Откройте меню <strong>Settings</strong> (значок шестерёнки вверху справа на панели AI Studio).</li>
-                        <li>Перейдите в подраздел <strong>Secrets / Environment Variables</strong>.</li>
-                        <li>Добавьте следующие переменные окружения:</li>
-                        <ul style={{ paddingLeft: 14, marginTop: 4, listStyleType: "circle" }}>
-                          <li><code style={{ color: "var(--warm)" }}>SMTP_HOST</code> = <code style={{ color: "var(--sage)" }}>smtp.gmail.com</code></li>
-                          <li><code style={{ color: "var(--warm)" }}>SMTP_PORT</code> = <code style={{ color: "var(--sage)" }}>465</code></li>
-                          <li><code style={{ color: "var(--warm)" }}>SMTP_SECURE</code> = <code style={{ color: "var(--sage)" }}>true</code></li>
-                          <li><code style={{ color: "var(--warm)" }}>SMTP_USER</code> = <code style={{ color: "var(--sage)" }}>ваша_почта@gmail.com</code></li>
-                          <li><code style={{ color: "var(--warm)" }}>SMTP_PASS</code> = <em style={{ color: "var(--sage)" }}>специальный пароль приложения Gmail (App Password)</em></li>
-                        </ul>
-                        <li>После добавления перезагрузите сервер (кнопка <strong>Restart Server</strong>). Письма будут мгновенно прилетать прямо в ваш настоящий почтовый ящик!</li>
-                      </ol>
-                    </div>
-                  </div>
-                )}
-              </div>
-            )}
-          </div>
-        )}
+            );
+          })}
+        </div>
       </div>
 
       {/* Manual Import / Export */}

@@ -57,4 +57,7 @@ export interface UserProgress {
   emailNotifHour?: number;
   emailNotifOffset?: number;
   email?: string;
+  dailyWordsLimit?: number;
+  lastReviewSessionTime?: number;
+  secondLastReviewSessionTime?: number;
 }

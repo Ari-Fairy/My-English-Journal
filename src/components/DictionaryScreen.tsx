@@ -177,7 +177,7 @@ export default function DictionaryScreen({
               ) : (
                 <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between" }}>
                   <div style={{ flex: 1 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
                       <span style={{ fontWeight: 600 }}>{w.en}</span>
                       <button className="speak-btn" onClick={() => speak(w.en)}>🔊</button>
                       <span 
@@ -186,12 +186,25 @@ export default function DictionaryScreen({
                           padding: "2px 6px", 
                           borderRadius: "4px",
                           fontWeight: 600,
-                          background: w.learned ? "rgba(148,161,135,0.15)" : "rgba(223,174,134,0.15)",
-                          color: w.learned ? "var(--sage)" : "var(--rose)"
+                          background: w.streak >= 12 
+                            ? "rgba(90, 155, 212, 0.12)" 
+                            : w.learned 
+                              ? "rgba(148,161,135,0.15)" 
+                              : "rgba(223,174,134,0.15)",
+                          color: w.streak >= 12 
+                            ? "#5a9bd4" 
+                            : w.learned 
+                              ? "var(--sage)" 
+                              : "var(--rose)"
                         }}
                       >
-                        {w.learned ? "✓ Выучено" : "📖 Изучаю"}
+                        {w.streak >= 12 ? "🏆 Усвоено навсегда" : w.learned ? "✓ Выучено" : "📖 Изучаю"}
                       </span>
+                      {w.learned && w.streak < 12 && (
+                        <span style={{ fontSize: 10, color: "#888", background: "rgba(180,180,180,0.08)", padding: "2px 5px", borderRadius: "3px" }}>
+                          Этап {w.streak || 1}/11
+                        </span>
+                      )}
                     </div>
                     <div style={{ fontSize: 13, color: "#888" }}>{w.ru}</div>
                     <div style={{ fontSize: 11, color: "#ccc" }}>

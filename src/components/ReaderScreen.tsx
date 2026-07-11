@@ -130,8 +130,8 @@ export default function ReaderScreen({
 
     // Fallback to static story
     const stories = BOOK_STORIES[level] || [];
-    const dayIndex = new Date(date).getDate() % stories.length;
-    const staticStory = stories[dayIndex];
+    const index = (stats.booksRead || 0) % (stories.length || 1);
+    const staticStory = stories[index];
     if (staticStory) {
       setDailyStories(prev => ({ ...prev, [level]: staticStory }));
     }
@@ -317,7 +317,8 @@ export default function ReaderScreen({
     setShowQuizExplanation(false);
     setQuizScore(0);
 
-    const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
+    const index = (stats.booksRead || 0) % (BOOK_STORIES[selectedLevel]?.length || 1);
+    const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[index] || { title: "Книга", level: selectedLevel, text: "" };
 
     // Try reading prefetched quiz from cache for instantaneous load
     const cacheKey = `prefetched_quiz_${selectedLevel}_${today}`;
@@ -428,8 +429,8 @@ export default function ReaderScreen({
             wordCount = generatedStory.text.split(/\s+/).filter(Boolean).length;
           } else if (!isLoading) {
             const stories = BOOK_STORIES[level] || [];
-            const dayIndex = new Date().getDate() % stories.length;
-            const staticStory = stories[dayIndex];
+            const index = (stats.booksRead || 0) % (stories.length || 1);
+            const staticStory = stories[index];
             if (staticStory) {
               title = staticStory.title;
               wordCount = staticStory.text.split(/\s+/).filter(Boolean).length;
@@ -476,7 +477,8 @@ export default function ReaderScreen({
   }
 
   // Find the selected story (prefer generated, fallback to static)
-  const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[new Date().getDate() % (BOOK_STORIES[selectedLevel]?.length || 1)] || { title: "Книга", level: selectedLevel, text: "" };
+  const index = (stats.booksRead || 0) % (BOOK_STORIES[selectedLevel]?.length || 1);
+  const story = dailyStories[selectedLevel] || BOOK_STORIES[selectedLevel]?.[index] || { title: "Книга", level: selectedLevel, text: "" };
 
   if (selectedLevel && loadingStory[selectedLevel]) {
     return (

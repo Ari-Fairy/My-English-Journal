@@ -164,9 +164,9 @@ export const SEED_IRREGULAR = [
 export const BOOK_STORIES: { [key: string]: { title: string; level: string; text: string }[] } = {
   A1: [
     {
-      title: "My Morning",
+      title: "The Secret Garden",
       level: "A1",
-      text: "Every morning I wake up at seven. I go to the kitchen and make tea. I sit near the window. The sun shines outside. I look at the river. The wind blows softly. I think about the day. Today is a good day. I feel warm and happy. I open my diary and write. I drink my tea slowly. Then I pack my bag. I put a map inside. I go outside. The air is fresh. I walk to school. I follow the road by the river. I see a field of flowers. My heart is full of joy."
+      text: "Behind my house there is an old garden. No one goes there, but I love it. I open a small wooden door and walk in. The garden has many green plants and beautiful red roses. I sit on a stone bench under a big apple tree. A yellow bird sings a happy song. I feel calm and safe. I open my notebook and write about the flowers. The warm sun shines on my face. Sometimes I see a rabbit in the grass. It is my secret place, and it makes my heart full of peace."
     },
     {
       title: "The Little Cafe",
@@ -174,9 +174,9 @@ export const BOOK_STORIES: { [key: string]: { title: string; level: string; text
       text: "I like to visit a small cafe near my house. It has blue walls and warm lights. The baker makes fresh bread every morning. I sit at a table and order coffee. A cute cat sleeps near the door. People talk and laugh. I study my English words. I write them in my black notebook. Sometimes I look outside. It is raining, but the cafe is warm and cozy. I feel very peaceful here."
     },
     {
-      title: "A Day in the Park",
+      title: "The Friendly Dog",
       level: "A1",
-      text: "Today is Sunday. The sky is blue and there are no clouds. I go to the park with my brother. We ride our bikes on the path. Many children play with a red ball. Old people sit on green benches and read newspapers. I see beautiful birds in the trees. They sing sweet songs. We eat sweet apples under a big oak tree. The grass is green and soft. I love sunny weekends."
+      text: "Today I walk in the forest near my village. The trees are tall and the grass is wet. Suddenly, a big brown dog runs to me. It has warm brown eyes and a friendly tail. It does not bark; it just looks at me and sits. I have a small sandwich in my bag. I share my sandwich with the dog. It eats quickly and licks my hand. We walk together for a long time on the path. The sun begins to set, and I must go home. The dog waves its tail and walks back into the forest. I feel happy to have a new friend."
     }
   ],
   A2: [
@@ -191,9 +191,9 @@ export const BOOK_STORIES: { [key: string]: { title: string; level: string; text
       text: "Two days ago, my family drove to a beautiful lake in the mountains. The road was narrow and went up high. When we arrived, the air was very cold but fresh. We built a campfire near the water. My father caught a fish and cooked it for dinner. At night, we looked at the sky. There were millions of bright stars. I did not want to sleep because the view was amazing. I drew the lake in my diary before going to bed."
     },
     {
-      title: "The Lost Key",
+      title: "The Silver Ring",
       level: "A2",
-      text: "Yesterday morning, I could not find the key to my apartment. I searched everywhere - under the bed, in my bag, and behind the sofa. I was very late for my class. Suddenly, I remembered that I walked near the river the day before. I ran to the park. I walked along the same road. Fortunately, I saw something shining in the green grass near the wooden bench. It was my key! I felt so relieved and happy."
+      text: "Last winter, I bought a beautiful silver ring at a Christmas market. It was very special to me because it had a small blue stone. One cold evening, I went for a walk along the river. I wore thick gloves, but my hands were cold. When I returned home, I looked at my fingers and gasped - my silver ring was gone! I was extremely sad and could not sleep. The next afternoon, I went back to the river path. I walked slowly, searching the snowy ground. Suddenly, I noticed a tiny blue sparkle in the white snow. I ran and picked it up. It was my ring! It was cold but absolutely undamaged. I was so happy that I almost cried."
     }
   ],
   B1: [
@@ -233,24 +233,24 @@ export const BOOK_STORIES: { [key: string]: { title: string; level: string; text
 };
 
 export const STATIC_QUIZZES: { [key: string]: { question: string; options: string[]; correctIndex: number; explanation: string }[] } = {
-  "My Morning": [
+  "The Secret Garden": [
     {
-      question: "What does the author do in the kitchen?",
-      options: ["Cooks soup", "Makes tea", "Plays guitar", "Reads a book"],
-      correctIndex: 1,
-      explanation: "В тексте говорится: 'I go to the kitchen and make tea.'"
-    },
-    {
-      question: "Where does the author walk to?",
-      options: ["To school", "To the cinema", "To a restaurant", "To the cafe"],
+      question: "Where is the old garden located?",
+      options: ["Behind the house", "In the park", "Near the river", "At school"],
       correctIndex: 0,
-      explanation: "В тексте сказано: 'I walk to school.'"
+      explanation: "В тексте говорится: 'Behind my house there is an old garden.'"
     },
     {
-      question: "What does the author write in?",
-      options: ["A black notebook", "A newspaper", "A diary", "A letter"],
+      question: "What color are the roses in the garden?",
+      options: ["Blue", "Yellow", "Red", "White"],
       correctIndex: 2,
-      explanation: "В тексте сказано: 'I open my diary and write.'"
+      explanation: "В тексте сказано: 'The garden has many green plants and beautiful red roses.'"
+    },
+    {
+      question: "What animal does the author sometimes see in the grass?",
+      options: ["A cat", "A rabbit", "A dog", "A squirrel"],
+      correctIndex: 1,
+      explanation: "В тексте сказано: 'Sometimes I see a rabbit in the grass.'"
     }
   ],
   "The Little Cafe": [
@@ -273,24 +273,24 @@ export const STATIC_QUIZZES: { [key: string]: { question: string; options: strin
       explanation: "В тексте говорится: 'Sometimes I look outside. It is raining...'"
     }
   ],
-  "A Day in the Park": [
+  "The Friendly Dog": [
     {
-      question: "What day of the week is it?",
-      options: ["Monday", "Friday", "Saturday", "Sunday"],
-      correctIndex: 3,
-      explanation: "В тексте сказано: 'Today is Sunday.'"
+      question: "Where does the author walk today?",
+      options: ["In the city", "At the beach", "In the forest near the village", "In the school garden"],
+      correctIndex: 2,
+      explanation: "В тексте говорится: 'Today I walk in the forest near my village.'"
     },
     {
-      question: "What do the siblings ride on the path?",
-      options: ["Their skateboards", "Their bikes", "Their scooters", "Their horses"],
+      question: "What does the author share with the dog?",
+      options: ["A sweet apple", "A sandwich", "A cup of tea", "Fresh bread"],
       correctIndex: 1,
-      explanation: "В тексте говорится: 'We ride our bikes on the path.'"
+      explanation: "В тексте сказано: 'I share my sandwich with the dog.'"
     },
     {
-      question: "What do they eat under the big oak tree?",
-      options: ["Sweet apples", "Pancakes", "Fresh bread", "Sandwiches"],
-      correctIndex: 0,
-      explanation: "В тексте говорится: 'We eat sweet apples under a big oak tree.'"
+      question: "What does the dog do when the author goes home?",
+      options: ["It barks loudly", "It follows them home", "It sleeps under a tree", "It waves its tail and walks back into the forest"],
+      correctIndex: 3,
+      explanation: "В тексте сказано: 'The dog waves its tail and walks back into the forest.'"
     }
   ],
   "A New Friend": [
@@ -333,24 +333,24 @@ export const STATIC_QUIZZES: { [key: string]: { question: string; options: strin
       explanation: "В тексте сказано: 'I drew the lake in my diary before going to bed.'"
     }
   ],
-  "The Lost Key": [
+  "The Silver Ring": [
     {
-      question: "Where did the author search for the key?",
-      options: ["Under the bed, in the bag, behind the sofa", "On the kitchen table and in the fridge", "In school and at the cafe", "In the garden and on the street"],
+      question: "Where did the author buy the silver ring?",
+      options: ["At a Christmas market", "In a local store", "Near the river", "From a friend Nina"],
       correctIndex: 0,
-      explanation: "В тексте говорится: 'I searched everywhere - under the bed, in my bag, and behind the sofa.'"
+      explanation: "В тексте говорится: 'I bought a beautiful silver ring at a Christmas market.'"
     },
     {
-      question: "Why was the author in a hurry?",
-      options: ["They were late for work", "They were late for their class", "They had to catch a flight", "They wanted to meet Nina"],
+      question: "What special feature did the ring have?",
+      options: ["A gold flower", "A small blue stone", "An old map design", "Engraved letters"],
       correctIndex: 1,
-      explanation: "В тексте сказано: 'I was very late for my class.'"
+      explanation: "В тексте сказано: 'it had a small blue stone.'"
     },
     {
-      question: "Where did the author find the key?",
-      options: ["Under the bed", "Behind the sofa", "In the grass near a wooden bench", "In their bag"],
-      correctIndex: 2,
-      explanation: "В тексте сказано: 'Fortunately, I saw something shining in the green grass near the wooden bench. It was my key!'"
+      question: "Where did the author find the ring?",
+      options: ["In their thick gloves", "Under the bed", "At the Christmas market", "In the snow near the river path"],
+      correctIndex: 3,
+      explanation: "В тексте сказано: 'I noticed a tiny blue sparkle in the white snow...'"
     }
   ],
   "The River Journey": [

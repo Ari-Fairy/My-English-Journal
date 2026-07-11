@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Word, UserProgress } from "../types";
-import { getLocalDateString, getCurrentWeekKey } from "../utils";
+import { getLocalDateString, getCurrentWeekKey, getReviewCooldownStatus, getEffectiveDueWords } from "../utils";
 
 const getWeeklyPreset = (weekKey: string) => {
   let hash = 0;
@@ -13,8 +13,8 @@ const getWeeklyPreset = (weekKey: string) => {
     {
       title: "📚 Интенсивное накопление",
       goals: [
-        { id: "words", text: "📚 Выучить 15 слов за неделю", target: 15, type: "words" },
-        { id: "books", text: "📖 Прочитать хотя бы 1 книгу в разделе Чтение", target: 1, type: "books" },
+        { id: "words", text: "📚 Выучить 100 слов за неделю", target: 100, type: "words" },
+        { id: "books", text: "📖 Прочитать хотя бы 5 книг в разделе Чтение за неделю", target: 5, type: "books" },
         { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
       ]
     },
@@ -81,10 +81,11 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
 
   const getNextReviewTimeMs = (w: Word) => {
     if (!w.learned) return Infinity;
+    if (w.streak >= 10) return Infinity; // Полностью усвоено навсегда - больше не повторяем!
     const now = Date.now();
     const learnedAt = w.learnedDate ? new Date(w.learnedDate).getTime() : now;
     const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : learnedAt;
-    const iv = [24, 48, 96, 168, 336, 720]; // Review intervals in hours
+    const iv = [0.33, 1, 4, 12, 24, 48, 96, 168, 336]; 
     const hours = iv[Math.min(Math.max((w.streak || 1) - 1, 0), iv.length - 1)] || 24;
     const due = lastRev + (hours * 3600 * 1000);
     return Math.max(0, due - now);
@@ -92,15 +93,35 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
 
   const formatTimeLeft = (ms: number) => {
     if (ms <= 0) return "сейчас";
+    const mins = Math.ceil(ms / 60000);
+    if (mins < 60) return `через ${mins} мин`;
     const h = Math.ceil(ms / 3600000);
     if (h < 24) return `через ${h} ч`;
-    return `через ${Math.ceil(h / 24)} дн`;
+    const days = Math.ceil(h / 24);
+    if (days === 1) return "через 1 день";
+    if (days >= 2 && days <= 4) return `через ${days} дня`;
+    return `через ${days} дней`;
   };
 
-  const reviewWords = words.filter(w => w.learned && getNextReviewTimeMs(w) === 0);
+  const cooldownStatus = getReviewCooldownStatus(stats);
+  const { dueWords: reviewWords, totalOverdueCount } = getEffectiveDueWords(words, stats);
   const upcoming = learnedCount > 0 && reviewWords.length === 0 
     ? words.filter(w => w.learned && getNextReviewTimeMs(w) > 0).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b))[0] 
     : null;
+
+  const getUnifiedNextReviewTimeMs = () => {
+    const uncompletedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
+    if (uncompletedWords.length === 0) return null;
+    
+    // Find the min time left
+    const minMs = Math.min(...uncompletedWords.map(w => getNextReviewTimeMs(w)));
+    if (minMs === Infinity || isNaN(minMs)) return null;
+    
+    // Clamp to at least 20 minutes (20 * 60 * 1000)
+    return Math.max(minMs, 20 * 60 * 1000);
+  };
+  
+  const unifiedNextMs = getUnifiedNextReviewTimeMs();
 
   const recallActive = reviewWords.length > 0;
   const unlockedAchievementsCount = (stats.achievements || []).length;
@@ -177,14 +198,14 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             alignItems: "center", 
             borderRadius: "1.5rem", 
             fontSize: 15,
-            background: "var(--sage)",
-            color: "#fff",
-            boxShadow: "0 4px 12px rgba(148,161,135,.2)",
+            background: cooldownStatus.active ? "var(--border)" : "var(--sage)",
+            color: cooldownStatus.active ? "var(--muted)" : "#fff",
+            boxShadow: cooldownStatus.active ? "none" : "0 4px 12px rgba(148,161,135,.2)",
             border: "none",
             cursor: "pointer"
           }}
           onClick={() => {
-            if (reviewWords.length > 0) {
+            if (reviewWords.length > 0 && !cooldownStatus.active) {
               onStartStudy("review");
             } else {
               setRecallInfo(r => !r);
@@ -192,37 +213,76 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
-              {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: cooldownStatus.active ? "var(--muted)" : "#fff", fontWeight: 600 }}>
+              {cooldownStatus.active ? "Recall ⏳ Перерыв" : reviewWords.length > 0 ? "Recall ✨" : "Recall"}
             </div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
+            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: cooldownStatus.active ? "var(--muted)" : "#eee" }}>
               {learnedCount === 0 
                 ? "Сначала выучи слова 📚" 
-                : reviewWords.length > 0 
-                  ? `${reviewWords.length} слов ждут повторения` 
-                  : `Все ${learnedCount} слов повторены! См. график 📅`
+                : cooldownStatus.active 
+                  ? `Доступно через ${formatTimeLeft(cooldownStatus.timeLeftMs)}${totalOverdueCount > 0 ? ` · ${totalOverdueCount} в очереди` : ""}`
+                  : reviewWords.length > 0 
+                    ? totalOverdueCount > reviewWords.length
+                      ? `${reviewWords.length} слов доступны (всего ${totalOverdueCount}) ⚡`
+                      : `${reviewWords.length} слов ждут повторения` 
+                    : `Все ${learnedCount} слов повторены! См. график 📅`
               }
             </div>
           </div>
-          <span style={{ fontSize: 22, opacity: .9, color: "#fff" }}>↺</span>
+          <span style={{ fontSize: 22, opacity: .9, color: cooldownStatus.active ? "var(--muted)" : "#fff" }}>
+            {cooldownStatus.active ? "⏳" : "↺"}
+          </span>
         </button>
 
-        {recallInfo && reviewWords.length === 0 && (
+        {recallInfo && (
           <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>
-              {learnedCount === 0 ? "📝 Как начать повторение" : "📅 Расписание повторений"}
+              {learnedCount === 0 ? "📝 Как начать повторение" : cooldownStatus.active ? "🧠 Время для отдыха" : "📅 Расписание повторений"}
             </div>
             {learnedCount === 0 ? (
               <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: 0 }}>
                 У вас пока нет выученных слов. Нажмите на кнопку <strong>Study</strong> выше или добавьте слова в разделе <strong>Dictionary</strong>, чтобы начать обучение! 🚀
               </p>
-            ) : (
-              words.filter(w => w.learned).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b)).slice(0, 5).map(w => (
-                <div key={w.id} style={{ display: "flex", justifyContent: "space-between", padding: "4px 0", borderBottom: "1px solid var(--border)" }}>
-                  <span style={{ fontWeight: 500 }}>{w.en}</span>
-                  <span style={{ color: "var(--muted)" }}>{formatTimeLeft(getNextReviewTimeMs(w))}</span>
+            ) : cooldownStatus.active ? (
+              <div>
+                <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0" }}>
+                  Вы отлично позанимались и завершили 2 захода повторений! Чтобы знания закрепились эффективнее и слова не накапливались гигантской кучей, мы сделали обязательный перерыв в 4 часа. Оставшиеся слова равномерно распределены и будут подаваться порциями по 15 штук.
+                </p>
+                <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", textAlign: "center" }}>
+                  <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Рекомендуемый перерыв</div>
+                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--rose)", marginTop: 4 }}>
+                    ⏳ {formatTimeLeft(cooldownStatus.timeLeftMs)}
+                  </div>
                 </div>
-              ))
+              </div>
+            ) : reviewWords.length > 0 ? (
+              <div>
+                <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0 0 10px 0" }}>
+                  Слова готовы к повторению! Нажмите на кнопку <strong>Recall</strong> выше, чтобы начать сессию.
+                </p>
+                {totalOverdueCount > reviewWords.length && (
+                  <p style={{ color: "var(--muted)", lineHeight: 1.4, margin: 0, fontSize: 12 }}>
+                    💡 Всего слов на повторение в очереди: {totalOverdueCount}. Текущая порция ограничена до 30 слов, чтобы избежать переутомления.
+                  </p>
+                )}
+              </div>
+            ) : (
+              <div>
+                <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0 0 12px 0" }}>
+                  Отличная работа! Все доступные слова уже повторены.
+                </p>
+                {unifiedNextMs !== null && (
+                  <div style={{ padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", textAlign: "center" }}>
+                    <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Единое время возвращения</div>
+                    <div style={{ fontSize: 20, fontWeight: 700, color: "var(--sage)", marginTop: 4 }}>
+                      🕒 {formatTimeLeft(unifiedNextMs)}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
+                      (системные тайминги оптимизированы, минимальный интервал — 20 минут)
+                    </div>
+                  </div>
+                )}
+              </div>
             )}
           </div>
         )}
