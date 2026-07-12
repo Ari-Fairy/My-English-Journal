@@ -101,7 +101,7 @@ export function getApiUrl(path: string): string {
                        !hostname.includes("run.app");
   
   if (isCustomHost) {
-    const backendUrl = "https://ais-dev-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
+    const backendUrl = "https://ais-pre-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
     return `${backendUrl}${path.startsWith("/") ? "" : "/"}${path}`;
   }
   return path;
