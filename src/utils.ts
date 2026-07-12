@@ -92,10 +92,18 @@ export function getCurrentWeekKey(): string {
   return `${d.getFullYear()}-W${weekNo}`;
 }
 
-// Получение полного URL для API запросов при развертывании на внешних платформах (Vercel или Cloud Run)
+// Получение полного URL для API запросов при развертывании на внешних платформах (Vercel)
 export function getApiUrl(path: string): string {
-  // Поскольку теперь мы настроили Vercel для хостинга и фронтенда, и бэкенда на одном домене (через vercel.json),
-  // мы можем безопасно использовать относительные пути. Это полностью решает проблему CORS и Failed to fetch!
+  const hostname = window.location.hostname;
+  // Если мы запущены на стороннем хостинге (например, Vercel), то перенаправляем запросы на наш Cloud Run бэкенд
+  const isCustomHost = !hostname.includes("localhost") && 
+                       !hostname.includes("127.0.0.1") && 
+                       !hostname.includes("run.app");
+  
+  if (isCustomHost) {
+    const backendUrl = "https://ais-dev-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
+    return `${backendUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+  }
   return path;
 }
 

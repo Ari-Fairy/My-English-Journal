@@ -1,24 +1,9 @@
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { Word, IrregularVerb, UserProgress } from "../types";
 import { wipeUserAccountData } from "../firebaseSync";
 import { auth } from "../firebase";
 import { signOut, deleteUser } from "firebase/auth";
 import { getLocalDateString, sendWebNotification, getApiUrl } from "../utils";
-
-function urlBase64ToUint8Array(base64String: string) {
-  const padding = '='.repeat((4 - base64String.length % 4) % 4);
-  const base64 = (base64String + padding)
-    .replace(/\-/g, '+')
-    .replace(/_/g, '/');
-
-  const rawData = window.atob(base64);
-  const outputArray = new Uint8Array(rawData.length);
-
-  for (let i = 0; i < rawData.length; ++i) {
-    outputArray[i] = rawData.charCodeAt(i);
-  }
-  return outputArray;
-}
 
 interface SettingsScreenProps {
   user: any; // Firebase user or "guest"
@@ -60,29 +45,11 @@ export default function SettingsScreen({
     localStorage.getItem("my-eng-notif-freq") || "daily-20"
   );
 
-  const [isCurrentDeviceSubscribed, setIsCurrentDeviceSubscribed] = useState(false);
-
-  useEffect(() => {
-    if (typeof window !== "undefined" && "serviceWorker" in navigator && "Notification" in window && Notification.permission === "granted") {
-      navigator.serviceWorker.ready.then(async (reg) => {
-        try {
-          const sub = await reg.pushManager.getSubscription();
-          setIsCurrentDeviceSubscribed(!!sub);
-        } catch (err) {
-          console.error("Error checking push subscription on mount:", err);
-        }
-      }).catch(err => {
-        console.error("Service worker not ready on mount:", err);
-      });
-    }
-  }, []);
-
   const sendImmediateNotification = (title: string, body: string) => {
     sendWebNotification(title, body);
   };
 
   const [emailSending, setEmailSending] = useState(false);
-  const [pushSending, setPushSending] = useState(false);
   const [testEmailUrl, setTestEmailUrl] = useState<string | null>(null);
 
   const handleToggleEmailNotifs = () => {
@@ -154,59 +121,11 @@ export default function SettingsScreen({
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
       if (permission === "granted") {
-        notify("🎉 Подключаем push-службу...");
-        
-        // Register & Subscribe to Web Push notifications
-        if (typeof window !== "undefined" && "serviceWorker" in navigator) {
-          try {
-            const reg = await navigator.serviceWorker.ready;
-            
-            const vapidKey = 'BGkFSDAE_LEse1Eo0kgle9UUMP_7qAnt4lHu_PJACXW1jHi7tmnojJ-EebXwQu4xl4iYq_UvdPLSl9NayMVF3Fo';
-            const convertedKey = urlBase64ToUint8Array(vapidKey);
-            
-            const subscription = await reg.pushManager.subscribe({
-              userVisibleOnly: true,
-              applicationServerKey: convertedKey
-            });
-            
-            const subStr = JSON.stringify(subscription);
-            console.log("Subscribed successfully to Web Push:", subStr);
-            
-            // Save subscription to database
-            onSaveProgress({
-              ...stats,
-              pushSubscription: subStr
-            });
-            setIsCurrentDeviceSubscribed(true);
-            
-            // Trigger an immediate backend test push notification
-            fetch(getApiUrl("/api/send-test-push"), {
-              method: "POST",
-              headers: { "Content-Type": "application/json" },
-              body: JSON.stringify({ subscription: subStr })
-            })
-            .then(res => {
-              if (res.ok) {
-                notify("🎉 Подписка оформлена! Мы отправили вам приветственный тестовый пуш.");
-              } else {
-                notify("🎉 Уведомления успешно подключены для этого устройства!");
-              }
-            })
-            .catch(err => {
-              console.error("Failed to call test push endpoint:", err);
-              notify("🎉 Уведомления успешно подключены для этого устройства!");
-            });
-            
-          } catch (pushErr) {
-            console.error("Failed to subscribe to PushManager:", pushErr);
-            notify("⚠️ Push-служба не поддерживается этим браузером, но локальные уведомления включены.");
-          }
-        } else {
-          sendImmediateNotification(
-            "🦉 Журнал английского",
-            "Привет! Уведомления настроены отлично. Мы напомним тебе заниматься, чтобы твоя серия дней не сгорела! 🔥"
-          );
-        }
+        notify("🎉 Уведомления успешно включены!");
+        sendImmediateNotification(
+          "🦉 Журнал английского",
+          "Привет! Уведомления настроены отлично. Мы напомним тебе заниматься, чтобы твоя серия дней не сгорела! 🔥"
+        );
       } else if (permission === "denied") {
         notify("🔕 Уведомления заблокированы. Вы можете разрешить их в настройках браузера.");
       }
@@ -229,46 +148,11 @@ export default function SettingsScreen({
     notify("✅ Частота уведомлений успешно сохранена!");
   };
 
-  const handleSendTestPush = async () => {
-    if (!("serviceWorker" in navigator)) {
-      notify("⚠️ Service Worker не поддерживается на вашем устройстве.");
-      return;
-    }
-    setPushSending(true);
-    try {
-      // Set a 4-second timeout safety race for serviceWorker.ready promise
-      const swReadyPromise = navigator.serviceWorker.ready;
-      const timeoutPromise = new Promise<never>((_, reject) => 
-        setTimeout(() => reject(new Error("Превышено время ожидания Service Worker. Попробуйте обновить страницу.")), 4000)
-      );
-      
-      const reg = await Promise.race([swReadyPromise, timeoutPromise]) as ServiceWorkerRegistration;
-      const subscription = await reg.pushManager.getSubscription();
-      if (!subscription) {
-        notify("⚠️ Не найдена активная подписка. Пожалуйста, нажмите «Разрешены» или включите заново.");
-        setPushSending(false);
-        return;
-      }
-      
-      const subStr = JSON.stringify(subscription);
-      const response = await fetch(getApiUrl("/api/send-test-push"), {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ subscription: subStr })
-      });
-      
-      if (response.ok) {
-        notify("🔔 Тестовый push-уведомление успешно отправлено!");
-      } else {
-        const errData = await response.json();
-        notify(`❌ Ошибка отправки push: ${errData.error || "Неизвестная ошибка"}`);
-      }
-    } catch (err: any) {
-      console.error(err);
-      notify("❌ Не удалось отправить тестовый push-уведомление.");
-    } finally {
-      setPushSending(false);
-    }
+  const handleSendTestNotification = () => {
+    sendImmediateNotification(
+      "🦉 Время английского! (Тест)",
+      "Отлично! Твои уведомления работают. Не забудь заглянуть сегодня, чтобы продолжить обучение и сохранить свою серию дней! ✨"
+    );
   };
 
   const notify = (text: string, persistent = false) => {
@@ -457,169 +341,6 @@ export default function SettingsScreen({
             </button>
           </div>
         )}
-      </div>
-
-      {/* Notifications card */}
-      <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🔔 Напоминания заниматься</h3>
-        
-        {/* Email Notifications Segment */}
-        <div style={{ marginBottom: 16, borderBottom: "1px solid var(--border)", paddingBottom: 16 }}>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 500 }}>Email-уведомления</span>
-            <button 
-              className={`btn btn-sm ${stats.emailNotifEnabled ? "btn-primary" : "btn-outline"}`}
-              style={{
-                fontSize: 12,
-                padding: "4px 12px",
-                height: "auto",
-                borderColor: stats.emailNotifEnabled ? "var(--sage)" : "var(--border)",
-                color: stats.emailNotifEnabled ? "#fff" : "var(--text)"
-              }}
-              onClick={handleToggleEmailNotifs}
-              disabled={user === "guest"}
-            >
-              {stats.emailNotifEnabled ? "Включены" : "Выключены"}
-            </button>
-          </div>
-          
-          {user === "guest" ? (
-            <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
-              ⚠️ Зарегистрируйтесь и войдите, чтобы включить напоминания на вашу почту.
-            </p>
-          ) : (
-            <>
-              <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 12 }}>
-                Мы будем присылать вам уютный список слов для повторения прямо на почту в выбранное время, чтобы поддерживать серию дней!
-              </p>
-              
-              {stats.emailNotifEnabled && (
-                <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "rgba(0,0,0,0.15)", padding: 12, borderRadius: 8, marginTop: 8 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
-                    <span style={{ fontSize: 12, color: "var(--text)" }}>Время отправки:</span>
-                    <select 
-                      value={stats.emailNotifHour ?? 12} 
-                      onChange={handleEmailHourChange}
-                      style={{
-                        background: "var(--bg-card)",
-                        border: "1px solid var(--border)",
-                        borderRadius: "6px",
-                        padding: "4px 8px",
-                        fontSize: 12,
-                        color: "var(--text)"
-                      }}
-                    >
-                      {Array.from({ length: 24 }).map((_, i) => (
-                        <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
-                      ))}
-                    </select>
-                  </div>
-                  
-                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                    <button 
-                      className="btn btn-outline btn-sm" 
-                      style={{ flex: 1, fontSize: 11, padding: "6px 0", height: "auto" }} 
-                      onClick={handleSendTestEmail}
-                      disabled={emailSending}
-                    >
-                      {emailSending ? "Отправка..." : "🧪 Тестовое письмо"}
-                    </button>
-                  </div>
-                  
-                  {testEmailUrl && (
-                    <p style={{ fontSize: 11, color: "var(--sage)", marginTop: 4 }}>
-                      📥 <a href={testEmailUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "underline", color: "var(--sage)" }}>Открыть тестовое превью письма</a>
-                    </p>
-                  )}
-                  
-                  <div style={{ marginTop: 8, padding: "8px 10px", background: "rgba(214, 128, 96, 0.04)", borderLeft: "2px solid var(--coral)", borderRadius: "4px", fontSize: 10.5, lineHeight: 1.35, color: "var(--text-muted)" }}>
-                    ⚠️ <strong>Режим отладки:</strong> Если администратор не настроил SMTP-переменные (`SMTP_HOST` и др.) в Vercel, письма отправляются через сервис Ethereal. Ссылка на превью письма появится выше сразу после отправки.
-                  </div>
-                </div>
-              )}
-            </>
-          )}
-        </div>
-
-        {/* Browser & Phone Notifications Segment */}
-        <div>
-          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-            <span style={{ fontSize: 13, fontWeight: 500 }}>Push-уведомления</span>
-            {notifPermission !== "granted" ? (
-              <button 
-                className="btn btn-sm btn-outline"
-                style={{
-                  fontSize: 12,
-                  padding: "4px 12px",
-                  height: "auto",
-                  borderColor: "var(--border)",
-                  color: "var(--text)"
-                }}
-                onClick={handleRequestNotifPermission}
-              >
-                Включить
-              </button>
-            ) : !isCurrentDeviceSubscribed ? (
-              <button 
-                className="btn btn-sm btn-primary"
-                style={{
-                  fontSize: 12,
-                  padding: "4px 12px",
-                  height: "auto",
-                  background: "var(--sage)",
-                  borderColor: "var(--sage)",
-                  color: "#fff"
-                }}
-                onClick={handleRequestNotifPermission}
-              >
-                🔗 Подключить пуши
-              </button>
-            ) : (
-              <button 
-                className="btn btn-sm btn-outline"
-                style={{
-                  fontSize: 11,
-                  padding: "4px 10px",
-                  height: "auto",
-                  borderColor: "rgba(143, 160, 128, 0.4)",
-                  color: "var(--text-muted)"
-                }}
-                onClick={handleRequestNotifPermission}
-              >
-                Подключено 🔄
-              </button>
-            )}
-          </div>
-          
-          <div style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 8 }}>
-            Получайте быстрые напоминания прямо на экран вашего телефона или компьютера.
-            {notifPermission === "granted" && (
-              <span style={{ display: "block", marginTop: 4, fontWeight: 500, color: isCurrentDeviceSubscribed ? "var(--sage)" : "var(--coral)" }}>
-                {isCurrentDeviceSubscribed ? "🟢 Подписка активна на этом устройстве" : "🟡 Подписка не подключена на этом устройстве"}
-              </span>
-            )}
-          </div>
-
-          {notifPermission === "granted" && (
-            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
-              <button 
-                className="btn btn-outline btn-sm" 
-                style={{ flex: 1, fontSize: 11, padding: "6px 0", height: "auto" }} 
-                onClick={handleSendTestPush}
-                disabled={pushSending}
-              >
-                {pushSending ? "Отправка..." : "🧪 Тестовый пуш"}
-              </button>
-            </div>
-          )}
-
-          <div style={{ background: "rgba(143, 160, 128, 0.05)", borderLeft: "3px solid var(--sage)", padding: "10px 12px", borderRadius: "4px", fontSize: 11, lineHeight: 1.4, color: "var(--text)" }}>
-            <strong style={{ display: "block", marginBottom: 4, color: "var(--sage)" }}>📱 Как получать пуши на телефоне:</strong>
-            1. В браузере на телефоне нажмите кнопку <strong>«Поделиться»</strong> (Safari на iOS) или меню <strong>три точки</strong> (Chrome на Android).<br />
-            2. Выберите пункт <strong>«На экран Домой»</strong> или <strong>«Добавить/Установить приложение»</strong>.<br />
-            3. Запустите приложение с экрана телефона и обязательно нажмите <strong>«🔗 Подключить пуши»</strong> здесь в настройках!
-          </div>
-        </div>
       </div>
 
       {/* Daily word limit Settings */}
