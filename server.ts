@@ -43,6 +43,229 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// Server-side Firebase Setup & Background Scheduler
+import { initializeApp as initFirebaseApp } from "firebase/app";
+import { getFirestore as getFirebaseFirestore, collection as getFirebaseCollection, getDocs as getFirebaseDocs, updateDoc as updateFirebaseDoc, doc as getFirebaseDoc, query as queryFirebase, where as whereFirebase } from "firebase/firestore";
+import fs from "fs";
+
+const configPath = path.join(process.cwd(), "firebase-applet-config.json");
+let serverDb: any = null;
+
+if (fs.existsSync(configPath)) {
+  try {
+    const configData = JSON.parse(fs.readFileSync(configPath, "utf-8"));
+    const firebaseConfig = {
+      apiKey: process.env.VITE_FIREBASE_API_KEY || configData.apiKey,
+      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || configData.authDomain,
+      projectId: process.env.VITE_FIREBASE_PROJECT_ID || configData.projectId,
+      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || configData.storageBucket,
+      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || configData.messagingSenderId,
+      appId: process.env.VITE_FIREBASE_APP_ID || configData.appId,
+      measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || configData.measurementId,
+    };
+    const firebaseApp = initFirebaseApp(firebaseConfig, "server-instance");
+    serverDb = getFirebaseFirestore(firebaseApp);
+    console.log("Firebase initialized on server for background scheduling.");
+  } catch (err) {
+    console.error("Failed to initialize Firebase on server:", err);
+  }
+}
+
+// Helper to calculate word review timings
+function getServerWordNextReviewTimeMs(w: any): number {
+  if (!w.learned) return Infinity;
+  if (w.nextReviewDate) {
+    return new Date(w.nextReviewDate).getTime();
+  }
+  const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : (w.learnedDate ? new Date(w.learnedDate).getTime() : Date.now());
+  const intervalMin = w.intervalMinutes || 240; // 4 hours by default
+  return lastRev + intervalMin * 60 * 1000;
+}
+
+// Helper to filter words ready for repetition
+function getServerDueWords(words: any[]): any[] {
+  const now = Date.now();
+  const learnedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
+  const dueWordsPool = learnedWords.filter(w => getServerWordNextReviewTimeMs(w) <= now);
+  
+  return dueWordsPool.sort((a, b) => {
+    const aPriority = (a.isProblematic ? 50000 : 0) + (a.consecutiveErrors || 0) * 10000 + (100000 / (a.intervalMinutes || 240));
+    const bPriority = (b.isProblematic ? 50000 : 0) + (b.consecutiveErrors || 0) * 10000 + (100000 / (b.intervalMinutes || 240));
+    return bPriority - aPriority;
+  });
+}
+
+// Scheduled email sending implementation
+async function sendScheduledEmailHelper(email: string, userId: string, hour: number, offset: number): Promise<boolean> {
+  try {
+    if (!serverDb) return false;
+    
+    // Fetch user's actual words
+    const wordsCol = getFirebaseCollection(serverDb, "words");
+    const q = queryFirebase(wordsCol, whereFirebase("userId", "==", userId));
+    const wordsSnap = await getFirebaseDocs(q);
+    const words: any[] = [];
+    wordsSnap.forEach(snap => {
+      words.push(snap.data());
+    });
+    
+    const dueWords = getServerDueWords(words);
+    
+    const host = process.env.SMTP_HOST;
+    const port = process.env.SMTP_PORT ? parseInt(process.env.SMTP_PORT, 10) : 587;
+    const user = process.env.SMTP_USER;
+    const pass = process.env.SMTP_PASS;
+    const secure = process.env.SMTP_SECURE === "true";
+    const fromAddress = process.env.SMTP_FROM || '"My English Journal" <no-reply@englishjournal.app>';
+
+    let transporter;
+    let isFallback = false;
+
+    if (host && user && pass) {
+      transporter = nodemailer.createTransport({
+        host,
+        port,
+        secure,
+        auth: { user, pass },
+      });
+    } else {
+      const testAccount = await nodemailer.createTestAccount();
+      transporter = nodemailer.createTransport({
+        host: "smtp.ethereal.email",
+        port: 587,
+        secure: false,
+        auth: {
+          user: testAccount.user,
+          pass: testAccount.pass,
+        },
+      });
+      isFallback = true;
+    }
+
+    const appUrl = process.env.APP_URL || "https://ai.studio/build";
+    
+    let wordsListHtml = "";
+    if (dueWords.length > 0) {
+      wordsListHtml = `
+        <div style="background-color: #fcfbfa; border-left: 3px solid #8fa080; padding: 12px 16px; margin-bottom: 24px; border-radius: 4px;">
+          <p style="font-size: 12px; font-weight: bold; color: #6a665d; margin: 0 0 8px 0; text-transform: uppercase; letter-spacing: 0.5px;">СЛОВА, КОТОРЫЕ ЖДУТ ТВОЕГО ПОВТОРЕНИЯ (${dueWords.length}):</p>
+          <ul style="margin: 0; padding-left: 20px; font-size: 14px; line-height: 1.6; color: #2e2a25;">
+            ${dueWords.slice(0, 5).map(w => `<li><strong>${w.en}</strong> — ${w.ru}</li>`).join("")}
+          </ul>
+          ${dueWords.length > 5 ? `<p style="font-size: 12px; color: #6a665d; margin: 6px 0 0 0; font-style: italic;">...и ещё ${dueWords.length - 5} слов</p>` : ""}
+        </div>
+      `;
+    } else {
+      wordsListHtml = `
+        <div style="background-color: #fcfbfa; border-left: 3px solid #8fa080; padding: 12px 16px; margin-bottom: 24px; border-radius: 4px;">
+          <p style="font-size: 13px; color: #4a463d; margin: 0;">
+            ✨ У тебя пока нет слов на повторение! Отличная работа! Самое время добавить несколько новых слов или прочитать рассказ, чтобы расширить свой словарный запас.
+          </p>
+        </div>
+      `;
+    }
+
+    const mailOptions = {
+      from: isFallback ? '"My English Journal (Scheduled)" <no-reply@ethereal.email>' : fromAddress,
+      to: email,
+      subject: "My English Journal: Время повторить слова! 📚✨",
+      html: `
+<div style="font-family: 'Georgia', serif; background-color: #f7f6f2; color: #2e2a25; padding: 40px 20px; max-width: 600px; margin: 0 auto; border-radius: 12px; border: 1px solid #e1ded5;">
+  <div style="text-align: center; margin-bottom: 30px;">
+    <h1 style="font-style: italic; font-weight: normal; font-size: 28px; color: #8fa080; margin: 0;">My English Journal 📚</h1>
+    <p style="color: #6a665d; font-size: 11px; margin-top: 4px; letter-spacing: 1px; text-transform: uppercase;">Твой уютный дневник английского</p>
+  </div>
+  
+  <div style="background-color: #ffffff; border-radius: 8px; padding: 24px; box-shadow: 0 4px 12px rgba(46, 42, 37, 0.03); border: 1px solid #eeece5;">
+    <h2 style="font-style: italic; font-weight: normal; font-size: 20px; color: #d68060; margin-top: 0; margin-bottom: 16px; border-bottom: 1px solid #f0eee8; padding-bottom: 10px;">
+      Время ежедневного занятия! 🌟
+    </h2>
+    
+    <p style="font-size: 14px; line-height: 1.6; color: #4a463d; margin-bottom: 20px;">
+      Привет! Пора уделить английскому всего 5 минут. Это поможет закрепить знания в долгосрочной памяти и сохранить твою серию дней обучения!
+    </p>
+
+    ${wordsListHtml}
+
+    <div style="text-align: center; margin-top: 28px; margin-bottom: 10px;">
+      <a href="${appUrl}" style="background-color: #8fa080; color: #ffffff; text-decoration: none; padding: 12px 28px; font-size: 15px; font-weight: 500; border-radius: 30px; display: inline-block;">
+        Открыть мой журнал и заниматься →
+      </a>
+    </div>
+  </div>
+  
+  <div style="text-align: center; margin-top: 30px; font-size: 11px; color: #9c988f; line-height: 1.4;">
+    Вы получили это письмо, потому что включили email-напоминания в настройках My English Journal.<br>
+    Настройки времени отправки: ежедневно в ${String(hour).padStart(2, "0")}:00.<br>
+    Вы можете отключить подписку в любой момент в приложении.
+  </div>
+</div>
+      `
+    };
+
+    const info = await transporter.sendMail(mailOptions);
+    console.log(`[Scheduler] Email successfully sent to ${email}: ${info.messageId}`);
+    return true;
+  } catch (err) {
+    console.error(`[Scheduler] Error sending scheduled email to user ${userId}:`, err);
+    return false;
+  }
+}
+
+// Background scheduler function to check for scheduled reminder emails
+async function checkAndSendScheduledEmails() {
+  if (!serverDb) return;
+  console.log("[Scheduler] Checking for scheduled reminder emails...");
+  try {
+    const usersCol = getFirebaseCollection(serverDb, "users");
+    const q = queryFirebase(usersCol, whereFirebase("emailNotifEnabled", "==", true));
+    const snapshot = await getFirebaseDocs(q);
+    
+    const nowUtc = Date.now();
+    
+    for (const userDoc of snapshot.docs) {
+      const userData = userDoc.data();
+      const email = userData.email;
+      if (!email) continue;
+      
+      const targetHour = userData.emailNotifHour ?? 12;
+      const offset = userData.emailNotifOffset ?? 0;
+      const lastSentDate = userData.lastEmailSentDate || "";
+      
+      // Calculate user's current local hour and local date based on offset
+      const userLocalTime = new Date(nowUtc - (offset * 60 * 1000));
+      const currentLocalHour = userLocalTime.getUTCHours();
+      const currentLocalDate = userLocalTime.toISOString().split("T")[0]; // "YYYY-MM-DD"
+      
+      // If the current hour matches the target hour, and we haven't sent an email today
+      if (currentLocalHour === targetHour && lastSentDate !== currentLocalDate) {
+        console.log(`[Scheduler] Sending scheduled email to ${email} (target hour: ${targetHour}, local hour: ${currentLocalHour}, date: ${currentLocalDate})`);
+        
+        const sent = await sendScheduledEmailHelper(email, userData.userId, targetHour, offset);
+        if (sent) {
+          await updateFirebaseDoc(getFirebaseDoc(serverDb, "users", userDoc.id), {
+            lastEmailSentDate: currentLocalDate
+          });
+          console.log(`[Scheduler] Successfully updated lastEmailSentDate for ${email} to ${currentLocalDate}`);
+        }
+      }
+    }
+  } catch (err) {
+    console.error("[Scheduler] Error running scheduled email check:", err);
+  }
+}
+
+// Start background interval checker
+const CHECK_INTERVAL_MS = 60 * 1000; // run every 1 minute
+setInterval(() => {
+  checkAndSendScheduledEmails();
+}, CHECK_INTERVAL_MS);
+
+// Also run once immediately on startup after a small delay
+setTimeout(() => {
+  checkAndSendScheduledEmails();
+}, 10000);
+
 // Server-side translation memory cache
 const translationMemoryCache = new Map<string, string>();
 

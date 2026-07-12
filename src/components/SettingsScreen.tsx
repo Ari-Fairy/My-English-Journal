@@ -343,6 +343,117 @@ export default function SettingsScreen({
         )}
       </div>
 
+      {/* Notifications card */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🔔 Напоминания заниматься</h3>
+        
+        {/* Email Notifications Segment */}
+        <div style={{ marginBottom: 16, borderBottom: "1px solid var(--border)", paddingBottom: 16 }}>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Email-уведомления</span>
+            <button 
+              className={`btn btn-sm ${stats.emailNotifEnabled ? "btn-primary" : "btn-outline"}`}
+              style={{
+                fontSize: 12,
+                padding: "4px 12px",
+                height: "auto",
+                borderColor: stats.emailNotifEnabled ? "var(--sage)" : "var(--border)",
+                color: stats.emailNotifEnabled ? "#fff" : "var(--text)"
+              }}
+              onClick={handleToggleEmailNotifs}
+              disabled={user === "guest"}
+            >
+              {stats.emailNotifEnabled ? "Включены" : "Выключены"}
+            </button>
+          </div>
+          
+          {user === "guest" ? (
+            <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4 }}>
+              ⚠️ Зарегистрируйтесь и войдите, чтобы включить напоминания на вашу почту.
+            </p>
+          ) : (
+            <>
+              <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 12 }}>
+                Мы будем присылать вам уютный список слов для повторения прямо на почту в выбранное время, чтобы поддерживать серию дней!
+              </p>
+              
+              {stats.emailNotifEnabled && (
+                <div style={{ display: "flex", flexDirection: "column", gap: 10, background: "rgba(0,0,0,0.15)", padding: 12, borderRadius: 8, marginTop: 8 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                    <span style={{ fontSize: 12, color: "var(--text)" }}>Время отправки:</span>
+                    <select 
+                      value={stats.emailNotifHour ?? 12} 
+                      onChange={handleEmailHourChange}
+                      style={{
+                        background: "var(--bg-card)",
+                        border: "1px solid var(--border)",
+                        borderRadius: "6px",
+                        padding: "4px 8px",
+                        fontSize: 12,
+                        color: "var(--text)"
+                      }}
+                    >
+                      {Array.from({ length: 24 }).map((_, i) => (
+                        <option key={i} value={i}>{String(i).padStart(2, "0")}:00</option>
+                      ))}
+                    </select>
+                  </div>
+                  
+                  <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                    <button 
+                      className="btn btn-outline btn-sm" 
+                      style={{ flex: 1, fontSize: 11, padding: "6px 0", height: "auto" }} 
+                      onClick={handleSendTestEmail}
+                      disabled={emailSending}
+                    >
+                      {emailSending ? "Отправка..." : "🧪 Тестовое письмо"}
+                    </button>
+                  </div>
+                  
+                  {testEmailUrl && (
+                    <p style={{ fontSize: 11, color: "var(--sage)", marginTop: 4 }}>
+                      📥 <a href={testEmailUrl} target="_blank" rel="noreferrer" style={{ textDecoration: "underline", color: "var(--sage)" }}>Открыть тестовое превью письма</a>
+                    </p>
+                  )}
+                </div>
+              )}
+            </>
+          )}
+        </div>
+
+        {/* Browser & Phone Notifications Segment */}
+        <div>
+          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
+            <span style={{ fontSize: 13, fontWeight: 500 }}>Push-уведомления</span>
+            <button 
+              className={`btn btn-sm ${notifPermission === "granted" ? "btn-primary" : "btn-outline"}`}
+              style={{
+                fontSize: 12,
+                padding: "4px 12px",
+                height: "auto",
+                borderColor: notifPermission === "granted" ? "var(--sage)" : "var(--border)",
+                color: notifPermission === "granted" ? "#fff" : "var(--text)"
+              }}
+              onClick={handleRequestNotifPermission}
+              disabled={notifPermission === "granted"}
+            >
+              {notifPermission === "granted" ? "Разрешены" : "Включить"}
+            </button>
+          </div>
+          
+          <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 8 }}>
+            Получайте быстрые напоминания прямо на экран вашего телефона или компьютера.
+          </p>
+
+          <div style={{ background: "rgba(143, 160, 128, 0.05)", borderLeft: "3px solid var(--sage)", padding: "10px 12px", borderRadius: "4px", fontSize: 11, lineHeight: 1.4, color: "var(--text)" }}>
+            <strong style={{ display: "block", marginBottom: 4, color: "var(--sage)" }}>📱 Как получать пуши на телефоне:</strong>
+            1. В браузере на телефоне нажмите кнопку <strong>«Поделиться»</strong> (Safari на iOS) или меню <strong>три точки</strong> (Chrome на Android).<br />
+            2. Выберите пункт <strong>«На экран Домой»</strong> или <strong>«Добавить/Установить приложение»</strong>.<br />
+            3. Запустите приложение с экрана телефона и включите пуш-уведомления здесь в настройках!
+          </div>
+        </div>
+      </div>
+
       {/* Daily word limit Settings */}
       <div className="card" style={{ marginBottom: 12 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📖 Дневной лимит новых слов</h3>
