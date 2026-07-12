@@ -1161,6 +1161,12 @@ async function startServer() {
   });
 }
 
-startServer().catch((err) => {
-  console.error("Failed to start full-stack server:", err);
-});
+// Only start the Express listener if not running in a Vercel Serverless environment
+const isVercel = process.env.VERCEL === "1" || !!process.env.VERCEL;
+if (!isVercel) {
+  startServer().catch((err) => {
+    console.error("Failed to start full-stack server:", err);
+  });
+}
+
+export default app;
