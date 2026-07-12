@@ -1,11 +1,21 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import webpush from "web-push";
 
 dotenv.config();
+
+// Configure Web Push VAPID details
+const VAPID_PUBLIC_KEY = process.env.VAPID_PUBLIC_KEY || "BGkFSDAE_LEse1Eo0kgle9UUMP_7qAnt4lHu_PJACXW1jHi7tmnojJ-EebXwQu4xl4iYq_UvdPLSl9NayMVF3Fo";
+const VAPID_PRIVATE_KEY = process.env.VAPID_PRIVATE_KEY || "Je717vCYArlSifcGimzgJvpLfgtgl7E0NMUoZLWrnt8";
+
+webpush.setVapidDetails(
+  "mailto:admin-scheduler@englishjournal.app",
+  VAPID_PUBLIC_KEY,
+  VAPID_PRIVATE_KEY
+);
 
 const PORT = 3000;
 const app = express();
@@ -255,47 +265,85 @@ async function sendScheduledEmailHelper(email: string, userId: string, hour: num
   }
 }
 
-// Background scheduler function to check for scheduled reminder emails
+// Send a Push Notification to a subscription
+async function sendPushNotification(subscriptionJsonStr: string, title: string, body: string) {
+  try {
+    const subscription = JSON.parse(subscriptionJsonStr);
+    await webpush.sendNotification(subscription, JSON.stringify({ title, body }));
+    console.log(`[Web Push] Notification sent successfully to subscription`);
+    return true;
+  } catch (err) {
+    console.error("[Web Push] Failed to send push notification:", err);
+    return false;
+  }
+}
+
+// Background scheduler function to check for scheduled reminder emails and push notifications
 async function checkAndSendScheduledEmails() {
   const authOk = await ensureAuthenticated();
   if (!authOk || !serverDb) return;
-  console.log("[Scheduler] Checking for scheduled reminder emails...");
+  console.log("[Scheduler] Checking for scheduled reminder emails and push notifications...");
   try {
     const usersCol = getFirebaseCollection(serverDb, "users");
-    const q = queryFirebase(usersCol, whereFirebase("emailNotifEnabled", "==", true));
-    const snapshot = await getFirebaseDocs(q);
+    // Retrieve all users to process their preferences (email or push)
+    const snapshot = await getFirebaseDocs(usersCol);
     
     const nowUtc = Date.now();
     
     for (const userDoc of snapshot.docs) {
       const userData = userDoc.data();
-      const email = userData.email;
-      if (!email) continue;
+      const userId = userData.userId || userDoc.id;
       
+      const email = userData.email;
       const targetHour = userData.emailNotifHour ?? 12;
       const offset = userData.emailNotifOffset ?? 0;
-      const lastSentDate = userData.lastEmailSentDate || "";
       
       // Calculate user's current local hour and local date based on offset
       const userLocalTime = new Date(nowUtc - (offset * 60 * 1000));
       const currentLocalHour = userLocalTime.getUTCHours();
       const currentLocalDate = userLocalTime.toISOString().split("T")[0]; // "YYYY-MM-DD"
       
-      // If the current hour matches the target hour, and we haven't sent an email today
-      if (currentLocalHour === targetHour && lastSentDate !== currentLocalDate) {
-        console.log(`[Scheduler] Sending scheduled email to ${email} (target hour: ${targetHour}, local hour: ${currentLocalHour}, date: ${currentLocalDate})`);
+      // If user's local hour matches their target hour:
+      if (currentLocalHour === targetHour) {
         
-        const sent = await sendScheduledEmailHelper(email, userData.userId, targetHour, offset);
-        if (sent) {
-          await updateFirebaseDoc(getFirebaseDoc(serverDb, "users", userDoc.id), {
-            lastEmailSentDate: currentLocalDate
-          });
-          console.log(`[Scheduler] Successfully updated lastEmailSentDate for ${email} to ${currentLocalDate}`);
+        // 1. Handle Email reminders
+        if (userData.emailNotifEnabled && email) {
+          const lastSentEmailDate = userData.lastEmailSentDate || "";
+          if (lastSentEmailDate !== currentLocalDate) {
+            console.log(`[Scheduler] Sending scheduled email to ${email} (target hour: ${targetHour}, local hour: ${currentLocalHour}, date: ${currentLocalDate})`);
+            const sent = await sendScheduledEmailHelper(email, userId, targetHour, offset);
+            if (sent) {
+              await updateFirebaseDoc(getFirebaseDoc(serverDb, "users", userDoc.id), {
+                lastEmailSentDate: currentLocalDate
+              });
+              console.log(`[Scheduler] Successfully updated lastEmailSentDate for ${email} to ${currentLocalDate}`);
+            }
+          }
         }
+        
+        // 2. Handle Push reminders
+        if (userData.pushSubscription) {
+          const lastSentPushDate = userData.lastPushSentDate || "";
+          if (lastSentPushDate !== currentLocalDate) {
+            console.log(`[Scheduler] Sending scheduled push notification to user ${userId} (target hour: ${targetHour}, local hour: ${currentLocalHour}, date: ${currentLocalDate})`);
+            const sent = await sendPushNotification(
+              userData.pushSubscription,
+              "🦉 Время английского! ✨",
+              "Пора уделить всего 5 минут английскому сегодня, чтобы закрепить прогресс и сохранить серию дней! 📚"
+            );
+            if (sent) {
+              await updateFirebaseDoc(getFirebaseDoc(serverDb, "users", userDoc.id), {
+                lastPushSentDate: currentLocalDate
+              });
+              console.log(`[Scheduler] Successfully updated lastPushSentDate for user ${userId} to ${currentLocalDate}`);
+            }
+          }
+        }
+        
       }
     }
   } catch (err) {
-    console.error("[Scheduler] Error running scheduled email check:", err);
+    console.error("[Scheduler] Error running scheduled notifications check:", err);
   }
 }
 
@@ -1125,6 +1173,30 @@ app.post("/api/send-test-email", async (req, res) => {
   }
 });
 
+// Endpoint to send a beautiful test push notification
+app.post("/api/send-test-push", async (req, res) => {
+  try {
+    const { subscription } = req.body;
+    if (!subscription) {
+      res.status(400).json({ error: "Не найден объект подписки для push-уведомлений." });
+      return;
+    }
+
+    console.log("Sending test push notification to subscription...");
+    await webpush.sendNotification(
+      JSON.parse(subscription),
+      JSON.stringify({
+        title: "🦉 Время английского! (Тест) ✨",
+        body: "Прекрасно! Твои push-уведомления работают отлично. Теперь они будут приходить, даже когда приложение закрыто! 📚"
+      })
+    );
+    res.json({ success: true });
+  } catch (error: any) {
+    console.error("Test push sending error:", error);
+    res.status(500).json({ error: error?.message || "Failed to send test push" });
+  }
+});
+
 // Endpoint to trigger scheduled email notifications from an external cron job or manually
 app.get("/api/cron/check-reminders", async (req, res) => {
   console.log("[API Cron] External trigger for scheduled email notifications received.");
@@ -1140,6 +1212,7 @@ app.get("/api/cron/check-reminders", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     // Development mode
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",

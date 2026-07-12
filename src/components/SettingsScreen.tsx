@@ -5,6 +5,21 @@ import { auth } from "../firebase";
 import { signOut, deleteUser } from "firebase/auth";
 import { getLocalDateString, sendWebNotification, getApiUrl } from "../utils";
 
+function urlBase64ToUint8Array(base64String: string) {
+  const padding = '='.repeat((4 - base64String.length % 4) % 4);
+  const base64 = (base64String + padding)
+    .replace(/\-/g, '+')
+    .replace(/_/g, '/');
+
+  const rawData = window.atob(base64);
+  const outputArray = new Uint8Array(rawData.length);
+
+  for (let i = 0; i < rawData.length; ++i) {
+    outputArray[i] = rawData.charCodeAt(i);
+  }
+  return outputArray;
+}
+
 interface SettingsScreenProps {
   user: any; // Firebase user or "guest"
   words: Word[];
@@ -50,6 +65,7 @@ export default function SettingsScreen({
   };
 
   const [emailSending, setEmailSending] = useState(false);
+  const [pushSending, setPushSending] = useState(false);
   const [testEmailUrl, setTestEmailUrl] = useState<string | null>(null);
 
   const handleToggleEmailNotifs = () => {
@@ -121,11 +137,62 @@ export default function SettingsScreen({
       const permission = await Notification.requestPermission();
       setNotifPermission(permission);
       if (permission === "granted") {
-        notify("🎉 Уведомления успешно включены!");
-        sendImmediateNotification(
-          "🦉 Журнал английского",
-          "Привет! Уведомления настроены отлично. Мы напомним тебе заниматься, чтобы твоя серия дней не сгорела! 🔥"
-        );
+        notify("🎉 Уведомления успешно включены! Подключаем push-службу...");
+        
+        // Register & Subscribe to Web Push notifications
+        if (typeof window !== "undefined" && "serviceWorker" in navigator) {
+          try {
+            const reg = await navigator.serviceWorker.ready;
+            const existingSub = await reg.pushManager.getSubscription();
+            
+            let subscription = existingSub;
+            if (!subscription) {
+              const vapidKey = 'BGkFSDAE_LEse1Eo0kgle9UUMP_7qAnt4lHu_PJACXW1jHi7tmnojJ-EebXwQu4xl4iYq_UvdPLSl9NayMVF3Fo';
+              const convertedKey = urlBase64ToUint8Array(vapidKey);
+              
+              subscription = await reg.pushManager.subscribe({
+                userVisibleOnly: true,
+                applicationServerKey: convertedKey
+              });
+            }
+            
+            const subStr = JSON.stringify(subscription);
+            console.log("Subscribed successfully to Web Push:", subStr);
+            
+            // Save subscription to database
+            onSaveProgress({
+              ...stats,
+              pushSubscription: subStr
+            });
+            
+            // Trigger an immediate backend test push notification
+            fetch(getApiUrl("/api/send-test-push"), {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ subscription: subStr })
+            })
+            .then(res => {
+              if (res.ok) {
+                notify("🎉 Подписка оформлена! Мы отправили вам приветственный тестовый пуш.");
+              } else {
+                notify("🎉 Уведомления разрешены! Успешно зарегистрировано в базе данных.");
+              }
+            })
+            .catch(err => {
+              console.error("Failed to call test push endpoint:", err);
+              notify("🎉 Уведомления разрешены! Успешно зарегистрировано в базе данных.");
+            });
+            
+          } catch (pushErr) {
+            console.error("Failed to subscribe to PushManager:", pushErr);
+            notify("⚠️ Push-служба не поддерживается этим браузером, но локальные уведомления включены.");
+          }
+        } else {
+          sendImmediateNotification(
+            "🦉 Журнал английского",
+            "Привет! Уведомления настроены отлично. Мы напомним тебе заниматься, чтобы твоя серия дней не сгорела! 🔥"
+          );
+        }
       } else if (permission === "denied") {
         notify("🔕 Уведомления заблокированы. Вы можете разрешить их в настройках браузера.");
       }
@@ -148,11 +215,40 @@ export default function SettingsScreen({
     notify("✅ Частота уведомлений успешно сохранена!");
   };
 
-  const handleSendTestNotification = () => {
-    sendImmediateNotification(
-      "🦉 Время английского! (Тест)",
-      "Отлично! Твои уведомления работают. Не забудь заглянуть сегодня, чтобы продолжить обучение и сохранить свою серию дней! ✨"
-    );
+  const handleSendTestPush = async () => {
+    if (!("serviceWorker" in navigator)) {
+      notify("⚠️ Service Worker не поддерживается на вашем устройстве.");
+      return;
+    }
+    setPushSending(true);
+    try {
+      const reg = await navigator.serviceWorker.ready;
+      const subscription = await reg.pushManager.getSubscription();
+      if (!subscription) {
+        notify("⚠️ Не найдена активная подписка. Пожалуйста, нажмите «Разрешены» или включите заново.");
+        setPushSending(false);
+        return;
+      }
+      
+      const subStr = JSON.stringify(subscription);
+      const response = await fetch(getApiUrl("/api/send-test-push"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ subscription: subStr })
+      });
+      
+      if (response.ok) {
+        notify("🔔 Тестовый push-уведомление успешно отправлено!");
+      } else {
+        const errData = await response.json();
+        notify(`❌ Ошибка отправки push: ${errData.error || "Неизвестная ошибка"}`);
+      }
+    } catch (err: any) {
+      console.error(err);
+      notify("❌ Не удалось отправить тестовый push-уведомление.");
+    } finally {
+      setPushSending(false);
+    }
   };
 
   const notify = (text: string, persistent = false) => {
@@ -444,6 +540,19 @@ export default function SettingsScreen({
           <p style={{ fontSize: 11, color: "var(--text-muted)", lineHeight: 1.4, marginBottom: 8 }}>
             Получайте быстрые напоминания прямо на экран вашего телефона или компьютера.
           </p>
+
+          {notifPermission === "granted" && (
+            <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12 }}>
+              <button 
+                className="btn btn-outline btn-sm" 
+                style={{ flex: 1, fontSize: 11, padding: "6px 0", height: "auto" }} 
+                onClick={handleSendTestPush}
+                disabled={pushSending}
+              >
+                {pushSending ? "Отправка..." : "🧪 Тестовый пуш"}
+              </button>
+            </div>
+          )}
 
           <div style={{ background: "rgba(143, 160, 128, 0.05)", borderLeft: "3px solid var(--sage)", padding: "10px 12px", borderRadius: "4px", fontSize: 11, lineHeight: 1.4, color: "var(--text)" }}>
             <strong style={{ display: "block", marginBottom: 4, color: "var(--sage)" }}>📱 Как получать пуши на телефоне:</strong>
