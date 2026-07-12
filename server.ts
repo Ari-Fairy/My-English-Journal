@@ -182,14 +182,14 @@ async function sendScheduledEmailHelper(email: string, userId: string, hour: num
         auth: { user, pass },
       });
     } else {
-      const testAccount = await nodemailer.createTestAccount();
+      console.log("No SMTP credentials. Using pre-registered Ethereal account...");
       transporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",
         port: 587,
         secure: false,
         auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
+          user: "sbds45poeyqw3zz7@ethereal.email",
+          pass: "VNr8v33J8uH7qtvDNY",
         },
       });
       isFallback = true;
@@ -1092,15 +1092,14 @@ app.post("/api/send-test-email", async (req, res) => {
         auth: { user, pass },
       });
     } else {
-      console.log("No SMTP environment variables found. Using Ethereal fallback...");
-      const testAccount = await nodemailer.createTestAccount();
+      console.log("No SMTP environment variables found. Using Ethereal static fallback...");
       transporter = nodemailer.createTransport({
         host: "smtp.ethereal.email",
         port: 587,
         secure: false,
         auth: {
-          user: testAccount.user,
-          pass: testAccount.pass,
+          user: "sbds45poeyqw3zz7@ethereal.email",
+          pass: "VNr8v33J8uH7qtvDNY",
         },
       });
       isFallback = true;
