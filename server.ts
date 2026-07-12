@@ -43,6 +43,48 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
+// Server-side translation memory cache
+const translationMemoryCache = new Map<string, string>();
+
+// Endpoint to translate an English word/phrase to Russian using Gemini
+app.post("/api/translate", async (req, res) => {
+  try {
+    const { word, context } = req.body || {};
+    if (!word) {
+      res.status(400).json({ error: "Missing word parameter" });
+      return;
+    }
+
+    const cacheKey = `${word.toLowerCase().trim()}:${context ? context.toLowerCase().trim() : ""}`;
+    if (translationMemoryCache.has(cacheKey)) {
+      res.json({ translation: translationMemoryCache.get(cacheKey) });
+      return;
+    }
+
+    const ai = getAIClient();
+    
+    let prompt = `Translate the English word or phrase "${word}" to Russian.`;
+    if (context) {
+      prompt += ` This word was clicked in the following context: "${context}". Please provide the most appropriate Russian translation for this specific context.`;
+    }
+    prompt += ` Return ONLY the direct translation, single word or short list of synonym translations (like "пыль, вытирать пыль"), with no extra words, explanations, quotation marks, or markdown formatting. Just the clean Russian translation string.`;
+
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: [prompt]
+    });
+
+    const translation = (response.text || "").trim().replace(/^["']|["']$/g, "");
+    if (translation) {
+      translationMemoryCache.set(cacheKey, translation);
+    }
+    res.json({ translation });
+  } catch (error: any) {
+    console.error("Translate API error:", error);
+    res.status(500).json({ error: error?.message || "Translation failed" });
+  }
+});
+
 // Endpoint to process handwritten word list photos using Gemini API
 app.post("/api/ocr", async (req, res) => {
   try {

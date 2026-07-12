@@ -110,15 +110,27 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
     : null;
 
   const getUnifiedNextReviewTimeMs = () => {
+    // 1. Check if we are still within the 20-minute cooldown from the last session
+    const lastSession = stats.lastReviewSessionTime || 0;
+    const now = Date.now();
+    const cooldownMs = 20 * 60 * 1000;
+    const timeSinceLastSession = now - lastSession;
+    
+    // 2. Find standard next review time for any uncompleted learned words
     const uncompletedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
     if (uncompletedWords.length === 0) return null;
     
-    // Find the min time left
-    const minMs = Math.min(...uncompletedWords.map(w => getNextReviewTimeMs(w)));
-    if (minMs === Infinity || isNaN(minMs)) return null;
+    const standardNextReviewTimes = uncompletedWords.map(w => getNextReviewTimeMs(w));
+    const minStandardMs = Math.min(...standardNextReviewTimes);
     
-    // Clamp to at least 20 minutes (20 * 60 * 1000)
-    return Math.max(minMs, 20 * 60 * 1000);
+    if (minStandardMs === Infinity || isNaN(minStandardMs)) return null;
+    
+    if (timeSinceLastSession < cooldownMs) {
+      // Return the remainder of the 20-minute cooldown
+      return cooldownMs - timeSinceLastSession;
+    }
+    
+    return minStandardMs;
   };
   
   const unifiedNextMs = getUnifiedNextReviewTimeMs();
@@ -246,10 +258,10 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             ) : cooldownStatus.active ? (
               <div>
                 <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0" }}>
-                  Вы отлично позанимались и завершили 2 захода повторений! Чтобы знания закрепились эффективнее и слова не накапливались гигантской кучей, мы сделали обязательный перерыв в 4 часа. Оставшиеся слова равномерно распределены и будут подаваться порциями по 15 штук.
+                  Мы убрали длинный 4-часовой перерыв и внедрили систему умных микро-порций! Теперь слова подаются небольшими группами максимум по 15 штук с минимальным интервалом отдыха 20 минут. Это позволяет комфортно повторять язык без перегрузки и предотвращает накопление огромной очереди.
                 </p>
                 <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Рекомендуемый перерыв</div>
+                  <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Минимальный перерыв</div>
                   <div style={{ fontSize: 20, fontWeight: 700, color: "var(--rose)", marginTop: 4 }}>
                     ⏳ {formatTimeLeft(cooldownStatus.timeLeftMs)}
                   </div>
@@ -262,7 +274,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
                 </p>
                 {totalOverdueCount > reviewWords.length && (
                   <p style={{ color: "var(--muted)", lineHeight: 1.4, margin: 0, fontSize: 12 }}>
-                    💡 Всего слов на повторение в очереди: {totalOverdueCount}. Текущая порция ограничена до 30 слов, чтобы избежать переутомления.
+                    💡 Всего слов на повторение в очереди: {totalOverdueCount}. Текущая порция ограничена до 15 слов, чтобы избежать переутомления.
                   </p>
                 )}
               </div>

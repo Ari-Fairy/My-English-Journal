@@ -786,9 +786,233 @@ export default function ReaderScreen({
   );
 }
 
+// Comprehensive offline dictionary for instant translation of common words and story words
+const COMMON_WORDS_DICT: { [key: string]: string } = {
+  // Articles
+  "the": "определенный артикль (не переводится)",
+  "a": "неопределенный артикль",
+  "an": "неопределенный артикль",
+  // Pronouns
+  "i": "я", "me": "мне, меня", "my": "мой, моя, моё", "myself": "себя, сам",
+  "we": "мы", "us": "нам, нас", "our": "наш, наша", "ours": "наш", "ourselves": "мы сами, себя",
+  "you": "ты, вы, тебя, вас", "your": "твой, ваш", "yours": "твой, ваш", "yourself": "себя, сам", "yourselves": "себя, сами",
+  "he": "он", "him": "его, ему", "his": "его", "himself": "себя, сам",
+  "she": "она", "her": "её, ей", "hers": "её", "herself": "себя, сама",
+  "it": "это, оно", "its": "его, её (для неодушевл.)", "itself": "себя, само",
+  "they": "они", "them": "их, им", "their": "их", "theirs": "их", "themselves": "себя, сами",
+  "who": "кто", "whom": "кого, кому", "whose": "чей", "which": "который, какой", "what": "что, какой",
+  "this": "этот, эта, это", "that": "тот, та, то, что", "these": "эти", "those": "те",
+  "some": "некоторые, несколько, какой-то", "any": "любой, какой-нибудь", "no": "нет, никакой",
+  "all": "все, всё, вся", "both": "оба, и то и другое", "each": "каждый", "every": "каждый, всякий",
+  "other": "другой", "others": "другие", "another": "другой, еще один", "such": "такой, подобный",
+  // Prepositions & Conjunctions
+  "and": "и", "or": "или", "but": "но, а, кроме", "if": "если", "because": "потому что",
+  "as": "как, так как, в качестве", "of": "из, о, об (выражает род. падеж)", "to": "к, в, на (направление / перед глаголом)",
+  "for": "для, ради, в течение", "with": "с, вместе с", "without": "без", "about": "о, около, кругом",
+  "against": "против, вопреки", "between": "между", "among": "среди", "through": "сквозь, через",
+  "during": "в течение, во время", "before": "перед, до, раньше", "after": "после, за, через",
+  "above": "над, выше", "below": "внизу, под, ниже", "under": "под, ниже, меньше", "over": "над, через, более",
+  "on": "на, по, в", "at": "у, в, около, за", "in": "в, внутри", "out": "из, наружу, вне",
+  "up": "вверх, по", "down": "вниз, по", "into": "в, внутрь", "off": "от, с, выключено",
+  "away": "прочь, вдали, вон", "from": "от, из, с", "by": "у, около, мимо, к (средство / авторство)",
+  "since": "с тех пор как, поскольку", "until": "до тех пор пока, до", "till": "до",
+  "while": "в то время как, пока, в то время", "so": "так, поэтому, тоже", "than": "чем",
+  // Auxiliary / Common Verbs & Inflections
+  "be": "быть, являться", "am": "есмь, являюсь", "is": "есть, является", "are": "есть, суть, являются",
+  "was": "был, была, было", "were": "были", "been": "был, побывал", "being": "будучи, существо",
+  "have": "иметь, обладать", "has": "имеет", "had": "имел, имела, имели", "having": "имея",
+  "do": "делать, выполнять", "does": "делает", "did": "делал, сделал", "doing": "делающий, процесс", "done": "сделанный",
+  "will": "будет (вспом. глагол будущего времени)", "would": "бы (вспом. глагол сослаг. наклонения)",
+  "shall": "должен (вспом. глагол)", "should": "следует, должен бы",
+  "can": "мочь, уметь", "could": "мог, мог бы, умел", "may": "может (разрешено)", "might": "мог бы (вероятно)",
+  "must": "должен, обязан", "ought": "следует, должен", "dare": "осмеливаться",
+  "go": "идти, ехать", "goes": "идет", "went": "шел, пошел", "gone": "ушедший", "going": "идущий, собирающийся",
+  "see": "видеть", "sees": "видит", "saw": "видел", "seen": "увиденный", "seeing": "видение",
+  "know": "знать", "knows": "знает", "knew": "знал", "known": "известный", "knowing": "знающий",
+  "make": "делать, создавать", "makes": "делает", "made": "сделал, сделанный",
+  "get": "получать, становиться", "gets": "получает", "got": "получил", "gotten": "полученный",
+  "think": "думать", "thinks": "думает", "thought": "думал, мысль",
+  "take": "брать, взять", "takes": "берет", "took": "взял", "taken": "взятый",
+  "come": "приходить, приезжать", "comes": "приходит", "came": "пришел",
+  "give": "давать", "gives": "дает", "gave": "дал", "given": "данный",
+  "find": "находить", "finds": "находит", "found": "нашел, найденный",
+  "say": "сказать, говорить", "says": "говорит", "said": "сказал, сказанный",
+  "tell": "рассказывать, велеть", "tells": "рассказывает", "told": "рассказал",
+  "ask": "спрашивать, просить", "asks": "спрашивает", "asked": "спросил",
+  "show": "показывать", "shows": "показывает", "showed": "показал", "shown": "показанный",
+  "write": "писать", "writes": "пишет", "wrote": "написал", "written": "написанный",
+  "read": "читать", "reads": "читает", "reading": "чтение, читающий",
+  "feel": "чувствовать", "feels": "чувствует", "felt": "чувствовал",
+  "hear": "слышать", "hears": "слышит", "heard": "слышал",
+  "run": "бегать, бежать, течь", "runs": "бежит, течет", "ran": "бежал",
+  "sit": "сидеть", "sits": "сидит", "sat": "сидел",
+  "stand": "стоять", "stands": "стоит", "stood": "стоял",
+  "sleep": "спать", "sleeps": "спит", "slept": "спал",
+  "sing": "петь", "sings": "поет", "sang": "пел", "sung": "спетый",
+  "purr": "мурлыкать", "purrs": "мурлычет", "purred": "мурлыкал",
+  "bark": "лаять", "barks": "лает", "barked": "лаял",
+  "wave": "махать, волна", "waves": "машет, волны", "waved": "махал",
+  "lick": "лизать", "licks": "лижет", "licked": "лизал",
+  "draw": "рисовать, тащить", "draws": "рисует", "drew": "нарисовал", "drawn": "нарисованный",
+  "paint": "рисовать красками", "paints": "рисует", "painted": "нарисовал",
+  "laugh": "смеяться", "laughs": "смеется", "laughed": "смеялся",
+  "cry": "плакать, кричать", "cries": "плачет", "cried": "плакал",
+  "gasp": "ахнуть, вздохнуть", "gasps": "ахает", "gasped": "ахнул, ахнула",
+  "shines": "светит", "shine": "светить", "shone": "светил",
+  "blow": "дуть, дуновение", "blows": "дует", "blew": "дул", "blown": "выдутый",
+  "flow": "течь, течение", "flows": "течет", "flowed": "тек", "flowing": "текущий",
+  "explore": "исследовать", "explores": "исследует", "explored": "исследовал", "exploring": "исследование",
+  "stumble": "спотыкаться, наталкиваться", "stumbles": "спотыкается", "stumbled": "натолкнулся",
+  "whisper": "шептать, шепот", "whispers": "шепчет, шепот", "whispered": "прошептал",
+  "pack": "упаковывать, пачка", "packs": "упаковывает", "packed": "упаковал",
+  "build": "строить", "builds": "строит", "built": "построил, построенный",
+  "buy": "покупать", "buys": "покупает", "bought": "купил, купленный",
+  "catch": "ловить, поймать", "catches": "ловит", "caught": "поймал",
+  "cook": "готовить еду", "cooks": "готовит", "cooked": "приготовил",
+  "clean": "чистить, чистый", "cleans": "чистит", "cleaned": "почистил",
+  "relax": "расслабляться", "relaxes": "расслабляется", "relaxed": "расслабленный",
+  "study": "учиться, изучать", "studies": "изучает", "studied": "изучал",
+  "learn": "учить, узнавать", "learns": "учит", "learned": "выучил, выученный",
+  "teach": "учить, преподавать", "teaches": "преподает", "taught": "научил",
+  "stay": "оставаться", "stays": "остается", "stayed": "остался",
+  "decide": "решать", "decides": "решает", "decided": "решил",
+  "visit": "посещать", "visits": "посещает", "visited": "посетил",
+  "order": "заказывать, порядок", "orders": "заказывает", "ordered": "заказал",
+  "share": "делиться", "shares": "делится", "shared": "поделился",
+  "enjoy": "наслаждаться", "enjoys": "наслаждается", "enjoyed": "наслаждался",
+  "seem": "казаться", "seems": "кажется", "seemed": "казался",
+  "happen": "случаться", "happens": "случается", "happened": "случилось",
+  "look": "смотреть, выглядеть", "looks": "смотрит", "looked": "смотрел",
+  "want": "хотеть", "wants": "хочет", "wanted": "хотел",
+  "like": "нравиться, как, подобно", "likes": "нравится", "liked": "нравился",
+  "love": "любить, любовь", "loves": "любит", "loved": "любил",
+  "open": "открывать, открытый", "opens": "открывает", "opened": "открыл",
+  "walk": "гулять, идти пешком", "walks": "гуляет", "walked": "гулял",
+  "cross": "пересекать, крест", "crosses": "пересекает", "crossed": "пересек",
+  "follow": "следовать, идти за", "follows": "следует", "followed": "следовал",
+  "lead": "вести, руководить", "leads": "ведет", "led": "вел",
+  "return": "возвращаться", "returns": "возвращается", "returned": "вернулся",
+  "enter": "входить", "enters": "входит", "entered": "вошел",
+  "appear": "появляться", "appears": "появляется", "appeared": "появился",
+  "arrived": "прибыл, приехал", "arrive": "прибывать", "arrives": "прибывает",
+  "grows": "растет", "grow": "расти", "grew": "вырос", "grown": "выросший",
+  "choose": "выбирать", "chooses": "выбирает", "chose": "выбрал", "chosen": "выбранный",
+  "fall": "падать, осень", "falls": "падает", "fell": "упал", "fallen": "упавший",
+  "forget": "забывать", "forgets": "забывает", "forgot": "забыл", "forgotten": "забытый",
+  "understand": "понимать", "understands": "понимает", "understood": "понял",
+  "remember": "помнить", "remembers": "помнит", "remembered": "помнил",
+  "live": "жить", "lives": "живет", "lived": "жил", "living": "живущий, жизнь",
+  "work": "работать, работа", "works": "работает", "worked": "работал",
+  "play": "играть, пьеса", "plays": "играет", "played": "играл",
+  "use": "использовать, польза", "uses": "использует", "used": "использовал, привыкший",
+  "help": "помогать, помощь", "helps": "помогает", "helped": "помог",
+  "try": "пытаться, пробовать", "tries": "пытается", "tried": "пытался",
+  "need": "нуждаться, нужно", "needs": "нуждается", "needed": "требовалось",
+  "keep": "хранить, продолжать", "keeps": "хранит", "kept": "хранил",
+  "start": "начинать, старт", "starts": "начинает", "started": "начал",
+  "begin": "начинать", "begins": "начинает", "began": "начал", "begun": "начатый",
+  "end": "заканчивать, конец", "ends": "заканчивается", "ended": "закончился",
+  "leave": "покидать, оставлять", "leaves": "покидает, листья", "left": "оставил, левый",
+  "save": "сохранять, спасать", "saves": "сохраняет", "saved": "сохранил",
+  "change": "менять, изменение, сдача", "changes": "меняет", "changed": "изменил",
+  "meet": "встречать", "meets": "встречает", "met": "встретил",
+  "lose": "терять, проигрывать", "loses": "теряет", "lost": "потерял, потерянный",
+  "win": "побеждать", "wins": "побеждает", "won": "победил",
+  "spend": "тратить, проводить (время)", "spends": "тратит", "spent": "потратил",
+  "wear": "носить (одежду)", "wears": "носит", "wore": "носил", "worn": "ношенный",
+  "wake": "просыпаться", "wakes": "просыпается", "woke": "проснулся", "woken": "проснувшийся",
+  // Adjectives, Nouns & Adverbs (Common Story Words)
+  "again": "снова", "almost": "почти", "already": "уже", "also": "также",
+  "always": "всегда", "enough": "достаточно", "even": "даже", "just": "просто, только что",
+  "maybe": "может быть", "never": "никогда", "not": "не", "now": "сейчас", "often": "часто",
+  "only": "только", "perhaps": "возможно", "probably": "вероятно", "quite": "вполне",
+  "really": "действительно, очень", "seldom": "редко", "sometimes": "иногда", "still": "всё ещё",
+  "then": "тогда, потом", "there": "там, туда", "today": "сегодня", "tomorrow": "завтра",
+  "too": "слишком, также", "usually": "обычно", "very": "очень", "yesterday": "вчера",
+  "yet": "ещё, уже", "well": "хорошо", "fast": "быстро, быстрый", "slow": "медленный",
+  "slowly": "медленно", "gently": "мягко, нежно", "suddenly": "внезапно, вдруг",
+  "peacefully": "мирно", "happily": "счастливо", "softly": "тихо, мягко",
+  "quietly": "тихо, спокойно", "swiftly": "быстро, стремительно",
+  "completely": "полностью", "extremely": "чрезвычайно, крайне",
+  "absolutely": "абсолютно, совершенно", "carefully": "осторожно, внимательно",
+  "scary": "страшный, пугающий", "solitude": "одиночество, уединение",
+  "lighthouse": "маяк", "skeptical": "скептический", "pretext": "предлог, повод",
+  "curiosity": "любопытство", "gaze": "взгляд, пристально смотреть",
+  "profound": "глубокий, основательный", "eagerly": "с нетерпением, жадно",
+  "restoration": "восстановление, реставрация", "aspirations": "стремления, чаяния",
+  "unlocked": "незапертый", "abandoned": "заброшенный", "cottage": "домик, коттедж",
+  "pines": "сосны", "mystery": "тайна, загадка", "compass": "компас", "valley": "долина",
+  "shelter": "убежище, приют", "current": "течение, ток, текущий", "smooth": "гладкий",
+  "village": "деревня", "mountain": "гора", "mountains": "горы", "camp": "лагерь",
+  "campfire": "костер", "millions": "миллионы", "ring": "кольцо", "bench": "скамейка",
+  "wooden": "деревянный", "stone": "каменный, камень", "rabbit": "кролик",
+  "peace": "мир, покой", "baker": "пекарь", "fresh": "свежий", "cute": "милый",
+  "cozy": "уютный", "tail": "хвост", "by the way": "кстати", "genius": "гений",
+  "adventure": "приключение", "adventures": "приключения", "river": "река",
+  "riverbank": "берег реки", "house": "дом", "garden": "сад", "door": "дверь",
+  "plants": "растения", "plant": "растение", "roses": "розы", "rose": "роза",
+  "tree": "дерево", "trees": "деревья", "bird": "птица", "flowers": "цветы",
+  "flower": "цветок", "sun": "солнце", "grass": "трава", "place": "место",
+  "heart": "сердце", "cafe": "кафе", "walls": "стены", "wall": "стена",
+  "lights": "огни, свет", "light": "свет, легкий", "bread": "хлеб",
+  "morning": "утро", "table": "стол", "coffee": "кофе", "cat": "кот, кошка",
+  "people": "люди", "words": "слова", "word": "слово", "notebook": "блокнот",
+  "rain": "дождь", "raining": "идет дождь", "forest": "лес", "wet": "мокрый, влажный",
+  "eyes": "глаза", "eye": "глаз", "bag": "сумка", "sandwich": "бутерброд",
+  "hand": "рука", "hands": "руки", "time": "время", "path": "тропинка, путь",
+  "friend": "друг", "friends": "друзья", "school": "школа", "name": "имя",
+  "class": "класс", "book": "книга", "hours": "часы (время)", "hour": "час",
+  "bridge": "мост", "leaf": "лист", "moment": "момент",
+  "family": "семья", "lake": "озеро", "road": "дорога", "narrow": "узкий",
+  "high": "высокий", "air": "воздух", "cold": "холодный, холод", "hot": "горячий",
+  "water": "вода", "fish": "рыба", "night": "ночь", "sky": "небо", "stars": "звезды",
+  "star": "звезда", "view": "вид", "bed": "кровать", "winter": "зима", "summer": "лето",
+  "autumn": "осень", "spring": "весна", "silver": "серебро, серебряный", "market": "рынок",
+  "special": "особенный", "evening": "вечер", "gloves": "перчатки", "fingers": "пальцы",
+  "finger": "палец", "sad": "грустный", "afternoon": "время после полудня",
+  "snow": "снег", "snowy": "снежный", "ground": "земля", "sparkle": "искра, сверкать",
+  "tiny": "крошечный", "undamaged": "неповрежденный", "town": "город",
+  "bags": "сумки", "plan": "план", "direction": "направление", "dark": "темный",
+  "darker": "темнее", "storm": "шторм, гроза", "passed": "прошел",
+  "landscape": "пейзаж", "colour": "цвет", "pocket": "карман", "joy": "радость",
+  "deep": "глубокий", "woods": "лес, роща", "gift": "дар, подарок",
+  "coastal": "прибрежный", "grey": "серый",
+  "ancient": "древний", "legends": "легенды", "legend": "легенда",
+  "sound": "звук, здоровый", "experience": "опыт, переживание", "story": "история, рассказ",
+  "years": "годы", "year": "год", "entries": "записи", "entry": "запись",
+  "extraordinary": "необычайный, выдающийся", "footsteps": "шаги, топот",
+  "apartment": "квартира", "weight": "вес, тяжесть", "chest": "грудь, сундук",
+  "warmth": "тепло, теплота", "stranger": "незнакомец", "shop": "магазин",
+  "watch": "часы (наручные), смотреть", "workshop": "мастерская", "gears": "шестеренки",
+  "clock": "часы", "dome": "купол", "present": "настоящее, подарок",
+  "sense": "чувство, смысл", "wonder": "чудо, удивляться", "encounter": "встреча",
+  "architecture": "архитектура", "music": "музыка", "expression": "выражение",
+  "exhibition": "выставка", "blueprints": "чертежи",
+  "engineer": "инженер", "unity": "единство", "sunset": "закат",
+  "solstice": "солнцестояние", "reflect": "отражать", "connection": "связь",
+  "spaces": "пространства, космос", "shape": "форма, формировать",
+  "pancakes": "блины", "dinner": "ужин", "lunch": "обед", "breakfast": "завтрак",
+  "comfortable": "комфортный, удобный", "amazing": "чудесный, удивительный",
+  "boring": "скучный", "difficult": "сложный", "tired": "уставший",
+  "exciting": "увлекательный", "funny": "смешной, забавный", "foggy": "туманный",
+  "chilly": "прохладный, зябкий", "happy": "счастливый", "calm": "тихий, спокойный, успокаивать",
+  "safe": "безопасный, сейф", "peaceful": "мирный, спокойный", "friendly": "дружелюбный",
+  "new": "новый", "young": "молодой", "old": "старый", "tall": "высокий",
+  "big": "большой", "small": "маленький", "little": "маленький, немного", "large": "большой, крупный"
+};
+
+// Global client-side translation cache
+const translationCache: { [key: string]: string } = {};
+
 // Helper for local offline dictionary lookup with lemmatization
 function getLocalTranslation(cleanWord: string, userWords: Word[]): string | null {
   const w = cleanWord.toLowerCase().trim();
+
+  // 1. Try extreme speed lookup in our common words dictionary
+  if (COMMON_WORDS_DICT[w]) {
+    return COMMON_WORDS_DICT[w];
+  }
+
   const searchLists = [
     userWords.map(x => ({ en: x.en, ru: x.ru })),
     SEED_WORDS,
@@ -797,16 +1021,17 @@ function getLocalTranslation(cleanWord: string, userWords: Word[]): string | nul
     SEED_IRREGULAR.map(v => ({ en: v.participle, ru: v.ru }))
   ];
 
-  // 1. Try exact match
+  // 2. Try exact match in other lists
   for (const list of searchLists) {
     const found = list.find((x: any) => (x.en || "").toLowerCase() === w);
     if (found) return found.ru;
   }
 
-  // 2. Try inflections
+  // 3. Try inflections
   // Plural/3rd person: -s, -es
   if (w.endsWith("s") && w.length > 2) {
     const stem = w.slice(0, -1);
+    if (COMMON_WORDS_DICT[stem]) return COMMON_WORDS_DICT[stem];
     for (const list of searchLists) {
       const found = list.find((x: any) => (x.en || "").toLowerCase() === stem);
       if (found) return found.ru;
@@ -814,6 +1039,7 @@ function getLocalTranslation(cleanWord: string, userWords: Word[]): string | nul
   }
   if (w.endsWith("es") && w.length > 3) {
     const stem = w.slice(0, -2);
+    if (COMMON_WORDS_DICT[stem]) return COMMON_WORDS_DICT[stem];
     for (const list of searchLists) {
       const found = list.find((x: any) => (x.en || "").toLowerCase() === stem);
       if (found) return found.ru;
@@ -825,6 +1051,7 @@ function getLocalTranslation(cleanWord: string, userWords: Word[]): string | nul
     const stem = w.slice(0, -2);
     const stemD = w.slice(0, -1);
     for (const stemCandidate of [stem, stemD]) {
+      if (COMMON_WORDS_DICT[stemCandidate]) return COMMON_WORDS_DICT[stemCandidate];
       for (const list of searchLists) {
         const found = list.find((x: any) => (x.en || "").toLowerCase() === stemCandidate);
         if (found) return found.ru;
@@ -838,6 +1065,7 @@ function getLocalTranslation(cleanWord: string, userWords: Word[]): string | nul
     const stemE = stem + "e";
     const stemDouble = stem.slice(0, -1); // e.g., running -> run
     for (const stemCandidate of [stem, stemE, stemDouble]) {
+      if (COMMON_WORDS_DICT[stemCandidate]) return COMMON_WORDS_DICT[stemCandidate];
       for (const list of searchLists) {
         const found = list.find((x: any) => (x.en || "").toLowerCase() === stemCandidate);
         if (found) return found.ru;
@@ -867,10 +1095,20 @@ function WordPopup({ word, pos, inDict, onAdd, onClose, words }: {
     setTranslation("");
 
     async function translate() {
-      // Step 1: Check offline local lexicon first
+      // Step 1: Check memory translationCache
+      if (translationCache[word.clean]) {
+        if (active) {
+          setTranslation(translationCache[word.clean]);
+          setLoading(false);
+        }
+        return;
+      }
+
+      // Step 2: Check offline local lexicon
       const localMatch = getLocalTranslation(word.clean, words);
       if (localMatch) {
         if (active) {
+          translationCache[word.clean] = localMatch; // Populate cache
           setTranslation(localMatch);
           setLoading(false);
         }
@@ -878,11 +1116,11 @@ function WordPopup({ word, pos, inDict, onAdd, onClose, words }: {
       }
 
       // Helper to fetch with timeout
-      async function fetchWithTimeout(url: string, timeoutMs = 2500) {
+      async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 3500) {
         const controller = new AbortController();
         const id = setTimeout(() => controller.abort(), timeoutMs);
         try {
-          const response = await fetch(url, { signal: controller.signal });
+          const response = await fetch(url, { ...options, signal: controller.signal });
           clearTimeout(id);
           return response;
         } catch (e) {
@@ -891,13 +1129,34 @@ function WordPopup({ word, pos, inDict, onAdd, onClose, words }: {
         }
       }
 
-      // Step 2: Try MyMemory API with 2.5s timeout
+      // Step 3: Try our backend translation endpoint (uses Gemini + server-side cache)
       try {
-        const r = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word.clean)}&langpair=en|ru`);
+        const r = await fetchWithTimeout(getApiUrl("/api/translate"), {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ word: word.clean })
+        }, 4000);
+        if (r.ok) {
+          const d = await r.json();
+          if (active && d && d.translation) {
+            translationCache[word.clean] = d.translation; // Cache it!
+            setTranslation(d.translation);
+            setLoading(false);
+            return;
+          }
+        }
+      } catch (e) {
+        console.warn("Backend Gemini translation timeout/error", e);
+      }
+
+      // Step 4: Try MyMemory API with 2.5s timeout
+      try {
+        const r = await fetchWithTimeout(`https://api.mymemory.translated.net/get?q=${encodeURIComponent(word.clean)}&langpair=en|ru`, {}, 2500);
         const rText = await r.text();
         const d = rText ? JSON.parse(rText) : null;
         const t = d?.responseData?.translatedText;
         if (active && t && t.toLowerCase() !== word.clean.toLowerCase() && t.length < 100 && !/^[A-Z0-9\s]+$/.test(t)) {
+          translationCache[word.clean] = t; // Cache it!
           setTranslation(t);
           setLoading(false);
           return;
@@ -906,13 +1165,14 @@ function WordPopup({ word, pos, inDict, onAdd, onClose, words }: {
         console.warn("MyMemory translate timeout/error", e);
       }
 
-      // Step 3: Try Lingva Translate fallback API with 2.5s timeout
+      // Step 5: Try Lingva Translate fallback API with 2.5s timeout
       try {
-        const r = await fetchWithTimeout(`https://lingva.ml/api/v1/en/ru/${encodeURIComponent(word.clean)}`);
+        const r = await fetchWithTimeout(`https://lingva.ml/api/v1/en/ru/${encodeURIComponent(word.clean)}`, {}, 2500);
         const rText = await r.text();
         const d = rText ? JSON.parse(rText) : null;
         const t = d?.translation;
         if (active && t && t.toLowerCase() !== word.clean.toLowerCase()) {
+          translationCache[word.clean] = t; // Cache it!
           setTranslation(t);
           setLoading(false);
           return;

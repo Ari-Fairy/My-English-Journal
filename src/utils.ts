@@ -107,25 +107,17 @@ export function getApiUrl(path: string): string {
   return path;
 }
 
-// Получить статус кулдауна на повторение слов
+// Получить статус кулдауна на повторение слов (минимальный интервал отдыха в 20 минут после сессии)
 export function getReviewCooldownStatus(stats: UserProgress) {
   const last = stats.lastReviewSessionTime || 0;
-  const secondLast = stats.secondLastReviewSessionTime || 0;
   const now = Date.now();
-  const cooldownMs = 4 * 3600 * 1000; // 4 часа перерыв
+  const cooldownMs = 20 * 60 * 1000; // Минимальный перерыв в 20 минут
 
-  // Если оба последних сеанса были завершены в пределах последних 4 часов
-  const hasTwoSessions = (now - last < cooldownMs) && (now - secondLast < cooldownMs);
-  if (!hasTwoSessions) {
-    return { active: false, timeLeftMs: 0 };
-  }
-
-  // Кулдаун длится 4 часа с момента завершения второго (последнего) сеанса
   const timeLeftMs = Math.max(0, (last + cooldownMs) - now);
   return { active: timeLeftMs > 0, timeLeftMs };
 }
 
-// Получить эффективный список слов на повторение (с ограничением в 30 и равномерным распределением)
+// Получить эффективный список слов на повторение (максимум 15 слов за сессию с плавным интервалом)
 export function getEffectiveDueWords(words: Word[], stats: UserProgress): { dueWords: Word[]; totalOverdueCount: number } {
   // 1. Фильтруем выученные слова, которые еще не усвоены навсегда (streak < 10)
   const learnedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
@@ -150,22 +142,16 @@ export function getEffectiveDueWords(words: Word[], stats: UserProgress): { dueW
 
   const totalOverdueCount = rawDueWords.length;
 
-  // Если активен перерыв (коулдаун), то доступных слов на повторение сейчас 0
+  // Если активен минимальный 20-минутный перерыв, то доступных слов на повторение сейчас 0
   const cooldown = getReviewCooldownStatus(stats);
   if (cooldown.active) {
     return { dueWords: [], totalOverdueCount };
   }
 
-  // 3. Равномерно распределяем (stagger) слова, если их накопилось много
-  // Первые 30 слов доступны сразу
-  // Слова от 30 до 44 откладываются на 4 часа
-  // Слова от 45 до 59 откладываются на 8 часов и т.д.
-  // Это гарантирует, что пользователь никогда не увидит больше 30 слов одновременно,
-  // а избыток будет плавно распределен в будущее порциями по 15 слов.
-  const effectiveDueWords = rawDueWords.filter((_, index) => {
-    if (index < 30) return true;
-    return false; // Все слова после первых 30 временно скрыты/постпонированы
-  });
+  // 3. Порционируем слова по 15 штук за раз. 
+  // Это гарантирует, что пользователь никогда не увидит гору из 100 слов одновременно,
+  // а сможет комфортно повторить 15 штук и отдохнуть минимум 20 минут.
+  const effectiveDueWords = rawDueWords.slice(0, 15);
 
   return { dueWords: effectiveDueWords, totalOverdueCount };
 }
