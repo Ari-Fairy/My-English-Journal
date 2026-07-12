@@ -43,31 +43,26 @@ app.get("/api/health", (req, res) => {
   res.json({ status: "ok" });
 });
 
-// Server-side Firebase Setup & Background Scheduler
-import { initializeApp as initFirebaseApp } from "firebase/app";
-import { getFirestore as getFirebaseFirestore, collection as getFirebaseCollection, getDocs as getFirebaseDocs, updateDoc as updateFirebaseDoc, doc as getFirebaseDoc, query as queryFirebase, where as whereFirebase } from "firebase/firestore";
+// Server-side Firebase Admin Setup & Background Scheduler
+import { initializeApp, getApps } from "firebase-admin/app";
+import { getFirestore, Firestore } from "firebase-admin/firestore";
 import fs from "fs";
 
 const configPath = path.join(process.cwd(), "firebase-applet-config.json");
-let serverDb: any = null;
+let adminDb: Firestore | null = null;
 
 if (fs.existsSync(configPath)) {
   try {
     const configData = JSON.parse(fs.readFileSync(configPath, "utf-8"));
-    const firebaseConfig = {
-      apiKey: process.env.VITE_FIREBASE_API_KEY || configData.apiKey,
-      authDomain: process.env.VITE_FIREBASE_AUTH_DOMAIN || configData.authDomain,
-      projectId: process.env.VITE_FIREBASE_PROJECT_ID || configData.projectId,
-      storageBucket: process.env.VITE_FIREBASE_STORAGE_BUCKET || configData.storageBucket,
-      messagingSenderId: process.env.VITE_FIREBASE_MESSAGING_SENDER_ID || configData.messagingSenderId,
-      appId: process.env.VITE_FIREBASE_APP_ID || configData.appId,
-      measurementId: process.env.VITE_FIREBASE_MEASUREMENT_ID || configData.measurementId,
-    };
-    const firebaseApp = initFirebaseApp(firebaseConfig, "server-instance");
-    serverDb = getFirebaseFirestore(firebaseApp);
-    console.log("Firebase initialized on server for background scheduling.");
+    if (getApps().length === 0) {
+      initializeApp({
+        projectId: process.env.VITE_FIREBASE_PROJECT_ID || configData.projectId,
+      });
+    }
+    adminDb = getFirestore();
+    console.log("Firebase Admin SDK initialized successfully on server for background scheduling.");
   } catch (err) {
-    console.error("Failed to initialize Firebase on server:", err);
+    console.error("Failed to initialize Firebase Admin SDK on server:", err);
   }
 }
 
@@ -98,15 +93,13 @@ function getServerDueWords(words: any[]): any[] {
 // Scheduled email sending implementation
 async function sendScheduledEmailHelper(email: string, userId: string, hour: number, offset: number): Promise<boolean> {
   try {
-    if (!serverDb) return false;
+    if (!adminDb) return false;
     
-    // Fetch user's actual words
-    const wordsCol = getFirebaseCollection(serverDb, "words");
-    const q = queryFirebase(wordsCol, whereFirebase("userId", "==", userId));
-    const wordsSnap = await getFirebaseDocs(q);
+    // Fetch user's actual words using Admin SDK
+    const wordsSnap = await adminDb.collection("words").where("userId", "==", userId).get();
     const words: any[] = [];
-    wordsSnap.forEach(snap => {
-      words.push(snap.data());
+    wordsSnap.forEach(doc => {
+      words.push(doc.data());
     });
     
     const dueWords = getServerDueWords(words);
@@ -214,12 +207,10 @@ async function sendScheduledEmailHelper(email: string, userId: string, hour: num
 
 // Background scheduler function to check for scheduled reminder emails
 async function checkAndSendScheduledEmails() {
-  if (!serverDb) return;
+  if (!adminDb) return;
   console.log("[Scheduler] Checking for scheduled reminder emails...");
   try {
-    const usersCol = getFirebaseCollection(serverDb, "users");
-    const q = queryFirebase(usersCol, whereFirebase("emailNotifEnabled", "==", true));
-    const snapshot = await getFirebaseDocs(q);
+    const snapshot = await adminDb.collection("users").where("emailNotifEnabled", "==", true).get();
     
     const nowUtc = Date.now();
     
@@ -243,7 +234,7 @@ async function checkAndSendScheduledEmails() {
         
         const sent = await sendScheduledEmailHelper(email, userData.userId, targetHour, offset);
         if (sent) {
-          await updateFirebaseDoc(getFirebaseDoc(serverDb, "users", userDoc.id), {
+          await adminDb.collection("users").doc(userDoc.id).update({
             lastEmailSentDate: currentLocalDate
           });
           console.log(`[Scheduler] Successfully updated lastEmailSentDate for ${email} to ${currentLocalDate}`);
