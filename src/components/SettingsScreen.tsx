@@ -345,7 +345,7 @@ export default function SettingsScreen({
 
       {/* Daily word limit Settings */}
       <div className="card" style={{ marginBottom: 12 }}>
-        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📖 Дневной лимит слов</h3>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📖 Дневной лимит новых слов</h3>
         <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 12 }}>
           Выберите количество новых слов, которые вы хотите учить каждый день во время занятий.
         </p>
@@ -368,6 +368,41 @@ export default function SettingsScreen({
                   onSaveProgress({
                     ...stats,
                     dailyWordsLimit: val
+                  });
+                }}
+              >
+                {val}
+              </button>
+            );
+          })}
+        </div>
+      </div>
+
+      {/* Session repetition limit Settings */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>🔄 Лимит слов на сессию повторения</h3>
+        <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 12 }}>
+          Выберите максимальное количество слов, которое вы хотите повторять за одну сессию. Лишние слова подождут в очереди.
+        </p>
+        <div style={{ display: "flex", gap: 8 }}>
+          {[10, 15, 30, 50].map(val => {
+            const isSelected = (stats.sessionReviewLimit ?? 15) === val;
+            return (
+              <button
+                key={val}
+                className={`btn ${isSelected ? "btn-primary" : "btn-outline"}`}
+                style={{ 
+                  flex: 1, 
+                  padding: "10px 0", 
+                  fontSize: 13, 
+                  fontWeight: 600,
+                  borderColor: isSelected ? "var(--sage)" : "var(--border)",
+                  color: isSelected ? "#fff" : "var(--text)"
+                }}
+                onClick={() => {
+                  onSaveProgress({
+                    ...stats,
+                    sessionReviewLimit: val
                   });
                 }}
               >

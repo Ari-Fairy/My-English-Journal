@@ -1,11 +1,11 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Word, UserProgress } from "../types";
-import { speak, getLocalDateString, getEffectiveDueWords } from "../utils";
+import { speak, getLocalDateString, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
 
 interface StudyScreenProps {
   words: Word[];
   stats: UserProgress;
-  sessionType: "learn" | "review";
+  sessionType: "learn" | "review" | "mandatory";
   onSaveWord: (word: Word) => void;
   onSaveProgress: (stats: UserProgress) => void;
   onExit: () => void;
@@ -278,19 +278,16 @@ export default function StudyScreen({
   }, [cur?.id, mode, stage]);
 
   const getNextReviewTimeMs = (w: Word) => {
-    if (!w.learned) return Infinity;
-    if (w.streak >= 10) return Infinity; // Полностью усвоено навсегда - больше не повторяем!
-    const now = Date.now();
-    const learnedAt = w.learnedDate ? new Date(w.learnedDate).getTime() : now;
-    const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : learnedAt;
-    const iv = [0.33, 1, 4, 12, 24, 48, 96, 168, 336]; 
-    const hours = iv[Math.min(Math.max((w.streak || 1) - 1, 0), iv.length - 1)] || 24;
-    const due = lastRev + (hours * 3600 * 1000);
-    return Math.max(0, due - now);
+    const dueTime = getWordNextReviewTimeMs(w);
+    if (dueTime === Infinity) return Infinity;
+    return Math.max(0, dueTime - Date.now());
   };
 
   const getPool = () => {
     if (sessionType === "learn") return words.filter(w => !w.learned);
+    if (sessionType === "mandatory") {
+      return words.filter(w => w.learned && w.isMandatoryEndOfDay);
+    }
     if (sessionType === "review") {
       return getEffectiveDueWords(words, stats).dueWords;
     }
@@ -340,16 +337,43 @@ export default function StudyScreen({
 
     const today = getLocalDateString();
     const nowIso = new Date().toISOString();
+    const nowMs = Date.now();
 
     if (!correct) {
       setWrongIds(prev => prev.includes(cur.id) ? prev : [...prev, cur.id]);
       setSessionMistakes(prev => prev.includes(cur.id) ? prev : [...prev, cur.id]);
 
+      // Calculate consecutive errors and spacing rules on error
+      const currentConsecErrors = (cur.consecutiveErrors || 0) + 1;
+      const isProblematic = currentConsecErrors >= 2;
+      const isMandatoryEndOfDay = currentConsecErrors >= 3;
+
+      let intervalMin = 15; // default fallback
+      const prevInterval = cur.intervalMinutes || 240;
+
+      if (prevInterval >= 1440) {
+        // Daily intervals fall back 1 step
+        if (prevInterval === 10080) intervalMin = 4320;      // 7 days -> 3 days
+        else if (prevInterval === 4320) intervalMin = 1440;  // 3 days -> 24 hours
+        else if (prevInterval === 1440) intervalMin = 240;   // 24 hours -> 4 hours
+      } else {
+        // Sub-daily intervals (< 1440) fall back to 15 mins
+        intervalMin = 15;
+      }
+
+      const nextReviewDate = new Date(nowMs + intervalMin * 60 * 1000).toISOString();
+
       const updatedWord: Word = {
         ...cur,
         wrong: cur.wrong + 1,
         streak: 0,
-        lastReviewed: nowIso
+        lastReviewed: nowIso,
+        intervalMinutes: intervalMin,
+        consecutiveErrors: currentConsecErrors,
+        isProblematic,
+        isMandatoryEndOfDay,
+        nextReviewDate,
+        learned: true
       };
       onSaveWord(updatedWord);
 
@@ -362,17 +386,39 @@ export default function StudyScreen({
 
     } else {
       // Correct answer
-      const wasWrongAtLeastOnce = sessionMistakes.includes(cur.id);
+      const isNewWord = !cur.learned || !cur.lastReviewed;
+      let intervalMin = 240; // Default fallback (4 hours)
       let newStreak = cur.streak;
-      if (wasWrongAtLeastOnce) {
-        newStreak = 1; // 20 minutes interval
+
+      if (isNewWord) {
+        // New word answered correctly: interval gets 4 hours (240 min)
+        intervalMin = 240;
+        newStreak = 3; // Equivalent to level 2 (4 hours)
       } else {
-        if (!cur.learned) {
-          newStreak = 2; // 1 hour interval
-        } else {
-          newStreak = Math.max(2, cur.streak + 1); // increment streak for subsequent repetitions
+        // Advance interval level
+        const prevInterval = cur.intervalMinutes || 240;
+        if (prevInterval === 15) {
+          intervalMin = 60; // 15 mins -> 1 hour
+          newStreak = 1;
+        } else if (prevInterval === 60) {
+          intervalMin = 240; // 1 hour -> 4 hours
+          newStreak = 2;
+        } else if (prevInterval === 240) {
+          intervalMin = 1440; // 4 hours -> 24 hours (1 day)
+          newStreak = 3;
+        } else if (prevInterval === 1440) {
+          intervalMin = 4320; // 24 hours -> 3 days
+          newStreak = 4;
+        } else if (prevInterval === 4320) {
+          intervalMin = 10080; // 3 days -> 7 days (maximum)
+          newStreak = 5;
+        } else if (prevInterval >= 10080) {
+          intervalMin = 10080; // stays at 7 days
+          newStreak = Math.max(5, (cur.streak || 5) + 1);
         }
       }
+
+      const nextReviewDate = new Date(nowMs + intervalMin * 60 * 1000).toISOString();
 
       const updatedWord: Word = {
         ...cur,
@@ -380,7 +426,12 @@ export default function StudyScreen({
         streak: newStreak,
         learned: true,
         learnedDate: cur.learnedDate || today,
-        lastReviewed: nowIso
+        lastReviewed: nowIso,
+        intervalMinutes: intervalMin,
+        consecutiveErrors: 0, // Reset errors on success
+        isProblematic: false,
+        isMandatoryEndOfDay: false,
+        nextReviewDate
       };
       onSaveWord(updatedWord);
 

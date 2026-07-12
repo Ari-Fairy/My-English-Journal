@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Word, UserProgress } from "../types";
-import { getLocalDateString, getCurrentWeekKey, getReviewCooldownStatus, getEffectiveDueWords } from "../utils";
+import { getLocalDateString, getCurrentWeekKey, getReviewCooldownStatus, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
 
 const getWeeklyPreset = (weekKey: string) => {
   let hash = 0;
@@ -51,11 +51,14 @@ interface HomePageProps {
   words: Word[];
   stats: UserProgress;
   onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings") => void;
-  onStartStudy: (sessionType: "learn" | "review") => void;
+  onStartStudy: (sessionType: "learn" | "review" | "mandatory") => void;
+  onSaveWord: (word: Word) => void;
+  onSaveProgress: (stats: UserProgress) => void;
 }
 
-export default function HomePage({ words, stats, onNavigate, onStartStudy }: HomePageProps) {
+export default function HomePage({ words, stats, onNavigate, onStartStudy, onSaveWord, onSaveProgress }: HomePageProps) {
   const [recallInfo, setRecallInfo] = useState(false);
+  const [isSpreading, setIsSpreading] = useState(false);
 
   const learnedCount = words.filter(w => w.learned).length;
   const today = getLocalDateString();
@@ -80,15 +83,9 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
   }, 0);
 
   const getNextReviewTimeMs = (w: Word) => {
-    if (!w.learned) return Infinity;
-    if (w.streak >= 10) return Infinity; // Полностью усвоено навсегда - больше не повторяем!
-    const now = Date.now();
-    const learnedAt = w.learnedDate ? new Date(w.learnedDate).getTime() : now;
-    const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : learnedAt;
-    const iv = [0.33, 1, 4, 12, 24, 48, 96, 168, 336]; 
-    const hours = iv[Math.min(Math.max((w.streak || 1) - 1, 0), iv.length - 1)] || 24;
-    const due = lastRev + (hours * 3600 * 1000);
-    return Math.max(0, due - now);
+    const dueTime = getWordNextReviewTimeMs(w);
+    if (dueTime === Infinity) return Infinity;
+    return Math.max(0, dueTime - Date.now());
   };
 
   const formatTimeLeft = (ms: number) => {
@@ -104,19 +101,49 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
   };
 
   const cooldownStatus = getReviewCooldownStatus(stats);
-  const { dueWords: reviewWords, totalOverdueCount } = getEffectiveDueWords(words, stats);
+  const { dueWords: reviewWords, totalOverdueCount, allDueWordsSorted } = getEffectiveDueWords(words, stats);
+  
+  // Find any urgent 15-minute words that are waiting for their cooldown to expire
+  const urgentWaiting = words.filter(w => w.learned && w.intervalMinutes === 15 && getNextReviewTimeMs(w) > 0);
+  const earliestUrgent = urgentWaiting.sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b))[0];
+
+  // Find mandatory end-of-day repetitions
+  const mandatoryEndOfDayWords = words.filter(w => w.learned && w.isMandatoryEndOfDay);
+
+  const handleSpreadSurplus = () => {
+    if (totalOverdueCount <= 50 || isSpreading) return;
+    const ok = confirm(`Очередь переполнена (${totalOverdueCount} слов)! Вы хотите автоматически распределить излишек (все слова после первых 30) равномерно на следующие 1-3 дня?`);
+    if (!ok) return;
+
+    setIsSpreading(true);
+    try {
+      // Оставляем топ-30 слов, остальные распределяем на 1-3 дня вперед
+      const surplus = allDueWordsSorted.slice(30);
+      surplus.forEach(w => {
+        const pushDays = Math.floor(Math.random() * 3) + 1;
+        const newReviewTime = Date.now() + pushDays * 24 * 3600 * 1000;
+        const updated: Word = {
+          ...w,
+          nextReviewDate: new Date(newReviewTime).toISOString(),
+          consecutiveErrors: 0,
+          isProblematic: false
+        };
+        onSaveWord(updated);
+      });
+      alert(`🎉 Успешно распределено ${surplus.length} слов излишка на следующие 1-3 дня!`);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setIsSpreading(false);
+    }
+  };
+
   const upcoming = learnedCount > 0 && reviewWords.length === 0 
     ? words.filter(w => w.learned && getNextReviewTimeMs(w) > 0).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b))[0] 
     : null;
 
   const getUnifiedNextReviewTimeMs = () => {
-    // 1. Check if we are still within the 20-minute cooldown from the last session
-    const lastSession = stats.lastReviewSessionTime || 0;
-    const now = Date.now();
-    const cooldownMs = 20 * 60 * 1000;
-    const timeSinceLastSession = now - lastSession;
-    
-    // 2. Find standard next review time for any uncompleted learned words
+    // Find standard next review time for any uncompleted learned words
     const uncompletedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
     if (uncompletedWords.length === 0) return null;
     
@@ -124,12 +151,6 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
     const minStandardMs = Math.min(...standardNextReviewTimes);
     
     if (minStandardMs === Infinity || isNaN(minStandardMs)) return null;
-    
-    if (timeSinceLastSession < cooldownMs) {
-      // Return the remainder of the 20-minute cooldown
-      return cooldownMs - timeSinceLastSession;
-    }
-    
     return minStandardMs;
   };
   
@@ -210,14 +231,14 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
             alignItems: "center", 
             borderRadius: "1.5rem", 
             fontSize: 15,
-            background: cooldownStatus.active ? "var(--border)" : "var(--sage)",
-            color: cooldownStatus.active ? "var(--muted)" : "#fff",
-            boxShadow: cooldownStatus.active ? "none" : "0 4px 12px rgba(148,161,135,.2)",
+            background: "var(--sage)",
+            color: "#fff",
+            boxShadow: "0 4px 12px rgba(148,161,135,.2)",
             border: "none",
             cursor: "pointer"
           }}
           onClick={() => {
-            if (reviewWords.length > 0 && !cooldownStatus.active) {
+            if (reviewWords.length > 0) {
               onStartStudy("review");
             } else {
               setRecallInfo(r => !r);
@@ -225,48 +246,34 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
           }}
         >
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: cooldownStatus.active ? "var(--muted)" : "#fff", fontWeight: 600 }}>
-              {cooldownStatus.active ? "Recall ⏳ Перерыв" : reviewWords.length > 0 ? "Recall ✨" : "Recall"}
+            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
+              {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
             </div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: cooldownStatus.active ? "var(--muted)" : "#eee" }}>
+            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
               {learnedCount === 0 
                 ? "Сначала выучи слова 📚" 
-                : cooldownStatus.active 
-                  ? `Доступно через ${formatTimeLeft(cooldownStatus.timeLeftMs)}${totalOverdueCount > 0 ? ` · ${totalOverdueCount} в очереди` : ""}`
-                  : reviewWords.length > 0 
-                    ? totalOverdueCount > reviewWords.length
-                      ? `${reviewWords.length} слов доступны (всего ${totalOverdueCount}) ⚡`
-                      : `${reviewWords.length} слов ждут повторения` 
-                    : `Все ${learnedCount} слов повторены! См. график 📅`
+                : reviewWords.length > 0 
+                  ? totalOverdueCount > reviewWords.length
+                    ? `${reviewWords.length} слов доступны (всего ${totalOverdueCount}) ⚡`
+                    : `${reviewWords.length} слов ждут повторения` 
+                  : `Все ${learnedCount} слов повторены! См. график 📅`
               }
             </div>
           </div>
-          <span style={{ fontSize: 22, opacity: .9, color: cooldownStatus.active ? "var(--muted)" : "#fff" }}>
-            {cooldownStatus.active ? "⏳" : "↺"}
+          <span style={{ fontSize: 22, opacity: .9, color: "#fff" }}>
+            ↺
           </span>
         </button>
 
         {recallInfo && (
           <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
             <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>
-              {learnedCount === 0 ? "📝 Как начать повторение" : cooldownStatus.active ? "🧠 Время для отдыха" : "📅 Расписание повторений"}
+              {learnedCount === 0 ? "📝 Как начать повторение" : "📅 Расписание повторений"}
             </div>
             {learnedCount === 0 ? (
               <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: 0 }}>
                 У вас пока нет выученных слов. Нажмите на кнопку <strong>Study</strong> выше или добавьте слова в разделе <strong>Dictionary</strong>, чтобы начать обучение! 🚀
               </p>
-            ) : cooldownStatus.active ? (
-              <div>
-                <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0" }}>
-                  Мы убрали длинный 4-часовой перерыв и внедрили систему умных микро-порций! Теперь слова подаются небольшими группами максимум по 15 штук с минимальным интервалом отдыха 20 минут. Это позволяет комфортно повторять язык без перегрузки и предотвращает накопление огромной очереди.
-                </p>
-                <div style={{ marginTop: 14, padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", textAlign: "center" }}>
-                  <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Минимальный перерыв</div>
-                  <div style={{ fontSize: 20, fontWeight: 700, color: "var(--rose)", marginTop: 4 }}>
-                    ⏳ {formatTimeLeft(cooldownStatus.timeLeftMs)}
-                  </div>
-                </div>
-              </div>
             ) : reviewWords.length > 0 ? (
               <div>
                 <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0 0 10px 0" }}>
@@ -274,7 +281,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
                 </p>
                 {totalOverdueCount > reviewWords.length && (
                   <p style={{ color: "var(--muted)", lineHeight: 1.4, margin: 0, fontSize: 12 }}>
-                    💡 Всего слов на повторение в очереди: {totalOverdueCount}. Текущая порция ограничена до 15 слов, чтобы избежать переутомления.
+                    💡 Всего слов на повторение в очереди: {totalOverdueCount}. Текущая порция ограничена до {reviewWords.length} слов, чтобы избежать переутомления.
                   </p>
                 )}
               </div>
@@ -289,9 +296,6 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
                     <div style={{ fontSize: 20, fontWeight: 700, color: "var(--sage)", marginTop: 4 }}>
                       🕒 {formatTimeLeft(unifiedNextMs)}
                     </div>
-                    <div style={{ fontSize: 11, color: "var(--muted)", marginTop: 6 }}>
-                      (системные тайминги оптимизированы, минимальный интервал — 20 минут)
-                    </div>
                   </div>
                 )}
               </div>
@@ -299,6 +303,77 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy }: Hom
           </div>
         )}
       </div>
+
+      {/* ⚠️ Очередь повторения переполнена */}
+      {totalOverdueCount > 50 && (
+        <div className="card fade-in" style={{ 
+          marginBottom: 20, 
+          padding: 16, 
+          background: "rgba(181, 93, 76, 0.08)", 
+          border: "1.5px solid rgba(181, 93, 76, 0.25)",
+          borderRadius: "1.5rem"
+        }}>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 6px 0", fontSize: 15, color: "var(--rose)", fontWeight: 600 }}>
+            ⚠️ Очередь переполнена! ({totalOverdueCount} слов из 50)
+          </h3>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4, margin: "0 0 12px 0" }}>
+            В вашей очереди повторения скопилось слишком много слов. Рекомендуем разгрузить её, распределив излишек на ближайшие дни, чтобы заниматься комфортно.
+          </p>
+          <button 
+            className="btn btn-outline" 
+            style={{ width: "100%", padding: 10, fontSize: 13, borderColor: "rgba(181, 93, 76, 0.3)", color: "var(--rose)" }}
+            onClick={handleSpreadSurplus}
+            disabled={isSpreading}
+          >
+            {isSpreading ? "⏳ Распределение..." : "🔄 Распределить излишек на 1-3 дня"}
+          </button>
+        </div>
+      )}
+
+      {/* ⏳ Срочное повторение (15-минутный интервал) */}
+      {earliestUrgent && reviewWords.length === 0 && (
+        <div className="card fade-in" style={{ 
+          marginBottom: 20, 
+          padding: "12px 14px", 
+          border: "1px dashed var(--border)",
+          borderRadius: "1rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center"
+        }}>
+          <div style={{ fontSize: 12, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6 }}>
+            <span>⏳</span> Ближайшее срочное повторение:
+          </div>
+          <div style={{ fontSize: 13, fontWeight: 600, color: "var(--warm)" }}>
+            {formatTimeLeft(getNextReviewTimeMs(earliestUrgent))} (всего: {urgentWaiting.length})
+          </div>
+        </div>
+      )}
+
+      {/* 🔴 Обязательное повторение в конце дня */}
+      {mandatoryEndOfDayWords.length > 0 && (
+        <div className="card fade-in" style={{ 
+          marginBottom: 20, 
+          padding: 16, 
+          background: "rgba(124, 139, 114, 0.06)", 
+          border: "1.5px solid rgba(124, 139, 114, 0.2)",
+          borderRadius: "1.5rem"
+        }}>
+          <h3 style={{ display: "flex", alignItems: "center", gap: 8, margin: "0 0 6px 0", fontSize: 15, color: "var(--sage)", fontWeight: 600 }}>
+            🔴 Обязательное повторение в конце дня ({mandatoryEndOfDayWords.length} слов)
+          </h3>
+          <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4, margin: "0 0 12px 0" }}>
+            Это слова, на которых вы споткнулись 3 или более раз за сегодняшнюю сессию. Закрепите их перед сном, чтобы они перешли в долгосрочную память!
+          </p>
+          <button 
+            className="btn btn-primary" 
+            style={{ width: "100%", padding: 12, fontSize: 13, background: "var(--rose)", border: "none", color: "#fff" }}
+            onClick={() => onStartStudy("mandatory")}
+          >
+            🚀 Повторить сложные слова ({mandatoryEndOfDayWords.length}) →
+          </button>
+        </div>
+      )}
 
       {/* 🎯 Мои цели и привычки */}
       <div className="card" style={{ marginBottom: 20, padding: "16px 18px", border: "1px solid var(--border)" }}>

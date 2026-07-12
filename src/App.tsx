@@ -32,7 +32,7 @@ export default function App() {
   const [authLoading, setAuthLoading] = useState(true);
   const [dbLoading, setDbLoading] = useState(false);
   const [view, setView] = useState<"home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings">("home");
-  const [sessionType, setSessionType] = useState<"learn" | "review">("learn");
+  const [sessionType, setSessionType] = useState<"learn" | "review" | "mandatory">("learn");
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     return (localStorage.getItem("my-eng-theme") as "light" | "dark") || "light";
@@ -885,6 +885,8 @@ export default function App() {
             setSessionType(type);
             setView("study");
           }} 
+          onSaveWord={handleSaveWord}
+          onSaveProgress={handleSaveProgress}
         />
       )}
 

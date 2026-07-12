@@ -107,53 +107,96 @@ export function getApiUrl(path: string): string {
   return path;
 }
 
-// Получить статус кулдауна на повторение слов (минимальный интервал отдыха в 20 минут после сессии)
+// Получить статус кулдауна на повторение слов (минимальный интервал отдыха в 20 минут после сессии) - ОТКЛЮЧЕН
 export function getReviewCooldownStatus(stats: UserProgress) {
-  const last = stats.lastReviewSessionTime || 0;
-  const now = Date.now();
-  const cooldownMs = 20 * 60 * 1000; // Минимальный перерыв в 20 минут
-
-  const timeLeftMs = Math.max(0, (last + cooldownMs) - now);
-  return { active: timeLeftMs > 0, timeLeftMs };
+  return { active: false, timeLeftMs: 0 };
 }
 
-// Получить эффективный список слов на повторение (максимум 15 слов за сессию с плавным интервалом)
-export function getEffectiveDueWords(words: Word[], stats: UserProgress): { dueWords: Word[]; totalOverdueCount: number } {
+// Получить время следующего повторения слова в ms
+export function getWordNextReviewTimeMs(w: Word): number {
+  if (!w.learned) return Infinity;
+  if (w.nextReviewDate) {
+    return new Date(w.nextReviewDate).getTime();
+  }
+  const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : (w.learnedDate ? new Date(w.learnedDate).getTime() : Date.now());
+  const intervalMin = w.intervalMinutes || 240; // по умолчанию 4 часа
+  return lastRev + intervalMin * 60 * 1000;
+}
+
+// Получить эффективный список слов на повторение (максимум за сессию с плавным интервалом)
+export function getEffectiveDueWords(words: Word[], stats: UserProgress): { 
+  dueWords: Word[]; 
+  totalOverdueCount: number;
+  allDueWordsSorted: Word[];
+} {
+  const now = Date.now();
+
   // 1. Фильтруем выученные слова, которые еще не усвоены навсегда (streak < 10)
   const learnedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
 
-  // Вспомогательная функция для получения времени следующего стандартного повторения
-  const getStandardDueTimeMs = (w: Word) => {
-    const learnedAt = w.learnedDate ? new Date(w.learnedDate).getTime() : Date.now();
-    const lastRev = w.lastReviewed ? new Date(w.lastReviewed).getTime() : learnedAt;
-    // Интервалы в часах: 20мин, 1ч, 4ч, 12ч, 24ч (1д), 48ч (2д), 96ч (4д), 168ч (7д), 336ч (14д)
-    const iv = [0.33, 1, 4, 12, 24, 48, 96, 168, 336];
-    const hours = iv[Math.min(Math.max((w.streak || 1) - 1, 0), iv.length - 1)] || 24;
-    return lastRev + (hours * 3600 * 1000);
+  // 2. Применяем правило автоматического сокращения интервала для слов, провисевших в очереди > 24 часов
+  const processedWords = learnedWords.map(w => {
+    const dueTimeMs = getWordNextReviewTimeMs(w);
+    const overdueMs = now - dueTimeMs;
+    const oneDayMs = 24 * 60 * 60 * 1000;
+
+    if (overdueMs > oneDayMs && w.intervalMinutes) {
+      let newInterval = w.intervalMinutes;
+      if (w.intervalMinutes === 10080) { // 7 дней -> 3 дня
+        newInterval = 4320;
+      } else if (w.intervalMinutes === 4320) { // 3 дня -> 24 часа
+        newInterval = 1440;
+      } else if (w.intervalMinutes === 1440) { // 24 часа -> 4 часа
+        newInterval = 240;
+      }
+
+      if (newInterval !== w.intervalMinutes) {
+        return {
+          ...w,
+          intervalMinutes: newInterval,
+          nextReviewDate: new Date(now).toISOString(), // становится доступно прямо сейчас
+          lastReviewed: new Date(now - newInterval * 60 * 1000).toISOString()
+        };
+      }
+    }
+    return w;
+  });
+
+  // 3. Отбираем слова, готовые к повторению
+  const dueWordsPool = processedWords.filter(w => getWordNextReviewTimeMs(w) <= now);
+
+  // 4. Приоритетное ранжирование
+  // Приоритет всегда у слов с самым коротким интервалом и с самым большим количеством ошибок.
+  // Проблемные слова (isProblematic) попадают первыми.
+  const getPriorityScore = (w: Word): number => {
+    let score = 0;
+    if (w.isProblematic) score += 50000;
+    if (w.isMandatoryEndOfDay) score += 30000;
+    score += (w.consecutiveErrors || 0) * 10000;
+    
+    // Короткие интервалы имеют наивысший приоритет
+    const interval = w.intervalMinutes || 240;
+    score += (100000 / interval); 
+    
+    // Больше ошибок -> выше приоритет
+    score += w.wrong * 100;
+    return score;
   };
 
-  const now = Date.now();
-
-  // 2. Находим слова, у которых подошло время повторения по стандартной схеме
-  const rawDueWords = learnedWords
-    .filter(w => getStandardDueTimeMs(w) <= now)
-    // Сортируем: сначала самые просроченные
-    .sort((a, b) => getStandardDueTimeMs(a) - getStandardDueTimeMs(b));
-
-  const totalOverdueCount = rawDueWords.length;
+  const allDueWordsSorted = [...dueWordsPool].sort((a, b) => getPriorityScore(b) - getPriorityScore(a));
+  const totalOverdueCount = allDueWordsSorted.length;
 
   // Если активен минимальный 20-минутный перерыв, то доступных слов на повторение сейчас 0
   const cooldown = getReviewCooldownStatus(stats);
   if (cooldown.active) {
-    return { dueWords: [], totalOverdueCount };
+    return { dueWords: [], totalOverdueCount, allDueWordsSorted };
   }
 
-  // 3. Порционируем слова по 15 штук за раз. 
-  // Это гарантирует, что пользователь никогда не увидит гору из 100 слов одновременно,
-  // а сможет комфортно повторить 15 штук и отдохнуть минимум 20 минут.
-  const effectiveDueWords = rawDueWords.slice(0, 15);
+  // 5. Ограничение на размер сессии
+  const limit = stats.sessionReviewLimit || stats.dailyWordsLimit || 15;
+  const dueWords = allDueWordsSorted.slice(0, limit);
 
-  return { dueWords: effectiveDueWords, totalOverdueCount };
+  return { dueWords, totalOverdueCount, allDueWordsSorted };
 }
 
 

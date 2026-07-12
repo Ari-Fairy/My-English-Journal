@@ -13,6 +13,12 @@ export interface Word {
   wrong: number;
   streak: number;
   created: string;
+  // Spaced repetition fields
+  intervalMinutes?: number; // 15, 60, 240, 1440, 4320, 10080
+  consecutiveErrors?: number; // consecutive errors within a single day
+  isProblematic?: boolean; // marked if consecutiveErrors >= 2
+  isMandatoryEndOfDay?: boolean; // marked if consecutiveErrors >= 3 (for end-of-day lists)
+  nextReviewDate?: string; // ISO string for the next repetition time
 }
 
 export interface IrregularVerb {
@@ -58,6 +64,7 @@ export interface UserProgress {
   emailNotifOffset?: number;
   email?: string;
   dailyWordsLimit?: number;
+  sessionReviewLimit?: number;
   lastReviewSessionTime?: number;
   secondLastReviewSessionTime?: number;
 }
