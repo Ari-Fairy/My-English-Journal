@@ -46,30 +46,141 @@ app.get("/api/health", (req, res) => {
 // Server-side translation memory cache
 const translationMemoryCache = new Map<string, string>();
 
+// Helper to pause execution
+const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+
+// Helper for generating content with retry and fallback model
+async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string } = {}): Promise<any> {
+  const { maxRetries = 3, fallbackModel = "gemini-3.1-flash-lite" } = options;
+  const ai = getAIClient();
+  let lastError: any = null;
+  let currentDelay = 500;
+
+  // Try with the requested model (or default)
+  const initialModel = params.model || "gemini-3.5-flash";
+  let currentModel = initialModel;
+
+  for (let attempt = 1; attempt <= maxRetries; attempt++) {
+    try {
+      console.log(`[Gemini API] Attempt ${attempt} using model "${currentModel}"`);
+      const response = await ai.models.generateContent({
+        ...params,
+        model: currentModel
+      });
+      return response;
+    } catch (error: any) {
+      lastError = error;
+      const errMsg = error?.message || String(error);
+      const isTransient = errMsg.includes("503") || 
+                        errMsg.includes("UNAVAILABLE") || 
+                        errMsg.includes("demand") || 
+                        errMsg.includes("Resource exhausted") || 
+                        errMsg.includes("429");
+
+      console.warn(`[Gemini API Warning] Attempt ${attempt} failed with error: ${errMsg}`);
+
+      if (!isTransient) {
+        break; // If not a transient error, don't wait/retry, fail immediately
+      }
+
+      // If the primary model failed due to high demand/rate limits, immediately switch to the fallback model
+      if (fallbackModel && currentModel !== fallbackModel) {
+        console.log(`[Gemini API] Primary model "${currentModel}" failed with a transient error. Seamlessly switching to highly-available fallback model "${fallbackModel}"...`);
+        currentModel = fallbackModel;
+        currentDelay = 200; // Fast retry with fallback model
+      }
+
+      if (attempt === maxRetries) {
+        break;
+      }
+
+      console.log(`[Gemini API] Retrying in ${currentDelay}ms...`);
+      await delay(currentDelay);
+      currentDelay *= 1.5; // Exponential backoff
+    }
+  }
+
+  // Desperation attempt if somehow everything else failed but we didn't try the fallback yet
+  if (fallbackModel && currentModel !== fallbackModel) {
+    console.log(`[Gemini API] Desperation fallback attempt using "${fallbackModel}"...`);
+    try {
+      const response = await ai.models.generateContent({
+        ...params,
+        model: fallbackModel
+      });
+      return response;
+    } catch (fallbackError: any) {
+      console.error(`[Gemini API Error] Desperation fallback model "${fallbackModel}" also failed:`, fallbackError);
+      lastError = fallbackError;
+    }
+  }
+
+  throw lastError || new Error("Gemini API call failed");
+}
+
+const OFFLINE_TRANSLATION_FALLBACKS: { [key: string]: string } = {
+  "the": "артикль (не переводится)", "a": "артикль", "an": "артикль",
+  "i": "я", "me": "мне, меня", "my": "мой, моя", "we": "мы", "us": "нам, нас", "our": "наш, наша",
+  "you": "ты, вы, тебя", "your": "твой, ваш", "he": "он", "him": "его, ему", "his": "его",
+  "she": "она", "her": "её, ей", "it": "это, оно", "its": "его, её", "they": "они", "them": "их, им",
+  "their": "их", "who": "кто", "what": "что, какой", "which": "который", "this": "этот, эта, это",
+  "that": "тот, та, то, что", "these": "эти", "those": "те", "and": "и", "but": "но", "or": "или",
+  "if": "если", "because": "потому что", "as": "как, так как", "of": "из, о, об", "to": "к, в, на",
+  "for": "для, ради", "with": "с, вместе с", "without": "без", "about": "о, около", "at": "у, в, около",
+  "by": "у, около, мимо", "from": "от, из, с", "go": "идти, ехать", "went": "шел, поехал", "gone": "ушедший",
+  "see": "видеть", "saw": "видел", "seen": "увиденный", "make": "делать, создавать", "made": "сделал",
+  "get": "получать, становиться", "got": "получил", "know": "знать", "knew": "знал", "think": "думать",
+  "thought": "думал, мысль", "take": "брать, взять", "took": "взял", "come": "приходить", "came": "пришел",
+  "give": "давать", "gives": "дает", "gave": "дал", "find": "находить", "found": "нашел",
+  "say": "сказать, говорить", "said": "сказал", "always": "всегда", "never": "никогда", "sometimes": "иногда",
+  "today": "сегодня", "tomorrow": "завтра", "yesterday": "вчера", "good": "хороший", "bad": "плохой",
+  "new": "новый", "old": "старый", "day": "день", "night": "ночь", "time": "время", "year": "год",
+  "house": "дом", "friend": "друг", "water": "вода", "river": "река", "forest": "лес", "wood": "дерево, лес",
+  "tree": "дерево", "book": "книга", "read": "читать", "reads": "читает", "write": "писать", "writes": "пишет",
+  "love": "любить", "like": "нравиться", "want": "хотеть", "help": "помогать", "play": "играть",
+  "work": "работать, работа", "sleep": "спать", "happy": "счастливый", "sad": "грустный", "beautiful": "красивый",
+  "small": "маленький", "big": "большой", "large": "большой", "little": "маленький, немного", "long": "длинный, долгий",
+  "short": "короткий", "high": "высокий", "low": "низкий", "fast": "быстро, быстрый", "slow": "медленный, медленно",
+  "gently": "мягко, нежно", "suddenly": "внезапно, вдруг", "quietly": "тихо, спокойно", "mystery": "тайна, загадка",
+  "valley": "долина", "mountain": "гора", "village": "деревня, село", "lighthouse": "маяк", "cottage": "домик",
+  "bridge": "мост", "current": "течение, текущий", "solitude": "одиночество, уединение", "peace": "мир, покой",
+  "wind": "ветер", "sky": "небо", "dark": "темный, темнота", "light": "свет, легкий", "star": "звезда",
+  "moon": "луна", "sun": "солнце", "cloud": "облако", "rain": "дождь", "snow": "снег", "flower": "цветок",
+  "cat": "кот, кошка", "dog": "собака", "bird": "птица", "road": "дорога, путь", "path": "тропа, путь",
+  "street": "улица", "town": "город (небольшой)", "city": "город (крупный)", "people": "люди, народ",
+  "man": "мужчина, человек", "woman": "женщина", "child": "ребенок", "children": "дети", "boy": "мальчик",
+  "girl": "девочка", "father": "отец", "mother": "мать", "brother": "брат", "sister": "сестра",
+  "family": "семья", "life": "жизнь", "heart": "сердце", "mind": "разум, ум", "soul": "душа",
+  "word": "слово", "story": "рассказ, история", "page": "страница", "diary": "дневник", "map": "карта",
+  "compass": "компас", "journey": "путешествие", "adventure": "приключение", "morning": "утро",
+  "evening": "вечер", "afternoon": "день (после полудня)", "hour": "час", "minute": "минута",
+  "second": "секунда", "week": "неделя", "month": "месяц", "monday": "понедельник", "tuesday": "вторник",
+  "wednesday": "среда", "thursday": "четверг", "friday": "пятница", "saturday": "суббота",
+  "sunday": "воскресенье"
+};
+
 // Endpoint to translate an English word/phrase to Russian using Gemini
 app.post("/api/translate", async (req, res) => {
+  const { word, context } = req.body || {};
+  if (!word) {
+    res.status(400).json({ error: "Missing word parameter" });
+    return;
+  }
+
+  const cacheKey = `${word.toLowerCase().trim()}:${context ? context.toLowerCase().trim() : ""}`;
+  if (translationMemoryCache.has(cacheKey)) {
+    res.json({ translation: translationMemoryCache.get(cacheKey) });
+    return;
+  }
+
   try {
-    const { word, context } = req.body || {};
-    if (!word) {
-      res.status(400).json({ error: "Missing word parameter" });
-      return;
-    }
-
-    const cacheKey = `${word.toLowerCase().trim()}:${context ? context.toLowerCase().trim() : ""}`;
-    if (translationMemoryCache.has(cacheKey)) {
-      res.json({ translation: translationMemoryCache.get(cacheKey) });
-      return;
-    }
-
-    const ai = getAIClient();
-    
     let prompt = `Translate the English word or phrase "${word}" to Russian.`;
     if (context) {
       prompt += ` This word was clicked in the following context: "${context}". Please provide the most appropriate Russian translation for this specific context.`;
     }
     prompt += ` Return ONLY the direct translation, single word or short list of synonym translations (like "пыль, вытирать пыль"), with no extra words, explanations, quotation marks, or markdown formatting. Just the clean Russian translation string.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3.5-flash",
       contents: [prompt]
     });
@@ -77,11 +188,40 @@ app.post("/api/translate", async (req, res) => {
     const translation = (response.text || "").trim().replace(/^["']|["']$/g, "");
     if (translation) {
       translationMemoryCache.set(cacheKey, translation);
+      res.json({ translation });
+      return;
     }
-    res.json({ translation });
+    
+    throw new Error("Empty translation response from model");
   } catch (error: any) {
-    console.error("Translate API error:", error);
-    res.status(500).json({ error: error?.message || "Translation failed" });
+    console.error("Translate API error, trying offline dictionary fallback:", error);
+    
+    // 1. Precise match in offline fallback dictionary
+    const cleanWord = word.trim().toLowerCase();
+    let fallbackTrans = OFFLINE_TRANSLATION_FALLBACKS[cleanWord];
+
+    // 2. Base forms match if word ends with -s, -ed, -ing, etc.
+    if (!fallbackTrans) {
+      if (cleanWord.endsWith("s") && OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -1)]) {
+        fallbackTrans = OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -1)];
+      } else if (cleanWord.endsWith("es") && OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -2)]) {
+        fallbackTrans = OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -2)];
+      } else if (cleanWord.endsWith("ed") && OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -2)]) {
+        fallbackTrans = OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -2)];
+      } else if (cleanWord.endsWith("ing") && OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -3)]) {
+        fallbackTrans = OFFLINE_TRANSLATION_FALLBACKS[cleanWord.slice(0, -3)];
+      }
+    }
+
+    if (fallbackTrans) {
+      console.log(`[Offline Fallback Match] translated "${word}" -> "${fallbackTrans}"`);
+      translationMemoryCache.set(cacheKey, fallbackTrans);
+      res.json({ translation: fallbackTrans });
+    } else {
+      // 3. Absolute ultimate fallback (return the word itself capitalized / unchanged to prevent UI crash)
+      console.warn(`[No Offline Fallback Match] for "${word}". Returning word itself.`);
+      res.json({ translation: word });
+    }
   }
 });
 
@@ -95,7 +235,6 @@ app.post("/api/ocr", async (req, res) => {
     }
 
     const base64Data = image.split(",")[1] || image;
-    const ai = getAIClient();
 
     const prompt = `This is an image of a handwritten or typed vocabulary list of English-Russian words. 
 Extract all word pairs in the format "English — Russian". 
@@ -103,7 +242,7 @@ Return ONLY a valid, standard JSON array of objects with "en" and "ru" fields.
 For example: [{"en": "genius", "ru": "гений"}, {"en": "such", "ru": "такой"}]. 
 Return absolutely nothing else, no markdown wrapping, no explanation, just raw valid JSON.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3.5-flash",
       contents: [
         {
@@ -520,8 +659,6 @@ app.post("/api/classify", async (req, res) => {
   }
 
   try {
-    const ai = getAIClient();
-
     const systemInstruction = `You are an expert lexicographer and English-Russian linguist.
 You analyze an English word/phrase and its Russian translation to determine its part of speech (POS) and its vocabulary topic.
 
@@ -553,8 +690,8 @@ For example:
 - If the word is "lion" (лев) and there is a key like "custom_xyz:🦁 Животные", you MUST return "custom_xyz"!
 Always prioritize mapping to the custom keys in the provided list based on their labels. Only if a word absolutely does not fit any of the provided keys or custom labels, you can invent a new lowercase key for POS or Topic. If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа").`;
 
-    const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+    const response = await generateContentWithRetry({
+      model: "gemini-3.1-flash-lite",
       contents: `Word: "${en}" -> Translation: "${ru}"`,
       config: {
         systemInstruction: systemInstruction,
@@ -621,8 +758,6 @@ app.post("/api/generate-story", async (req, res) => {
       return;
     }
 
-    const ai = getAIClient();
-
     const systemInstruction = `You are an expert English teacher who writes simple, highly engaging short stories for English language learners. 
 You must write a story specifically tailored to the English CEFR level ${level}.
 
@@ -645,7 +780,7 @@ Return ONLY a valid JSON object in this exact shape:
 }
 Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3.5-flash",
       contents: [
         { text: systemInstruction },
@@ -678,13 +813,11 @@ app.post("/api/generate-quiz", async (req, res) => {
       return;
     }
 
-    const ai = getAIClient();
-
     const systemInstruction = `You are an expert English teacher. Analyze the English story provided and generate 3 interactive multiple-choice questions (comprehension check) to test the reader's understanding of the plot.
 The questions themselves should be in simple, level-appropriate English (appropriate for level ${level || "A2"}). The options should be in English.
 Provide a clear, brief explanation in Russian of why the correct answer is correct.`;
 
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: "gemini-3.5-flash",
       contents: [
         { text: systemInstruction },

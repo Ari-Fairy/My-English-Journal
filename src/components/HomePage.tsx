@@ -8,7 +8,7 @@ const getWeeklyPreset = (index: number) => {
       title: "📚 Интенсивное накопление",
       goals: [
         { id: "words", text: "📚 Выучить 100 слов за неделю", target: 100, type: "words" },
-        { id: "books", text: "📖 Прочитать 50 глав или книг за неделю", target: 50, type: "books" },
+        { id: "books", text: "📖 Прочитать 10 глав или книг за неделю", target: 10, type: "books" },
         { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
       ]
     },
@@ -16,7 +16,7 @@ const getWeeklyPreset = (index: number) => {
       title: "📖 Читательский вызов",
       goals: [
         { id: "words", text: "📚 Выучить 150 слов за неделю", target: 150, type: "words" },
-        { id: "books", text: "📖 Прочитать 60 глав или книг за неделю", target: 60, type: "books" },
+        { id: "books", text: "📖 Прочитать 15 глав или книг за неделю", target: 15, type: "books" },
         { id: "streak", text: "🔥 Заниматься 5 дней подряд", target: 5, type: "streak" }
       ]
     },
@@ -24,7 +24,7 @@ const getWeeklyPreset = (index: number) => {
       title: "🚀 Лингвистический спринт",
       goals: [
         { id: "words", text: "📚 Выучить 200 слов за неделю", target: 200, type: "words" },
-        { id: "books", text: "📖 Прочитать 70 глав или книг за неделю", target: 70, type: "books" },
+        { id: "books", text: "📖 Прочитать 12 глав или книг за неделю", target: 12, type: "books" },
         { id: "streak", text: "🔥 Заниматься 7 дней подряд", target: 7, type: "streak" }
       ]
     },
@@ -32,7 +32,7 @@ const getWeeklyPreset = (index: number) => {
       title: "🧘🏽 Стабильный темп",
       goals: [
         { id: "words", text: "📚 Выучить 120 слов за неделю", target: 120, type: "words" },
-        { id: "books", text: "📖 Прочитать 50 глав или книг за неделю", target: 50, type: "books" },
+        { id: "books", text: "📖 Прочитать 5 глав или книг за неделю", target: 5, type: "books" },
         { id: "streak", text: "🔥 Заниматься 4 дня подряд", target: 4, type: "streak" }
       ]
     }

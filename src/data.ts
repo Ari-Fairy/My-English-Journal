@@ -524,16 +524,6 @@ export const ACHIEVEMENTS_DEF: Achievement[] = [
     check: ({ stats }) => (stats.streak || 0) >= 7
   },
   {
-    id: "all_diary",
-    icon: "📔",
-    title: "Дневник закрыт",
-    desc: "Выучи все слова из темы \"Дневник\"",
-    check: ({ words }) => {
-      const dw = words.filter(w => w.topic === "diary");
-      return dw.length > 0 && dw.every(w => w.learned);
-    }
-  },
-  {
     id: "irregular_10",
     icon: "⚡",
     title: "Глаголы-мастер",
