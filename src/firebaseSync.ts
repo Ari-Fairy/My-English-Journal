@@ -221,6 +221,19 @@ export async function saveWord(word: Word): Promise<void> {
   }
 }
 
+// Save multiple words in a batch
+export async function saveWords(wordsList: Word[]): Promise<void> {
+  try {
+    const batch = writeBatch(db);
+    wordsList.forEach(word => {
+      batch.set(doc(wordsCollection, word.id), cleanForFirestore(word));
+    });
+    await batch.commit();
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `words/batch-save`);
+  }
+}
+
 // Delete a word
 export async function deleteWord(wordId: string): Promise<void> {
   try {

@@ -67,4 +67,5 @@ export interface UserProgress {
   sessionReviewLimit?: number;
   lastReviewSessionTime?: number;
   secondLastReviewSessionTime?: number;
+  firstStudyDate?: string;
 }

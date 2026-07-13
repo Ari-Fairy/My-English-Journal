@@ -7,6 +7,7 @@ interface StudyScreenProps {
   stats: UserProgress;
   sessionType: "learn" | "review" | "mandatory";
   onSaveWord: (word: Word) => void;
+  onSaveWords?: (words: Word[]) => void;
   onSaveProgress: (stats: UserProgress) => void;
   onExit: () => void;
 }
@@ -16,9 +17,17 @@ export default function StudyScreen({
   stats, 
   sessionType, 
   onSaveWord, 
+  onSaveWords,
   onSaveProgress, 
   onExit 
 }: StudyScreenProps) {
+  const getSessionLimit = () => {
+    if (sessionType === "review") {
+      return stats.sessionReviewLimit || stats.dailyWordsLimit || 15;
+    }
+    return stats.dailyWordsLimit ?? 15;
+  };
+
   const [stage, setStage] = useState<"mode" | "dir" | "session" | "done">(
     sessionType === "learn" ? "dir" : "mode"
   );
@@ -62,9 +71,33 @@ export default function StudyScreen({
         secondLastReviewSessionTime: stats.lastReviewSessionTime || 0,
         lastReviewSessionTime: now
       };
+
+      // Auto-reschedule any remaining due words that weren't reviewed in this session
+      const reviewedIds = new Set(queue.map(w => w.id));
+      const remainingDueWords = words.filter(w => 
+        w.learned && 
+        (w.streak || 0) < 10 && 
+        !reviewedIds.has(w.id) && 
+        getWordNextReviewTimeMs(w) <= now
+      );
+
+      if (remainingDueWords.length > 0 && onSaveWords) {
+        const rescheduled = remainingDueWords.map(w => {
+          // Postpone to tomorrow (add 24 hours)
+          const newReviewTime = now + 24 * 3600 * 1000;
+          return {
+            ...w,
+            nextReviewDate: new Date(newReviewTime).toISOString(),
+            consecutiveErrors: 0,
+            isProblematic: false
+          };
+        });
+        onSaveWords(rescheduled);
+      }
+
       onSaveProgress(updatedStats);
     }
-  }, [stage, sessionType, stats, onSaveProgress]);
+  }, [stage, sessionType, stats, onSaveProgress, queue, words, onSaveWords]);
 
   const cur = queue[idx];
   const pDir = cur ? (dir === "mixed" ? (cur.id.charCodeAt(0) + idx) % 2 === 0 ? "en-ru" : "ru-en" : dir) : "en-ru";
@@ -586,7 +619,7 @@ export default function StudyScreen({
                   const pool = getPool();
                   const withErrors = shuffle(pool.filter(w => w.wrong > w.correct));
                   const rest = shuffle(pool.filter(w => w.wrong <= w.correct));
-                  const limit = stats.dailyWordsLimit ?? 15;
+                  const limit = getSessionLimit();
                   setQueue([...withErrors, ...rest].slice(0, limit));
                   setIdx(0);
                   setWrongIds([]);
@@ -647,7 +680,7 @@ export default function StudyScreen({
                 const pool = getPool();
                 const withErrors = shuffle(pool.filter(w => w.wrong > w.correct));
                 const rest = shuffle(pool.filter(w => w.wrong <= w.correct));
-                const limit = stats.dailyWordsLimit ?? 15;
+                const limit = getSessionLimit();
                 setQueue([...withErrors, ...rest].slice(0, limit));
                 setIdx(0);
                 setWrongIds([]);

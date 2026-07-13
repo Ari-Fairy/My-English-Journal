@@ -1,50 +1,44 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Word, UserProgress } from "../types";
-import { getLocalDateString, getCurrentWeekKey, getReviewCooldownStatus, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
+import { getLocalDateString, getReviewCooldownStatus, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
 
-const getWeeklyPreset = (weekKey: string) => {
-  let hash = 0;
-  for (let i = 0; i < weekKey.length; i++) {
-    hash += weekKey.charCodeAt(i);
-  }
-  const index = hash % 4;
-
+const getWeeklyPreset = (index: number) => {
   const presets = [
     {
       title: "📚 Интенсивное накопление",
       goals: [
         { id: "words", text: "📚 Выучить 100 слов за неделю", target: 100, type: "words" },
-        { id: "books", text: "📖 Прочитать хотя бы 5 книг в разделе Чтение за неделю", target: 5, type: "books" },
+        { id: "books", text: "📖 Прочитать 50 глав или книг за неделю", target: 50, type: "books" },
         { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
       ]
     },
     {
       title: "📖 Читательский вызов",
       goals: [
-        { id: "words", text: "📚 Выучить 10 слов за неделю", target: 10, type: "words" },
-        { id: "books", text: "📖 Прочитать 2 книги в Чтении", target: 2, type: "books" },
+        { id: "words", text: "📚 Выучить 150 слов за неделю", target: 150, type: "words" },
+        { id: "books", text: "📖 Прочитать 60 глав или книг за неделю", target: 60, type: "books" },
         { id: "streak", text: "🔥 Заниматься 5 дней подряд", target: 5, type: "streak" }
       ]
     },
     {
       title: "🚀 Лингвистический спринт",
       goals: [
-        { id: "words", text: "📚 Выучить 20 слов за неделю", target: 20, type: "words" },
-        { id: "books", text: "📖 Прочитать 3 книги в Чтении", target: 3, type: "books" },
+        { id: "words", text: "📚 Выучить 200 слов за неделю", target: 200, type: "words" },
+        { id: "books", text: "📖 Прочитать 70 глав или книг за неделю", target: 70, type: "books" },
         { id: "streak", text: "🔥 Заниматься 7 дней подряд", target: 7, type: "streak" }
       ]
     },
     {
       title: "🧘🏽 Стабильный темп",
       goals: [
-        { id: "words", text: "📚 Выучить 8 слов за неделю", target: 8, type: "words" },
-        { id: "books", text: "📖 Прочитать хотя бы 1 книгу в разделе Чтение", target: 1, type: "books" },
+        { id: "words", text: "📚 Выучить 120 слов за неделю", target: 120, type: "words" },
+        { id: "books", text: "📖 Прочитать 50 глав или книг за неделю", target: 50, type: "books" },
         { id: "streak", text: "🔥 Заниматься 4 дня подряд", target: 4, type: "streak" }
       ]
     }
   ];
 
-  return presets[index];
+  return presets[index % presets.length];
 };
 
 interface HomePageProps {
@@ -53,27 +47,75 @@ interface HomePageProps {
   onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings") => void;
   onStartStudy: (sessionType: "learn" | "review" | "mandatory") => void;
   onSaveWord: (word: Word) => void;
+  onSaveWords: (words: Word[]) => void;
   onSaveProgress: (stats: UserProgress) => void;
 }
 
-export default function HomePage({ words, stats, onNavigate, onStartStudy, onSaveWord, onSaveProgress }: HomePageProps) {
+export default function HomePage({ words, stats, onNavigate, onStartStudy, onSaveWord, onSaveWords, onSaveProgress }: HomePageProps) {
   const [recallInfo, setRecallInfo] = useState(false);
   const [isSpreading, setIsSpreading] = useState(false);
+
+  useEffect(() => {
+    if (!stats.firstStudyDate) {
+      const dailyDates = Object.keys(stats.daily || {});
+      let fallbackDate = getLocalDateString();
+      if (dailyDates.length > 0) {
+        const sorted = dailyDates.sort();
+        fallbackDate = sorted[0];
+      } else {
+        const learnedDates = words.filter(w => w.learnedDate).map(w => w.learnedDate!);
+        if (learnedDates.length > 0) {
+          const sorted = learnedDates.sort();
+          fallbackDate = sorted[0];
+        }
+      }
+      onSaveProgress({
+        ...stats,
+        firstStudyDate: fallbackDate
+      });
+    }
+  }, [stats, words, onSaveProgress]);
+
+  const getStartDateMs = () => {
+    if (stats.firstStudyDate) {
+      return new Date(stats.firstStudyDate).getTime();
+    }
+    const dailyDates = Object.keys(stats.daily || {});
+    if (dailyDates.length > 0) {
+      const sorted = dailyDates.sort();
+      return new Date(sorted[0]).getTime();
+    }
+    const learnedDates = words.filter(w => w.learnedDate).map(w => new Date(w.learnedDate!).getTime());
+    if (learnedDates.length > 0) {
+      return Math.min(...learnedDates);
+    }
+    return Date.now();
+  };
+
+  const startDateMs = getStartDateMs();
+  const diffMs = Date.now() - startDateMs;
+  const currentWeekIndex = Math.floor(diffMs / (7 * 24 * 3600 * 1000));
+  const weekStartMs = startDateMs + currentWeekIndex * 7 * 24 * 3600 * 1000;
+  const weekEndMs = weekStartMs + 7 * 24 * 3600 * 1000;
 
   const learnedCount = words.filter(w => w.learned).length;
   const today = getLocalDateString();
   const todayLearned = words.filter(w => w.learnedDate === today).length;
-  const wordsThisWeek = words.filter(w => w.learned && w.learnedDate && (Date.now() - new Date(w.learnedDate).getTime() <= 7 * 24 * 3600 * 1000)).length;
+  
+  const wordsThisWeek = words.filter(w => {
+    if (!w.learned || !w.learnedDate) return false;
+    const t = new Date(w.learnedDate).getTime();
+    return t >= weekStartMs && t < weekEndMs;
+  }).length;
+
   const newWords = words.filter(w => !w.learned);
 
-  const weekKey = getCurrentWeekKey();
-  const activePreset = getWeeklyPreset(weekKey);
+  const activePreset = getWeeklyPreset(currentWeekIndex);
 
   const booksThisWeek = Object.entries(stats.dailyBooksRead || {}).reduce((count, [dateStr, levels]) => {
     try {
-      const diffTime = Date.now() - new Date(dateStr).getTime();
-      const diffDays = diffTime / (1000 * 60 * 60 * 24);
-      if (diffDays <= 7 && levels && Array.isArray(levels)) {
+      const t = new Date(dateStr).getTime();
+      if (t >= weekStartMs && t < weekEndMs && levels && Array.isArray(levels)) {
         return count + levels.length;
       }
     } catch (e) {
@@ -117,19 +159,19 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
 
     setIsSpreading(true);
     try {
-      // Оставляем топ-30 слов, остальные распределяем на 1-3 дня вперед
+      // Оставляем топ-30 слов, остальные распределяем на 1-3 дня вперед в одном батче
       const surplus = allDueWordsSorted.slice(30);
-      surplus.forEach(w => {
+      const updatedWords: Word[] = surplus.map(w => {
         const pushDays = Math.floor(Math.random() * 3) + 1;
         const newReviewTime = Date.now() + pushDays * 24 * 3600 * 1000;
-        const updated: Word = {
+        return {
           ...w,
           nextReviewDate: new Date(newReviewTime).toISOString(),
           consecutiveErrors: 0,
           isProblematic: false
         };
-        onSaveWord(updated);
       });
+      onSaveWords(updatedWords);
       alert(`🎉 Успешно распределено ${surplus.length} слов излишка на следующие 1-3 дня!`);
     } catch (err) {
       console.error(err);
@@ -377,13 +419,16 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
 
       {/* 🎯 Мои цели и привычки */}
       <div className="card" style={{ marginBottom: 20, padding: "16px 18px", border: "1px solid var(--border)" }}>
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 14 }}>
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "baseline", marginBottom: 4 }}>
           <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, fontWeight: 600, color: "var(--sage)", display: "flex", alignItems: "center", gap: 8, margin: 0 }}>
             🎯 Мои цели и привычки
           </h3>
           <span style={{ fontSize: 11, color: "var(--muted)", fontStyle: "italic" }}>
             {activePreset.title}
           </span>
+        </div>
+        <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic", marginBottom: 14 }}>
+          Текущая неделя: с {new Date(weekStartMs).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} по {new Date(weekEndMs).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} (расчёт с вашего первого дня занятий)
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {activePreset.goals.map(goal => {

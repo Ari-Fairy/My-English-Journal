@@ -5,6 +5,7 @@ import {
   fetchUserData, 
   seedUserData, 
   saveWord, 
+  saveWords,
   deleteWord, 
   saveIrregularVerb, 
   saveUserProgress,
@@ -510,6 +511,41 @@ export default function App() {
     triggerAchievementsCheck(list, irregular, progress);
   };
 
+  const handleSaveWords = async (updatedWordsList: Word[]) => {
+    if (updatedWordsList.length === 0) return;
+    const updatedMap = new Map(updatedWordsList.map(w => [w.id, w]));
+    const list = words.map(w => updatedMap.has(w.id) ? updatedMap.get(w.id)! : w);
+    
+    const existingIds = new Set(words.map(w => w.id));
+    updatedWordsList.forEach(w => {
+      if (!existingIds.has(w.id)) {
+        list.push(w);
+      }
+    });
+
+    setWords(list);
+
+    if (user && user !== "guest") {
+      saveUserData(user.uid, list, irregular, progress);
+      try {
+        await saveWords(updatedWordsList);
+        setSyncError(null);
+      } catch (e: any) {
+        const errStr = e instanceof Error ? e.message : String(e);
+        if (errStr.toLowerCase().includes("offline") || errStr.toLowerCase().includes("network") || errStr.toLowerCase().includes("storage")) {
+          console.warn("Cloud save words pending/restricted: saved locally.");
+        } else {
+          console.error("Cloud save words failed:", e);
+        }
+        setSyncError("⚠️ Автономный режим: изменения сохранены на устройстве.");
+      }
+    } else {
+      saveGuestData(list, irregular, progress);
+    }
+
+    triggerAchievementsCheck(list, irregular, progress);
+  };
+
   const handleSaveVerb = async (updatedVerb: IrregularVerb) => {
     const list = irregular.map(v => v.id === updatedVerb.id ? updatedVerb : v);
     if (!irregular.some(v => v.id === updatedVerb.id)) {
@@ -886,6 +922,7 @@ export default function App() {
             setView("study");
           }} 
           onSaveWord={handleSaveWord}
+          onSaveWords={handleSaveWords}
           onSaveProgress={handleSaveProgress}
         />
       )}
@@ -896,6 +933,7 @@ export default function App() {
           stats={progress} 
           sessionType={sessionType}
           onSaveWord={handleSaveWord}
+          onSaveWords={handleSaveWords}
           onSaveProgress={handleSaveProgress}
           onExit={() => setView("home")}
         />
