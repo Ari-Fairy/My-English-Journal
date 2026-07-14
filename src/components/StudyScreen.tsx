@@ -72,19 +72,26 @@ export default function StudyScreen({
         lastReviewSessionTime: now
       };
 
-      // Auto-reschedule any remaining due words that weren't reviewed in this session
       const reviewedIds = new Set(queue.map(w => w.id));
-      const remainingDueWords = words.filter(w => 
-        w.learned && 
-        (w.streak || 0) < 10 && 
-        !reviewedIds.has(w.id) && 
-        getWordNextReviewTimeMs(w) <= now
-      );
 
-      if (remainingDueWords.length > 0 && onSaveWords) {
-        const rescheduled = remainingDueWords.map(w => {
-          // Postpone to tomorrow (add 24 hours)
-          const newReviewTime = now + 24 * 3600 * 1000;
+      // Batch all sub-4-hour review words to exactly 4 hours from now to completely prevent "one by one" drip feeding.
+      const fourHoursFromNow = now + 4 * 3600 * 1000;
+      const wordsToUpdate = words.filter(w => {
+        if (!w.learned || (w.streak || 0) >= 10) return false;
+        const dueMs = getWordNextReviewTimeMs(w);
+        return dueMs < fourHoursFromNow;
+      });
+
+      if (wordsToUpdate.length > 0 && onSaveWords) {
+        const rescheduled = wordsToUpdate.map(w => {
+          const wasReviewed = reviewedIds.has(w.id);
+          // If a word was due but NOT reviewed in this session (e.g. limit or skipped), postpone it to tomorrow (24 hours)
+          // Otherwise (for recently reviewed words, and words due soon), batch them to exactly 4 hours from now!
+          let newReviewTime = fourHoursFromNow;
+          if (!wasReviewed && getWordNextReviewTimeMs(w) <= now) {
+            newReviewTime = now + 24 * 3600 * 1000;
+          }
+
           return {
             ...w,
             nextReviewDate: new Date(newReviewTime).toISOString(),

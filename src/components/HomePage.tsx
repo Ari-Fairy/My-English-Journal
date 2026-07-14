@@ -54,6 +54,14 @@ interface HomePageProps {
 export default function HomePage({ words, stats, onNavigate, onStartStudy, onSaveWord, onSaveWords, onSaveProgress }: HomePageProps) {
   const [recallInfo, setRecallInfo] = useState(false);
   const [isSpreading, setIsSpreading] = useState(false);
+  const [, setTick] = useState(0);
+
+  useEffect(() => {
+    const timer = setInterval(() => {
+      setTick(t => t + 1);
+    }, 5000); // Update timer display every 5 seconds for great real-time precision!
+    return () => clearInterval(timer);
+  }, []);
 
   useEffect(() => {
     if (!stats.firstStudyDate) {
@@ -140,6 +148,20 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
     if (days === 1) return "через 1 день";
     if (days >= 2 && days <= 4) return `через ${days} дня`;
     return `через ${days} дней`;
+  };
+
+  const formatTimeLeftPrecise = (ms: number) => {
+    if (ms <= 0) return "сейчас";
+    const totalMins = Math.ceil(ms / 60000);
+    if (totalMins < 60) {
+      return `через ${totalMins} мин`;
+    }
+    const hrs = Math.floor(totalMins / 60);
+    const mins = totalMins % 60;
+    if (mins === 0) {
+      return `через ${hrs} ч`;
+    }
+    return `через ${hrs} ч ${mins} мин`;
   };
 
   const cooldownStatus = getReviewCooldownStatus(stats);
@@ -262,50 +284,79 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
           <span style={{ fontSize: 22, opacity: .8 }}>→</span>
         </button>
 
-        <button 
-          className="btn" 
-          style={{ 
-            width: "100%", 
-            padding: "16px 20px", 
-            textAlign: "left", 
-            display: "flex", 
-            justifyContent: "space-between", 
-            alignItems: "center", 
-            borderRadius: "1.5rem", 
-            fontSize: 15,
-            background: "var(--sage)",
-            color: "#fff",
-            boxShadow: "0 4px 12px rgba(148,161,135,.2)",
-            border: "none",
-            cursor: "pointer"
-          }}
-          onClick={() => {
-            if (reviewWords.length > 0) {
-              onStartStudy("review");
-            } else {
-              setRecallInfo(r => !r);
-            }
-          }}
-        >
-          <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
-              {reviewWords.length > 0 ? "Recall ✨" : "Recall"}
+        {reviewWords.length > 0 ? (
+          <button 
+            className="btn" 
+            style={{ 
+              width: "100%", 
+              padding: "16px 20px", 
+              textAlign: "left", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              borderRadius: "1.5rem", 
+              fontSize: 15,
+              background: "var(--sage)",
+              color: "#fff",
+              boxShadow: "0 4px 12px rgba(148,161,135,.2)",
+              border: "none",
+              cursor: "pointer"
+            }}
+            onClick={() => onStartStudy("review")}
+          >
+            <div>
+              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
+                Recall ✨
+              </div>
+              <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
+                {totalOverdueCount > reviewWords.length
+                  ? `${reviewWords.length} слов доступны (всего ${totalOverdueCount}) ⚡`
+                  : `${reviewWords.length} слов ждут повторения` 
+                }
+              </div>
             </div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
-              {learnedCount === 0 
-                ? "Сначала выучи слова 📚" 
-                : reviewWords.length > 0 
-                  ? totalOverdueCount > reviewWords.length
-                    ? `${reviewWords.length} слов доступны (всего ${totalOverdueCount}) ⚡`
-                    : `${reviewWords.length} слов ждут повторения` 
-                  : `Все ${learnedCount} слов повторены! См. график 📅`
-              }
+            <span style={{ fontSize: 22, opacity: .9, color: "#fff" }}>
+              ↺
+            </span>
+          </button>
+        ) : (
+          <button 
+            className="btn" 
+            style={{ 
+              width: "100%", 
+              padding: "16px 20px", 
+              textAlign: "left", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              borderRadius: "1.5rem", 
+              fontSize: 15,
+              background: "rgba(255,255,255,0.03)",
+              color: "var(--text-muted)",
+              border: "1px dashed var(--border)",
+              boxShadow: "none",
+              cursor: "pointer"
+            }}
+            onClick={() => setRecallInfo(r => !r)}
+          >
+            <div>
+              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "var(--muted)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
+                Recall 🔒
+              </div>
+              <div style={{ fontSize: 12, marginTop: 2, color: "var(--muted)" }}>
+                {learnedCount === 0 
+                  ? "Сначала выучи слова в разделе Study 📚" 
+                  : unifiedNextMs !== null
+                    ? `Все повторено! Приходи через ${formatTimeLeftPrecise(unifiedNextMs)} 🕒`
+                    : "Все слова выучены навсегда! 🎉"
+                }
+              </div>
             </div>
-          </div>
-          <span style={{ fontSize: 22, opacity: .9, color: "#fff" }}>
-            ↺
-          </span>
-        </button>
+            <span style={{ fontSize: 22, opacity: .5, color: "var(--muted)" }}>
+              🕒
+            </span>
+          </button>
+        )}
 
         {recallInfo && (
           <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
@@ -336,7 +387,7 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
                   <div style={{ padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", textAlign: "center" }}>
                     <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Единое время возвращения</div>
                     <div style={{ fontSize: 20, fontWeight: 700, color: "var(--sage)", marginTop: 4 }}>
-                      🕒 {formatTimeLeft(unifiedNextMs)}
+                      🕒 {formatTimeLeftPrecise(unifiedNextMs)}
                     </div>
                   </div>
                 )}
