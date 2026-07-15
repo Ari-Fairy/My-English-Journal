@@ -63,7 +63,7 @@ export default function StudyScreen({
   const sessionSavedRef = useRef(false);
 
   useEffect(() => {
-    if (stage === "done" && sessionType === "review" && !sessionSavedRef.current) {
+    if (stage === "done" && !sessionSavedRef.current) {
       sessionSavedRef.current = true;
       const now = Date.now();
       const updatedStats: UserProgress = {
@@ -74,12 +74,13 @@ export default function StudyScreen({
 
       const reviewedIds = new Set(queue.map(w => w.id));
 
-      // Batch all sub-4-hour review words to exactly 4 hours from now to completely prevent "one by one" drip feeding.
+      // Batch all sub-8-hour review words to exactly 4 hours from now to completely prevent "one by one" drip feeding.
+      const eightHoursFromNow = now + 8 * 3600 * 1000;
       const fourHoursFromNow = now + 4 * 3600 * 1000;
       const wordsToUpdate = words.filter(w => {
         if (!w.learned || (w.streak || 0) >= 10) return false;
         const dueMs = getWordNextReviewTimeMs(w);
-        return dueMs < fourHoursFromNow;
+        return dueMs < eightHoursFromNow;
       });
 
       if (wordsToUpdate.length > 0 && onSaveWords) {
