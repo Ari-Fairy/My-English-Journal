@@ -758,6 +758,30 @@ app.post("/api/generate-story", async (req, res) => {
       return;
     }
 
+    const themes = [
+      "a rainy afternoon in a cozy little cafe with a warm cup of cocoa",
+      "discovering a hidden garden in the middle of a bustling historic city",
+      "a walk in a golden autumn forest while collecting beautiful fallen leaves",
+      "watching stars from a small wooden cabin deep in the silent mountains",
+      "finding a mysterious dusty book in a magical old bookstore",
+      "helping a friendly neighbor bake fresh warm apple pies",
+      "a serene boat ride on a calm misty lake at sunrise",
+      "taking care of a playful stray cat that found its way to a sunny porch",
+      "a train journey through beautiful green valleys and historic villages",
+      "baking fresh blueberry pancakes on a quiet Sunday morning",
+      "building a small wooden birdhouse on a warm spring day",
+      "exploring a seaside town with a tall lighthouse and seagulls flying",
+      "a warm bonfire on a sandy beach under a bright full moon",
+      "walking through a fragrant lavender field in the countryside",
+      "discovering a secret path in a beautiful botanical greenhouse",
+      "a painter sitting on a hill overlooking a peaceful village, sketching the scenery",
+      "an old clockmaker repairing a timeless family heirloom in a cozy workshop",
+      "watching fireflies light up a meadow on a warm summer evening",
+      "finding a cozy attic room full of childhood maps and telescopes",
+      "baking fresh artisan bread in a traditional brick oven with family"
+    ];
+    const randomTheme = themes[Math.floor(Math.random() * themes.length)];
+
     const systemInstruction = `You are an expert English teacher who writes simple, highly engaging short stories for English language learners. 
 You must write a story specifically tailored to the English CEFR level ${level}.
 
@@ -784,7 +808,9 @@ Return absolutely nothing else, no markdown formatting, no comments, just raw JS
       model: "gemini-3.5-flash",
       contents: [
         { text: systemInstruction },
-        { text: `Generate a brand new, unique story for level ${level} on date ${date || "today"}. Make it highly cozy, inspiring, and different from any other story.` }
+        { text: `Generate a brand new, unique story for level ${level} on date ${date || "today"}. 
+Theme/vibe to center the story around: ${randomTheme}. 
+Make it highly cozy, inspiring, and different from any other story.` }
       ],
     });
 

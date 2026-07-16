@@ -405,6 +405,13 @@ body::before {
   text-align: center;
   cursor: pointer;
   transition: all 0.22s;
+  touch-action: manipulation;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.menu-card * {
+  pointer-events: none;
 }
 
 .menu-card:hover {

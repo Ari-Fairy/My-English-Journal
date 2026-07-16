@@ -92,33 +92,41 @@ export default function ReaderScreen({
     }
   };
 
-  const fetchStory = async (level: string, date: string) => {
+  const fetchStory = async (level: string, date: string, forceNew = false) => {
     const cacheKey = `generated_story_${level}_${date}`;
-    const cached = localStorage.getItem(cacheKey);
-    if (cached) {
-      try {
-        const parsed = JSON.parse(cached);
-        if (parsed && parsed.title && parsed.text) {
-          setDailyStories(prev => ({ ...prev, [level]: parsed }));
-          return;
+    if (!forceNew) {
+      const cached = localStorage.getItem(cacheKey);
+      if (cached) {
+        try {
+          const parsed = JSON.parse(cached);
+          if (parsed && parsed.title && parsed.text) {
+            setDailyStories(prev => ({ ...prev, [level]: parsed }));
+            return;
+          }
+        } catch (e) {
+          console.error("Failed to parse cached story", e);
         }
-      } catch (e) {
-        console.error("Failed to parse cached story", e);
       }
     }
 
     setLoadingStory(prev => ({ ...prev, [level]: true }));
     try {
+      const requestDate = forceNew ? `${date}_new_${Date.now()}` : date;
       const res = await fetch(getApiUrl("/api/generate-story"), {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ level, date })
+        body: JSON.stringify({ level, date: requestDate })
       });
       if (res.ok) {
         const resText = await res.text();
         const data = resText ? JSON.parse(resText) : null;
         if (data && data.title && data.text) {
           localStorage.setItem(cacheKey, JSON.stringify(data));
+          
+          // Invalidate the quiz cache for this level today so a brand-new quiz is generated
+          const quizCacheKey = `prefetched_quiz_${level}_${today}`;
+          localStorage.removeItem(quizCacheKey);
+
           setDailyStories(prev => ({ ...prev, [level]: data }));
           setLoadingStory(prev => ({ ...prev, [level]: false }));
           return;
@@ -128,19 +136,21 @@ export default function ReaderScreen({
       console.warn("Could not fetch generated story, falling back to static stories:", e?.message || e);
     }
 
-    // Fallback to static story
-    const stories = BOOK_STORIES[level] || [];
-    const index = (stats.booksRead || 0) % (stories.length || 1);
-    const staticStory = stories[index];
-    if (staticStory) {
-      setDailyStories(prev => ({ ...prev, [level]: staticStory }));
+    if (!forceNew) {
+      // Fallback to static story
+      const stories = BOOK_STORIES[level] || [];
+      const index = (stats.booksRead || 0) % (stories.length || 1);
+      const staticStory = stories[index];
+      if (staticStory) {
+        setDailyStories(prev => ({ ...prev, [level]: staticStory }));
+      }
     }
     setLoadingStory(prev => ({ ...prev, [level]: false }));
   };
 
   useEffect(() => {
-    // Only load already cached stories on mount to keep load instantaneous and avoid triggering parallel Gemini API requests
-    ["A1", "A2", "B1", "B2"].forEach(level => {
+    const levels = ["A1", "A2", "B1", "B2"];
+    levels.forEach(level => {
       const cacheKey = `generated_story_${level}_${today}`;
       const cached = localStorage.getItem(cacheKey);
       if (cached) {
@@ -293,6 +303,7 @@ export default function ReaderScreen({
 
   const handleFinishBook = () => {
     if (!selectedLevel) return;
+
     const todayLevels = [...todayReadLevels];
     if (!todayLevels.includes(selectedLevel)) {
       todayLevels.push(selectedLevel);
@@ -422,28 +433,24 @@ export default function ReaderScreen({
           const isLoading = loadingStory[level];
           const isReadToday = todayReadLevels.includes(level);
 
-          let title = "Загрузка...";
           let wordCount = 0;
           if (generatedStory) {
-            title = generatedStory.title;
             wordCount = generatedStory.text.split(/\s+/).filter(Boolean).length;
-          } else if (!isLoading) {
-            const stories = BOOK_STORIES[level] || [];
-            const index = (stats.booksRead || 0) % (stories.length || 1);
-            const staticStory = stories[index];
-            if (staticStory) {
-              title = staticStory.title;
-              wordCount = staticStory.text.split(/\s+/).filter(Boolean).length;
-            }
           }
 
           return (
             <div 
               key={level} 
               className="card" 
-              style={{ marginBottom: 10, cursor: isReadToday ? "default" : "pointer", opacity: isReadToday ? 0.6 : 1 }}
+              style={{ 
+                marginBottom: 10, 
+                cursor: isReadToday ? "not-allowed" : isLoading ? "wait" : "pointer", 
+                opacity: isReadToday ? 0.6 : 1,
+                border: isReadToday ? "1px dashed var(--border)" : "1px solid var(--border)",
+                background: "var(--card)"
+              }}
               onClick={() => {
-                if (!isReadToday && !isLoading) {
+                if (!isLoading && !isReadToday) {
                   setSelectedLevel(level);
                   setAddedWords({});
                   setFinished(false);
@@ -454,20 +461,32 @@ export default function ReaderScreen({
                 <div>
                   <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
                     <span className={`level-badge level-${level}`}>{level}</span>
-                    {isReadToday && <span style={{ fontSize: 11, color: "var(--sage)" }}>✓ прочитано сегодня</span>}
+                    {isReadToday ? (
+                      <span style={{ fontSize: 11, color: "var(--sage)", fontWeight: 500 }}>
+                        🔒 Прочитано сегодня (закрыто до завтра)
+                      </span>
+                    ) : (
+                      <span style={{ fontSize: 11, color: "var(--rose)", fontWeight: 500 }}>
+                        ✨ Новая книга на сегодня
+                      </span>
+                    )}
                   </div>
-                  <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17 }}>
+                  <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17, color: isReadToday ? "var(--muted)" : "var(--warm)" }}>
                     {isLoading ? (
                       <span className="pulsing" style={{ color: "#888" }}>✍️ Пишем новую книгу...</span>
+                    ) : isReadToday ? (
+                      generatedStory?.title || "Книга прочитана"
+                    ) : generatedStory ? (
+                      generatedStory.title
                     ) : (
-                      title
+                      "✨ Новая книга на сегодня"
                     )}
                   </div>
                   <div style={{ fontSize: 12, color: "#aaa", marginTop: 3 }}>
-                    {isLoading ? "секунду..." : `${wordCount} слов`}
+                    {isLoading ? "секунду..." : isReadToday ? "Увидимся завтра! ✨" : wordCount > 0 ? `${wordCount} слов` : "Будет создано ИИ для вас"}
                   </div>
                 </div>
-                <span style={{ fontSize: 22, opacity: isReadToday ? 0.2 : 0.4 }}>→</span>
+                <span style={{ fontSize: 22, opacity: isReadToday ? 0.15 : 0.4 }}>{isReadToday ? "🔒" : "→"}</span>
               </div>
             </div>
           );
@@ -636,11 +655,11 @@ export default function ReaderScreen({
           <div style={{ fontSize: 44, marginBottom: 12 }}>🌙</div>
           <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, color: "var(--warm)", marginBottom: 8, fontWeight: 600 }}>Отличная работа!</div>
           <div style={{ fontSize: 13, color: "#888", lineHeight: 1.5 }}>
-            Эта книга зачтена в ваш сегодняшний прогресс. Возвращайтесь завтра за новыми историями или попробуйте другой уровень!
+            Эта книга зачтена в ваш сегодняшний прогресс. Возвращайтесь завтра за новой ИИ-книгой для этого уровня или попробуйте другой уровень!
           </div>
         </div>
 
-        <button className="btn btn-primary" style={{ width: "100%", padding: 14, marginBottom: 10 }} onClick={() => { setSelectedLevel(null); setFinished(false); }}>← К списку книг</button>
+        <button className="btn btn-primary" style={{ width: "100%", padding: 14, marginBottom: 10 }} onClick={() => { setSelectedLevel(null); setFinished(false); }}>← К списку уровней</button>
         <button className="btn btn-secondary" style={{ width: "100%", padding: 14 }} onClick={onBack}>На главную</button>
       </div>
     );

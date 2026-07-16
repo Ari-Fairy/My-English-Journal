@@ -24,6 +24,7 @@ export default function DictionaryScreen({
   const [editId, setEditId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<Word>>({});
   const [toast, setToast] = useState("");
+  const [visibleCount, setVisibleCount] = useState(150);
 
   const deletedTopics = stats.deletedTopics || [];
   const deletedPos = stats.deletedPos || [];
@@ -95,9 +96,12 @@ export default function DictionaryScreen({
     setTimeout(() => setToast(""), 2000);
   };
 
+  // Sliced filtered list for virtual/progressive rendering
+  const visibleWords = filtered.slice(0, visibleCount);
+
   // Group by Part of Speech
   const grouped: { [key: string]: Word[] } = {};
-  filtered.forEach(w => {
+  visibleWords.forEach(w => {
     if (!grouped[w.partOfSpeech]) grouped[w.partOfSpeech] = [];
     grouped[w.partOfSpeech]!.push(w);
   });
@@ -115,18 +119,35 @@ export default function DictionaryScreen({
         className="input" 
         placeholder="🔍 Поиск слова..." 
         value={search} 
-        onChange={e => setSearch(e.target.value)} 
+        onChange={e => {
+          setSearch(e.target.value);
+          setVisibleCount(150);
+        }} 
         style={{ marginBottom: 10 }}
       />
 
       <div style={{ display: "flex", gap: 8, marginBottom: 14, flexWrap: "wrap" }}>
-        <select className="select" value={fPos} onChange={e => setFPos(e.target.value)}>
+        <select 
+          className="select" 
+          value={fPos} 
+          onChange={e => {
+            setFPos(e.target.value);
+            setVisibleCount(150);
+          }}
+        >
           <option value="all">Все части речи</option>
           {Object.entries(allPos).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
           ))}
         </select>
-        <select className="select" value={fTopic} onChange={e => setFTopic(e.target.value)}>
+        <select 
+          className="select" 
+          value={fTopic} 
+          onChange={e => {
+            setFTopic(e.target.value);
+            setVisibleCount(150);
+          }}
+        >
           <option value="all">Все темы</option>
           {Object.entries(allTopics).map(([k, v]) => (
             <option key={k} value={k}>{v}</option>
@@ -234,6 +255,16 @@ export default function DictionaryScreen({
           ))}
         </div>
       ))}
+
+      {filtered.length > visibleCount && (
+        <button 
+          className="btn btn-outline" 
+          style={{ width: "100%", padding: "12px", marginTop: "10px", marginBottom: "20px" }}
+          onClick={() => setVisibleCount(prev => prev + 100)}
+        >
+          Показать ещё (Осталось: {filtered.length - visibleCount})
+        </button>
+      )}
 
       {filtered.length === 0 && (
         <div style={{ textAlign: "center", padding: 40, color: "#ccc" }}>Ничего не найдено</div>
