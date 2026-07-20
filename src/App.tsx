@@ -27,12 +27,13 @@ import SettingsScreen from "./components/SettingsScreen";
 import AddScreen from "./components/AddScreen";
 import StatsScreen from "./components/StatsScreen";
 import AchievementsScreen from "./components/AchievementsScreen";
+import AiHubScreen from "./components/AiHubScreen";
 
 export default function App() {
   const [user, setUser] = useState<any>(null); // "guest" or Firebase User object
   const [authLoading, setAuthLoading] = useState(true);
   const [dbLoading, setDbLoading] = useState(false);
-  const [view, setView] = useState<"home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings">("home");
+  const [view, setView] = useState<"home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai">("home");
   const [sessionType, setSessionType] = useState<"learn" | "review" | "mandatory">("learn");
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
@@ -1008,6 +1009,16 @@ export default function App() {
           onImportData={handleImportBackup}
           onBack={() => setView("home")}
           onSaveProgress={handleSaveProgress}
+        />
+      )}
+
+      {view === "ai" && (
+        <AiHubScreen 
+          words={words} 
+          stats={progress}
+          onSaveWord={handleSaveWord}
+          onSaveProgress={handleSaveProgress}
+          onBack={() => setView("home")}
         />
       )}
     </div>

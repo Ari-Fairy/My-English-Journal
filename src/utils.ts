@@ -95,12 +95,18 @@ export function getCurrentWeekKey(): string {
 // Получение полного URL для API запросов при развертывании на внешних платформах (Vercel)
 export function getApiUrl(path: string): string {
   const hostname = window.location.hostname;
-  // Если мы запущены на стороннем хостинге (например, Vercel), то перенаправляем запросы на наш Cloud Run бэкенд
-  const isCustomHost = !hostname.includes("localhost") && 
-                       !hostname.includes("127.0.0.1") && 
-                       !hostname.includes("run.app");
-  
-  if (isCustomHost) {
+  // Если мы запущены в превью AI Studio, гитподе, локально или в контейнере Cloud Run, запросы должны идти относительно текущего хоста (relative).
+  // Только если мы развернуты на внешнем статическом хостинге (например, Vercel), мы перенаправляем их на бэкенд Cloud Run.
+  const isLocalOrWorkspace = hostname.includes("localhost") || 
+                             hostname.includes("127.0.0.1") || 
+                             hostname.includes("run.app") ||
+                             hostname.includes("aistudio") ||
+                             hostname.includes("google") ||
+                             hostname.includes("gitpod") ||
+                             hostname.includes("webcontainer") ||
+                             hostname.includes("stackblitz");
+
+  if (!isLocalOrWorkspace) {
     const backendUrl = "https://ais-dev-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
     return `${backendUrl}${path.startsWith("/") ? "" : "/"}${path}`;
   }

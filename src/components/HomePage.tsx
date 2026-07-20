@@ -44,7 +44,7 @@ const getWeeklyPreset = (index: number) => {
 interface HomePageProps {
   words: Word[];
   stats: UserProgress;
-  onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings") => void;
+  onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai") => void;
   onStartStudy: (sessionType: "learn" | "review" | "mandatory") => void;
   onSaveWord: (word: Word) => void;
   onSaveWords: (words: Word[]) => void;
@@ -54,6 +54,8 @@ interface HomePageProps {
 export default function HomePage({ words, stats, onNavigate, onStartStudy, onSaveWord, onSaveWords, onSaveProgress }: HomePageProps) {
   const [recallInfo, setRecallInfo] = useState(false);
   const [isSpreading, setIsSpreading] = useState(false);
+  const [showSpreadConfirm, setShowSpreadConfirm] = useState(false);
+  const [spreadSuccess, setSpreadSuccess] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
   useEffect(() => {
@@ -174,11 +176,8 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
   // Find mandatory end-of-day repetitions
   const mandatoryEndOfDayWords = words.filter(w => w.learned && w.isMandatoryEndOfDay);
 
-  const handleSpreadSurplus = () => {
-    if (totalOverdueCount <= 50 || isSpreading) return;
-    const ok = confirm(`Очередь переполнена (${totalOverdueCount} слов)! Вы хотите автоматически распределить излишек (все слова после первых 30) равномерно на следующие 1-3 дня?`);
-    if (!ok) return;
-
+  const executeSpreadSurplus = () => {
+    if (totalOverdueCount <= 30 || isSpreading) return;
     setIsSpreading(true);
     try {
       // Оставляем топ-30 слов, остальные распределяем на 1-3 дня вперед в одном батче
@@ -194,7 +193,11 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
         };
       });
       onSaveWords(updatedWords);
-      alert(`🎉 Успешно распределено ${surplus.length} слов излишка на следующие 1-3 дня!`);
+      setSpreadSuccess(`🎉 Успешно перенесено ${surplus.length} слов излишка на следующие 1-3 дня!`);
+      setTimeout(() => {
+        setSpreadSuccess(null);
+        setShowSpreadConfirm(false);
+      }, 5000);
     } catch (err) {
       console.error(err);
     } finally {
@@ -412,14 +415,44 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
           <p style={{ fontSize: 13, color: "var(--text-muted)", lineHeight: 1.4, margin: "0 0 12px 0" }}>
             В вашей очереди повторения скопилось слишком много слов. Рекомендуем разгрузить её, распределив излишек на ближайшие дни, чтобы заниматься комфортно.
           </p>
-          <button 
-            className="btn btn-outline" 
-            style={{ width: "100%", padding: 10, fontSize: 13, borderColor: "rgba(181, 93, 76, 0.3)", color: "var(--rose)" }}
-            onClick={handleSpreadSurplus}
-            disabled={isSpreading}
-          >
-            {isSpreading ? "⏳ Распределение..." : "🔄 Распределить излишек на 1-3 дня"}
-          </button>
+          
+          {spreadSuccess ? (
+            <div style={{ padding: "8px 12px", background: "rgba(143,160,128,0.15)", borderRadius: "12px", color: "var(--sage)", fontSize: 13, fontWeight: 500, textAlign: "center" }}>
+              {spreadSuccess}
+            </div>
+          ) : showSpreadConfirm ? (
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              <div style={{ fontSize: 12.5, color: "var(--warm)", marginBottom: 4, lineHeight: 1.4 }}>
+                Это автоматически перенесет <strong>{totalOverdueCount - 30} слов</strong> (все слова после первых 30) равномерно на следующие 1-3 дня. Вы уверены?
+              </div>
+              <div style={{ display: "flex", gap: 8 }}>
+                <button 
+                  className="btn btn-primary" 
+                  style={{ flex: 1, padding: 8, fontSize: 12, background: "var(--rose)", border: "none" }}
+                  onClick={executeSpreadSurplus}
+                  disabled={isSpreading}
+                >
+                  {isSpreading ? "⏳ Распределяем..." : "Да, распределить"}
+                </button>
+                <button 
+                  className="btn btn-outline" 
+                  style={{ flex: 1, padding: 8, fontSize: 12 }}
+                  onClick={() => setShowSpreadConfirm(false)}
+                >
+                  Отмена
+                </button>
+              </div>
+            </div>
+          ) : (
+            <button 
+              className="btn btn-outline" 
+              style={{ width: "100%", padding: 10, fontSize: 13, borderColor: "rgba(181, 93, 76, 0.3)", color: "var(--rose)" }}
+              onClick={() => setShowSpreadConfirm(true)}
+              disabled={isSpreading}
+            >
+              🔄 Распределить излишек на 1-3 дня
+            </button>
+          )}
         </div>
       )}
 
@@ -516,6 +549,53 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
               </div>
             );
           })}
+        </div>
+      </div>
+
+      {/* 🔮 Gemini AI Hub Prominent Practice Banner */}
+      <div 
+        className="card fade-in animate-pulse-subtle" 
+        style={{ 
+          marginBottom: 16, 
+          padding: "16px 20px", 
+          background: "linear-gradient(135deg, rgba(143,160,128,0.12) 0%, rgba(214,128,96,0.12) 100%)", 
+          border: "1.5px solid rgba(143,160,128,0.28)",
+          borderRadius: "1.5rem",
+          display: "flex",
+          justifyContent: "space-between",
+          alignItems: "center",
+          cursor: "pointer",
+          boxShadow: "0 4px 15px rgba(0,0,0,0.02)"
+        }}
+        onClick={() => onNavigate("ai")}
+      >
+        <div style={{ flex: 1, paddingRight: 12 }}>
+          <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 4 }}>
+            <span style={{ fontSize: 20 }}>🔮</span>
+            <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17, fontWeight: 600, color: "var(--sage)", margin: 0 }}>
+              Gemini AI Hub
+            </h3>
+            <span style={{ fontSize: 9, background: "var(--rose)", color: "#fff", padding: "1px 6px", borderRadius: 10, fontWeight: "bold", textTransform: "uppercase" }}>New</span>
+          </div>
+          <p style={{ fontSize: 12, color: "var(--text-muted)", lineHeight: 1.4, margin: 0 }}>
+            Говорите голосом, общайтесь с ИИ-преподавателями, сканируйте фото текстов и учите новые слова!
+          </p>
+        </div>
+        <div style={{ 
+          background: "var(--sage)", 
+          color: "#fff", 
+          borderRadius: "50%", 
+          width: 34, 
+          height: 34, 
+          display: "flex", 
+          alignItems: "center", 
+          justifyContent: "center",
+          fontWeight: "bold",
+          fontSize: 16,
+          boxShadow: "0 2px 6px rgba(143,160,128,0.3)",
+          flexShrink: 0
+        }}>
+          →
         </div>
       </div>
 

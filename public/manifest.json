@@ -1,0 +1,24 @@
+{
+  "short_name": "My Journal",
+  "name": "My English Journal",
+  "description": "Учите английский язык, читая книги и изучая слова",
+  "icons": [
+    {
+      "src": "/icon.jpg",
+      "sizes": "192x192",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/icon-512.jpg",
+      "sizes": "512x512",
+      "type": "image/jpeg",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/",
+  "display": "standalone",
+  "theme_color": "#12141c",
+  "background_color": "#12141c",
+  "orientation": "portrait"
+}

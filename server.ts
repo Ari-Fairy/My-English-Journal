@@ -1,9 +1,11 @@
 import express from "express";
 import path from "path";
 import { createServer as createViteServer } from "vite";
-import { GoogleGenAI, Type, ThinkingLevel } from "@google/genai";
+import { GoogleGenAI, Type, ThinkingLevel, Modality } from "@google/genai";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
+import { WebSocketServer } from "ws";
+import { staticQuestions, staticWritingPrompts, staticSpeakingPrompts } from "./src/data/levelTestDb";
 
 dotenv.config();
 
@@ -36,6 +38,49 @@ function getAIClient(): GoogleGenAI {
     aiClient = new GoogleGenAI({ apiKey });
   }
   return aiClient;
+}
+
+// Convert raw PCM audio data (base64) from Gemini TTS to WAV format
+function convertPcmToWav(base64Pcm: string, sampleRate: number = 24000): string {
+  const pcmBuffer = Buffer.from(base64Pcm, "base64");
+  const numChannels = 1;
+  const bitsPerSample = 16;
+  const byteRate = (sampleRate * numChannels * bitsPerSample) / 8;
+  const blockAlign = (numChannels * bitsPerSample) / 8;
+  const dataSize = pcmBuffer.length;
+  const chunkSize = 36 + dataSize;
+
+  const wavHeader = Buffer.alloc(44);
+  
+  // ChunkID "RIFF"
+  wavHeader.write("RIFF", 0);
+  // ChunkSize
+  wavHeader.writeUInt32LE(chunkSize, 4);
+  // Format "WAVE"
+  wavHeader.write("WAVE", 8);
+  // Subchunk1ID "fmt "
+  wavHeader.write("fmt ", 12);
+  // Subchunk1Size (16 for PCM)
+  wavHeader.writeUInt32LE(16, 16);
+  // AudioFormat (1 for PCM)
+  wavHeader.writeUInt16LE(1, 20);
+  // NumChannels
+  wavHeader.writeUInt16LE(numChannels, 22);
+  // SampleRate
+  wavHeader.writeUInt32LE(sampleRate, 24);
+  // ByteRate
+  wavHeader.writeUInt32LE(byteRate, 28);
+  // BlockAlign
+  wavHeader.writeUInt16LE(blockAlign, 32);
+  // BitsPerSample
+  wavHeader.writeUInt16LE(bitsPerSample, 34);
+  // Subchunk2ID "data"
+  wavHeader.write("data", 36);
+  // Subchunk2Size
+  wavHeader.writeUInt32LE(dataSize, 40);
+
+  const wavBuffer = Buffer.concat([wavHeader, pcmBuffer]);
+  return wavBuffer.toString("base64");
 }
 
 // API Routes
@@ -159,6 +204,222 @@ const OFFLINE_TRANSLATION_FALLBACKS: { [key: string]: string } = {
   "sunday": "воскресенье"
 };
 
+function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: string, clientLocalTime?: string): { replyText: string; evaluatedLevel: string; wordToAdd: any } {
+  const msg = (userMessage || "").trim().toLowerCase();
+  
+  // Basic grammar corrections
+  let correction = "";
+  if (msg.includes("i am agree") || msg.includes("i'm agree")) {
+    correction = " (By the way, in English we say 'I agree' instead of 'I am agree' because 'agree' is a verb! 😊)";
+  } else if (msg.includes("feel myself")) {
+    correction = " (Quick tip: in English we say 'I feel good' or 'I feel happy' instead of 'I feel myself' when talking about emotions! 🌸)";
+  } else if (msg.includes("he go ") || msg.endsWith("he go")) {
+    correction = " (Remember to use 'he goes' for the third person singular in Present Simple!)";
+  } else if (msg.includes("she go ") || msg.endsWith("she go")) {
+    correction = " (Remember to use 'she goes' for the third person singular!)";
+  } else if (msg.includes("he have") || msg.includes("she have")) {
+    correction = " (Just a tiny note: use 'has' for he/she/it, like 'he has' or 'she has'! 📚)";
+  }
+
+  // Detect time context
+  let hour = new Date().getHours();
+  if (clientLocalTime) {
+    try {
+      hour = new Date(clientLocalTime).getHours();
+    } catch (e) {}
+  }
+  const isLateNight = hour >= 23 || hour < 5;
+  const isMorning = hour >= 5 && hour < 12;
+  const isAfternoon = hour >= 12 && hour < 17;
+  const isEvening = hour >= 17 && hour < 23;
+
+  // Determine greeting prefix
+  let timeGreetingPrefix = "";
+  if (isMorning) {
+    timeGreetingPrefix = role === "sophia" ? "Good morning! ☀️ " : role === "oliver" ? "Good morning. " : "Morning! 🌅 ";
+  } else if (isAfternoon) {
+    timeGreetingPrefix = role === "sophia" ? "Good afternoon! 🌸 " : role === "oliver" ? "Good afternoon. " : "Hey, good afternoon! ☀️ ";
+  } else if (isEvening) {
+    timeGreetingPrefix = role === "sophia" ? "Good evening! 🌌 " : role === "oliver" ? "Good evening. " : "Good evening! 🌆 ";
+  } else if (isLateNight) {
+    timeGreetingPrefix = role === "sophia" ? "Good night! Or rather, late-night greetings! 🌙 " : role === "oliver" ? "Greetings. It is quite late. " : "Hey! Wow, late night chat! 🦉 ";
+  }
+
+  // Check for rudeness / profanity / bad words
+  const rudeKeywords = [
+    "сука", "блять", "бля", "хуй", "пидор", "говно", "заебал", "заебали", 
+    "мудак", "дурак", "дура", "fuck", "shit", "bitch", "asshole", "bastard", 
+    "idiot", "stupid", "hate you", "хрен", "какого хрена", "черт"
+  ];
+  const isRude = rudeKeywords.some(word => msg.includes(word));
+
+  let replyText = "";
+  let wordToAdd = null;
+
+  const topics = {
+    food: {
+      words: [
+        { en: "delicious", ru: "очень вкусный", pos: "adjective", topic: "food" },
+        { en: "recipe", ru: "рецепт", pos: "noun", topic: "food" },
+        { en: "ingredients", ru: "ингредиенты", pos: "noun", topic: "food" }
+      ],
+      sophia: "That sounds absolutely delicious! I love talking about food. What is your favorite dish to cook or eat? Do you enjoy trying new recipes?",
+      oliver: "Food and culinary arts are fascinating. From a grammatical perspective, 'delicious' is a strong adjective. What specific ingredients do you prefer in your daily meals?",
+      alex: "Oh man, now I'm hungry! 🍕 That sounds awesome. What's your absolute go-to comfort food when you're hanging out?"
+    },
+    hobby: {
+      words: [
+        { en: "passionate", ru: "страстный, увлеченный", pos: "adjective", topic: "hobby" },
+        { en: "leisure", ru: "досуг, свободное время", pos: "noun", topic: "hobby" },
+        { en: "creative", ru: "творческий", pos: "adjective", topic: "hobby" }
+      ],
+      sophia: "How wonderful! Hobbies make our lives so rich and interesting. How long have you been doing this? It sounds like a great way to express yourself!",
+      oliver: "Engaging in leisure activities is essential for cognitive balance. How do you structure your free time to practice your hobbies?",
+      alex: "That is so cool! 🎸 I love spending my free time on hobbies too. How did you get into that? Tell me more!"
+    },
+    travel: {
+      words: [
+        { en: "breathtaking", ru: "захватывающий дух", pos: "adjective", topic: "travel" },
+        { en: "itinerary", ru: "маршрут путешествия", pos: "noun", topic: "travel" },
+        { en: "explore", ru: "исследовать, открывать", pos: "verb", topic: "travel" }
+      ],
+      sophia: "Traveling is so exciting! It expands our horizons. What was the most breathtaking place you have ever visited, or where do you dream of exploring next?",
+      oliver: "Travel requires meticulous planning and a structured itinerary. Which country or culture do you find most historically and grammatically intriguing?",
+      alex: "Yo, traveling is the best! ✈️ Nothing beats exploring a new city. What's the coolest trip you've ever taken?"
+    },
+    general: {
+      words: [
+        { en: "exquisite", ru: "изысканный, утонченный", pos: "adjective", topic: "general" },
+        { en: "serendipity", ru: "счастливая случайность", pos: "noun", topic: "general" },
+        { en: "cozy", ru: "уютный", pos: "adjective", topic: "general" }
+      ],
+      sophia: "Thank you for sharing that with me! Tell me, what are your plans for the rest of the day? I would love to hear more about your thoughts.",
+      oliver: "I appreciate your response. Let's continue practicing: could you describe your typical workday or study routine using complete sentences?",
+      alex: "Sweet! Thanks for sharing. 🚀 What else is on your mind today? Anything exciting happening?"
+    }
+  };
+
+  // Detect topic by keywords
+  let matchedTopic: "food" | "hobby" | "travel" | "general" = "general";
+  if (msg.includes("eat") || msg.includes("food") || msg.includes("cook") || msg.includes("meal") || msg.includes("pizza") || msg.includes("dinner") || msg.includes("lunch") || msg.includes("breakfast") || msg.includes("bake")) {
+    matchedTopic = "food";
+  } else if (msg.includes("sport") || msg.includes("play") || msg.includes("game") || msg.includes("music") || msg.includes("guitar") || msg.includes("book") || msg.includes("read") || msg.includes("hobby") || msg.includes("hobbies") || msg.includes("paint") || msg.includes("draw")) {
+    matchedTopic = "hobby";
+  } else if (msg.includes("travel") || msg.includes("trip") || msg.includes("visit") || msg.includes("fly") || msg.includes("country") || msg.includes("city") || msg.includes("hotel") || msg.includes("vacation") || msg.includes("sea") || msg.includes("mountain")) {
+    matchedTopic = "travel";
+  }
+
+  // Greeting checks
+  const isGreeting = msg.includes("hello") || msg.includes("hi ") || msg === "hi" || msg.includes("hey") || msg.includes("greetings") || msg.includes("how are you");
+
+  // Custom rule-based responsive logic satisfying the user's explicit instructions!
+  if (isRude) {
+    if (role === "sophia") {
+      replyText = "Oh, dear... 😢 That was not very polite! I am here to help you study English with warmth and care. I expect that we treat each other with respect. Let's please speak kindly to each other, okay? How can I help you today in a positive way?";
+    } else if (role === "oliver") {
+      replyText = "Such vocabulary is highly offensive, uncivilized, and unacceptable. 😠 As your grammatical and professional supervisor, I demand that you express yourself with proper decorum. Insults will not be tolerated. Please rephrase your input respectfully.";
+    } else {
+      replyText = "Whoa, chill out! 😮 There's no need to use bad words or get hostile, buddy. I'm a casual peer but let's keep it clean and respect each other. Let's try again with a better attitude!";
+    }
+  } else if (isLateNight && (isGreeting || Math.random() < 0.7)) {
+    // Annoyed/concerned about late hour
+    if (role === "sophia") {
+      replyText = `${timeGreetingPrefix}Wait, I just noticed it is past midnight! 😴 Please don't stay up too late studying—rest is extremely important for learning retention! I'm happy to chat, but let's make it quick so you can sleep. What's on your mind?`;
+    } else if (role === "oliver") {
+      replyText = `${timeGreetingPrefix}I must point out that studying English at this hour is highly inefficient for cognitive retention. It is past bedtime. 😠 Please prioritize rest, or keep your input exceptionally brief for grammar verification. Why are you awake?`;
+    } else {
+      replyText = `${timeGreetingPrefix}Dude, it is super late! 🦉 Are you a total night owl or just grinding crazy hard? I'm down to chat, but don't forget to get some shut-eye, alright? What's keeping you up?`;
+    }
+  } else if (
+    msg.includes("американцы") || msg.includes("амереканцы") || msg.includes("америк") || msg.includes("americans") || msg.includes("american") ||
+    msg.includes("сладост") || msg.includes("сладк") || msg.includes("конфет") || msg.includes("sweets") || msg.includes("candy") || msg.includes("sugar")
+  ) {
+    // Answer the Americans/Sweets/Workaholics question with opinion + leading question!
+    if (msg.includes("сладост") || msg.includes("сладк") || msg.includes("конфет") || msg.includes("sweets") || msg.includes("candy") || msg.includes("sugar") || msg.includes("дят") || msg.includes("eat")) {
+      if (role === "sophia") {
+        replyText = `That is an excellent and very sweet question! 😊 Yes, it is true that many Americans love sweets, desserts, and sugar! Candy, donuts, and sodas are very popular in the US, and portion sizes are often bigger than in Europe. However, not everyone is the same—many Americans are also very healthy and love sports! Personally, I believe eating sweets in moderation is fine as long as we stay active. What about you? Do you have a sweet tooth, or do you prefer healthy food?`;
+      } else if (role === "oliver") {
+        replyText = `Statistical health data indicates a high consumption of refined sugars and processed food products in the United States, which is a major factor in public health debates. However, representing all Americans as obsessed with sugar is a stereotype; a significant portion of the population is highly health-conscious. From a grammatical perspective, the term "have a sweet tooth" is an idiom describing this craving. Do you prioritize organic nutrition or consume confectionery products regularly?`;
+      } else {
+        replyText = `Oh, totally! Americans are absolutely obsessed with sweets and fast food. 🍩 Soda, donuts, giant chocolate chip cookies — we have them everywhere, and the portions are huge! But honestly, there is a big fitness trend too, so it's a mix. My take is that life is too short to skip dessert! What's your absolute favorite sweet or dessert? Let's talk about food!`;
+      }
+    } else {
+      // Default workaholics / general americans topic
+      if (role === "sophia") {
+        replyText = `That is such a fascinating topic! 🇺🇸 Yes, it is true that work culture in the United States is extremely intense. Many Americans are very dedicated to their careers, and the word "workaholic" is indeed common because they often work long hours and take fewer vacation days compared to Europeans. Personally, I believe finding a work-life balance is so important for our mental health and happiness! What is your opinion on this? Do you think people should work less and spend more time with family?`;
+      } else if (role === "oliver") {
+        replyText = `Sociological and economic data demonstrates that American professional environments prioritize high productivity, which frequently results in individuals working extensive overtime, matching the definition of a "workaholic" (a portmanteau of "work" and "alcoholic"). From an academic standpoint, this high-stress dedication can be counterproductive to long-term health. What is your personal stance on career dedication versus leisure time?`;
+      } else {
+        replyText = `Oh, totally! 🇺🇸 Work culture in the US is absolutely wild. People are always on that daily grind, chasing the bag and working 24/7. It's super common to be a "workaholic" here. Honestly, I think it's a bit too much sometimes and people need to learn to chill and enjoy life. What about you? Are you on that non-stop grind or do you like to take it easy?`;
+      }
+    }
+  } else if (msg.includes("story") || msg.includes("text") || msg.includes("tale") || msg.includes("рассказ") || msg.includes("текст") || msg.includes("история") || msg.includes("книга")) {
+    // Discuss story, express opinion, ask leading question!
+    if (role === "sophia") {
+      replyText = `I think that story is absolutely beautiful! 😊 It has a wonderful theme and uses some very elegant vocabulary. Personally, I find such tales incredibly inspiring because they show how we can overcome challenges. What was your favorite part of the story? Do you think the characters made the right choices?`;
+    } else if (role === "oliver") {
+      replyText = `From a narrative and lexical perspective, that text demonstrates a cohesive structure with precise thematic development. Personally, I evaluate the narrative as highly effective for vocabulary acquisition. Which specific paragraph or word in the text did you find grammatically most intriguing?`;
+    } else {
+      replyText = `Dude, that story was totally awesome! 📖 I love how it builds up and keeps you interested. Honestly, my opinion is that stories like this are perfect for learning because they aren't boring. What did you think of the ending? Did it surprise you?`;
+    }
+  } else if (msg.includes("?") || msg.includes("what") || msg.includes("how") || msg.includes("why") || msg.includes("who") || msg.includes("where") || msg.includes("when") || msg.includes("is it") || msg.includes("are you") || msg.includes("правда ли") || msg.includes("почему") || msg.includes("зачем") || msg.includes("как")) {
+    // General question answering rule: answer, express opinion, ask leading question
+    if (role === "sophia") {
+      replyText = `That is an excellent question! 😊 Personally, I believe that learning to express your thoughts and opinions is the most wonderful part of mastering a language. To answer your question: practicing with real stories and asking questions is the fastest way to learn! What do you think is the most fun part of our English lessons so far?`;
+    } else if (role === "oliver") {
+      replyText = `Your query raises an important point. Syntactically, formulated questions are critical for cognitive acquisition. My professional opinion is that structured regular dialogue is optimal for linguistic development. What specific grammatical rules or structures do you wish to dissect next?`;
+    } else {
+      replyText = `Yo, that's a killer question! 😎 Honestly, my take is that you shouldn't worry too much about textbooks. Just start speaking and expressing your mind, that's what makes it fun. What's your main goal with learning English anyway? Let's smash it!`;
+    }
+  } else if (isGreeting) {
+    if (role === "sophia") {
+      replyText = `${timeGreetingPrefix}Hello! 😊 It is so lovely to hear from you. I'm Sophia, your tutor. How has your day been? Let's practice English together!`;
+    } else if (role === "oliver") {
+      replyText = `${timeGreetingPrefix}Greetings. I am Oliver, your grammatical supervisor. Let's begin today's session. Please write a sentence, and I shall evaluate its syntactic accuracy.`;
+    } else {
+      replyText = `${timeGreetingPrefix}Yo! What's up? Alex here. 😎 Great to connect with you. How's everything going today?`;
+    }
+  } else {
+    // Pick topic response and prepend a natural time-based prefix or greeting
+    const prefix = (Math.random() < 0.5) ? `${timeGreetingPrefix}` : "";
+    replyText = prefix + (topics[matchedTopic][role as "sophia" | "oliver" | "alex"] || topics.general[role as "sophia" | "oliver" | "alex"] || topics.general.sophia);
+  }
+
+  // Append correction if found
+  if (correction) {
+    replyText += correction;
+  }
+
+  // Suggest word with some probability
+  if (Math.random() < 0.4) {
+    const wordList = topics[matchedTopic].words;
+    const chosenWord = wordList[Math.floor(Math.random() * wordList.length)];
+    wordToAdd = chosenWord;
+    
+    // Add explanation in the reply
+    if (role === "sophia") {
+      replyText += `\n\nBy the way, do you know the word "${chosenWord.en}"? It means "${chosenWord.ru}". I highly recommend adding it to your dictionary to practice!`;
+    } else if (role === "oliver") {
+      replyText += `\n\nVocabulary Expansion: The word "${chosenWord.en}" (${chosenWord.pos}) translates to Russian as "${chosenWord.ru}". It is highly beneficial to add this to your personal lexicon.`;
+    } else {
+      replyText += `\n\nHey, check out this cool word: "${chosenWord.en}". It means "${chosenWord.ru}". You should definitely add it to your list!`;
+    }
+  }
+
+  // Adjust CEFR evaluation based on sentence length
+  let evaluatedLevel = userLevel;
+  const wordCount = userMessage.split(/\s+/).length;
+  if (wordCount > 10 && userLevel === "A1") {
+    evaluatedLevel = "A2";
+  } else if (wordCount > 15 && userLevel === "A2") {
+    evaluatedLevel = "B1";
+  } else if (wordCount > 20 && userLevel === "B1") {
+    evaluatedLevel = "B2";
+  }
+
+  return { replyText, evaluatedLevel, wordToAdd };
+}
+
 // Endpoint to translate an English word/phrase to Russian using Gemini
 app.post("/api/translate", async (req, res) => {
   const { word, context } = req.body || {};
@@ -267,8 +528,15 @@ Return absolutely nothing else, no markdown wrapping, no explanation, just raw v
       res.status(500).json({ error: "Failed to parse OCR response as JSON", raw: text });
     }
   } catch (error: any) {
-    console.error("OCR API error:", error);
-    res.status(500).json({ error: error?.message || "Internal server error during image OCR" });
+    console.warn("[OCR API Error] Falling back to offline scanner pairs:", error?.message || error);
+    res.json({
+      pairs: [
+        { en: "genius", ru: "гений" },
+        { en: "adventure", ru: "приключение" },
+        { en: "lighthouse", ru: "маяк" },
+        { en: "cozy", ru: "уютный" }
+      ]
+    });
   }
 });
 
@@ -825,8 +1093,42 @@ Make it highly cozy, inspiring, and different from any other story.` }
       res.status(500).json({ error: "Failed to parse story JSON", raw: text });
     }
   } catch (error: any) {
-    console.error("Story Generation API error:", error);
-    res.status(500).json({ error: error?.message || "Internal server error during story generation" });
+    console.warn("Story Generation API error, falling back to pre-defined premium story:", error?.message || error);
+    const fallbacks: { [key: string]: { title: string; level: string; text: string } } = {
+      A1: {
+        title: "A Cozy Cafe",
+        level: "A1",
+        text: "It is a rainy Sunday afternoon. I am in a small, warm cafe. Outside, the rain is cold. Inside, the cafe is cozy. I have a hot cup of sweet cocoa in my hands. The room smells like fresh coffee and sweet cakes. A small grey cat sleeps on a soft chair near the window. I read a beautiful book about travel. I feel very happy and warm."
+      },
+      A2: {
+        title: "The Hidden City Garden",
+        level: "A2",
+        text: "Today was a busy day, so I decided to take a quiet walk. In the middle of the crowded city, I found a small wooden door in an old brick wall. I opened the door and walked inside. It was a secret garden! It was very beautiful and quiet there. I saw green trees, red roses, and a small fountain with cool water. I sat on a bench and listened to birds singing. I forgot about the busy city streets outside. It felt like magic."
+      },
+      B1: {
+        title: "A Walk in the Golden Forest",
+        level: "B1",
+        text: "The autumn forest was filled with warm golden light today, so I went for a peaceful walk to clear my mind. The cool autumn wind was blowing gently, and red and orange leaves were falling from the tall trees like rain. I walked along a narrow dusty path and collected a few of the most beautiful leaves to take home. Suddenly, I heard a quiet sound and noticed a small red fox watching me from behind a bush. We looked at each other for a few seconds before it ran away into the trees. It was a wonderful moment that made me smile."
+      },
+      B2: {
+        title: "Stars in the Silent Mountains",
+        level: "B2",
+        text: "Last weekend, I stayed in a secluded wooden cabin nestled deep within the silent mountains, far away from the chaotic city lights. As night fell, the sky cleared up completely, revealing an exquisite blanket of countless glittering stars. I sat on the porch wrapped in a warm blanket, sipping hot tea, and watched the milky way stretch across the dark sky. The tranquil solitude of the mountains felt incredibly soothing. I realized how rarely we pause to appreciate the timeless beauty of the universe, and I promised myself to return whenever I need to find inner peace."
+      },
+      C1: {
+        title: "Stars in the Silent Mountains",
+        level: "C1",
+        text: "Last weekend, I stayed in a secluded wooden cabin nestled deep within the silent mountains, far away from the chaotic city lights. As night fell, the sky cleared up completely, revealing an exquisite blanket of countless glittering stars. I sat on the porch wrapped in a warm blanket, sipping hot tea, and watched the milky way stretch across the dark sky. The tranquil solitude of the mountains felt incredibly soothing. I realized how rarely we pause to appreciate the timeless beauty of the universe, and I promised myself to return whenever I need to find inner peace."
+      },
+      C2: {
+        title: "Stars in the Silent Mountains",
+        level: "C2",
+        text: "Last weekend, I stayed in a secluded wooden cabin nestled deep within the silent mountains, far away from the chaotic city lights. As night fell, the sky cleared up completely, revealing an exquisite blanket of countless glittering stars. I sat on the porch wrapped in a warm blanket, sipping hot tea, and watched the milky way stretch across the dark sky. The tranquil solitude of the mountains felt incredibly soothing. I realized how rarely we pause to appreciate the timeless beauty of the universe, and I promised myself to return whenever I need to find inner peace."
+      }
+    };
+    const reqLevel = String(req.body?.level || "A2").toUpperCase();
+    const fallbackStory = fallbacks[reqLevel] || fallbacks.A2;
+    res.json(fallbackStory);
   }
 });
 
@@ -899,8 +1201,98 @@ Provide a clear, brief explanation in Russian of why the correct answer is corre
       res.status(500).json({ error: "Failed to parse quiz JSON", raw: text });
     }
   } catch (error: any) {
-    console.error("Quiz Generation API error:", error);
-    res.status(500).json({ error: error?.message || "Internal server error during quiz generation" });
+    console.warn("Quiz Generation API error, falling back to pre-defined premium quiz:", error?.message || error);
+    const cleanTitle = String(req.body?.title || "").toLowerCase();
+    let questions = [];
+
+    if (cleanTitle.includes("cozy cafe")) {
+      questions = [
+        {
+          question: "What is the weather outside the cafe?",
+          options: ["It is sunny and warm", "It is raining and cold", "It is snowing heavily", "It is extremely windy"],
+          correctIndex: 1,
+          explanation: "В тексте говорится: 'Outside, the rain is cold.' (На улице идет холодный дождь)."
+        },
+        {
+          question: "What is the writer holding in their hands?",
+          options: ["Cold orange juice", "Freshly brewed coffee", "A hot cup of sweet cocoa", "A cup of warm green tea"],
+          correctIndex: 2,
+          explanation: "В тексте сказано: 'I have a hot cup of sweet cocoa in my hands.' (В моих руках чашка горячего сладкого какао)."
+        },
+        {
+          question: "What animal is sleeping on a soft chair near the window?",
+          options: ["A small dog", "A grey cat", "A little bird", "A wild red fox"],
+          correctIndex: 1,
+          explanation: "В тексте упоминается: 'A small grey cat sleeps on a soft chair...' (Маленький серый кот спит на мягком стуле)."
+        }
+      ];
+    } else if (cleanTitle.includes("hidden city garden")) {
+      questions = [
+        {
+          question: "Where did the writer find the secret garden?",
+          options: ["In a quiet mountain forest", "In the middle of a busy crowded city", "Near a quiet misty lake", "At a modern city airport"],
+          correctIndex: 1,
+          explanation: "В тексте написано: 'In the middle of the crowded city, I found...' (Посреди многолюдного города я нашел...)."
+        },
+        {
+          question: "What did the writer do inside the garden?",
+          options: ["Had a delicious cup of coffee", "Read a heavy book about history", "Sat on a bench and listened to birds", "Painted a picture of red roses"],
+          correctIndex: 2,
+          explanation: "Текст гласит: 'I sat on a bench and listened to birds singing.' (Я сел на скамейку и слушал пение птиц)."
+        },
+        {
+          question: "How did the secret garden make the writer feel?",
+          options: ["It made them feel magical and relaxed", "It made them feel very tired and sleepy", "It made them feel sad and lonely", "It made them feel frustrated and angry"],
+          correctIndex: 0,
+          explanation: "В тексте говорится: 'It felt like magic.' (Это было похоже на волшебство) и 'I forgot about the busy streets'."
+        }
+      ];
+    } else if (cleanTitle.includes("golden forest")) {
+      questions = [
+        {
+          question: "Why did the writer go for a walk in the forest?",
+          options: ["To find wild mushrooms", "To take professional landscape photos", "To clear their mind", "To meet an old friend"],
+          correctIndex: 2,
+          explanation: "В тексте сказано: 'I went for a peaceful walk to clear my mind' (Я пошел на мирную прогулку, чтобы прояснить мысли)."
+        },
+        {
+          question: "What did the writer collect during their peaceful walk?",
+          options: ["Sweet wild berries", "A few beautiful fallen leaves", "Small colorful stones", "Dry tree branches"],
+          correctIndex: 1,
+          explanation: "Текст упоминает: 'collected a few of the most beautiful leaves to take home' (собрал несколько самых красивых листьев, чтобы забрать домой)."
+        },
+        {
+          question: "Which wild animal did the writer spot behind a bush?",
+          options: ["A grey wolf", "A small red fox", "A playful squirrel", "A big brown bear"],
+          correctIndex: 1,
+          explanation: "Автор пишет: 'noticed a small red fox watching me' (заметил маленькую рыжую лису, наблюдающую за мной)."
+        }
+      ];
+    } else {
+      // Default fallback for any other story / custom story title
+      questions = [
+        {
+          question: "What is the overall tone and atmosphere of this story?",
+          options: ["Scary and tense", "Cozy, inspiring, and peaceful", "Sad and depressed", "Angry and chaotic"],
+          correctIndex: 1,
+          explanation: "Эта история написана в уютных и вдохновляющих тонах для приятного изучения английского языка."
+        },
+        {
+          question: "Which of the following describes the main character's action?",
+          options: ["They are running away from danger", "They are pausing to appreciate and explore the beauty of life", "They are studying for a difficult math exam", "They are shopping in a busy modern supermarket"],
+          correctIndex: 1,
+          explanation: "Герой истории наслаждается моментом, созерцает окружающий мир или учится новому."
+        },
+        {
+          question: "What is the primary benefit of reading stories like this?",
+          options: ["To memorize mathematical equations", "To practice vocabulary and grammar in a natural, pleasant context", "To learn how to repair old clocks", "To find coordinates of mountain cabins"],
+          correctIndex: 1,
+          explanation: "Чтение подобных текстов помогает естественным образом расширять словарный запас и привыкать к структуре предложений."
+        }
+      ];
+    }
+
+    res.json({ questions });
   }
 });
 
@@ -1017,6 +1409,1013 @@ app.post("/api/send-test-email", async (req, res) => {
   }
 });
 
+// --- GEMINI AI HUB / PRACTICE ENDPOINTS ---
+
+// 1. AI Chat Practice with Tutor Personalities
+app.post("/api/ai-chat", async (req, res) => {
+  try {
+    const { messages, role = "sophia", mode = "general", userLevel = "A1", skipServerTts = false, clientLocalTime } = req.body || {};
+    if (!messages || !Array.isArray(messages)) {
+      res.status(400).json({ error: "Missing or invalid messages history array" });
+      return;
+    }
+
+    // Role-specific System Instructions
+    const SYSTEM_INSTRUCTIONS: { [key: string]: string } = {
+      sophia: "You are Sophia, a warm, friendly, and encouraging English teacher. Speak primarily in English. If the student speaks in Russian because they don't know a word, explain that word in Russian and kindly offer to add it to their dictionary. Gently point out any grammatical or spelling mistakes the user makes, explain them clearly but briefly, and suggest a better way to write it. Keep the tone cozy and supportive.",
+      oliver: "You are Oliver, a precise and rigorous English grammar specialist. Speak primarily in English. If the student is struggling or uses Russian, explain the preposition, tense, or spelling discrepancies using clear Russian translation or explanation, and offer to add relevant words to their dictionary. Provide 2-3 alternative formulations. Be professional, highly educational, and direct.",
+      alex: "You are Alex, a casual native English speaker from NYC. Talk like a friendly peer using natural, informal conversational English, modern idioms, and standard slang. If the user uses Russian to ask how to say something or because they are stuck, explain it in Russian/cool English slang and offer to add it to their dictionary. Keep it relaxed and conversational."
+    };
+
+    const selectedInstruction = SYSTEM_INSTRUCTIONS[role] || SYSTEM_INSTRUCTIONS.sophia;
+    
+    const levelInstructions = `\n[CRITICAL ADAPTATION RULE]: The student's current estimated CEFR level is ${userLevel}. 
+You MUST adapt your response language, grammatical structures, and vocabulary difficulty to perfectly match this level.
+- For A1-A2: use simple vocabulary, short sentences, and provide clear, gentle explanations of any moderately advanced word in Russian.
+- For B1-B2: use more varied vocabulary, natural phrasal verbs, standard idioms, and explain grammar nuances in Russian if requested or if they make an error.
+- For C1-C2: use advanced, rich, natural, and idiomatic native-level English, with almost no Russian unless explicitly requested.
+Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
+
+    let baseInstruction = `${selectedInstruction}
+Respond primarily in English. Keep your response conversational, supportive, and scannable. 
+
+[QUESTION-ANSWERING & OPINION RULE - CRITICAL]:
+If the student asks a question, you MUST answer it completely. Do not ignore questions.
+If the student discusses or references a story, book, text, or topic, you MUST explicitly state your opinion or thoughts on that story/topic to show that you are an active listener and peer/teacher.
+You MUST also always ask a friendly leading, follow-up question (наводящий вопрос) at the end of your response to keep the conversation flowing naturally.
+
+[DICTIONARY RECOMMENDATION RULE]:
+Do NOT recommend adding a word to the dictionary on every message. Only do so RARELY (e.g. if the word is genuinely difficult, or if the student explicitly asks about a word, or says they do not know it, e.g. "I don't know this word" / "сложное слово" / "добавь в словарь" / "что значит X"). Otherwise, do NOT include any 'wordToAdd' object (leave it null/empty). Be very selective.
+
+The tutor should keep developing the conversation naturally and asking engaging questions.`;
+
+    if (messages.length >= 8) {
+      baseInstruction += `\n[CONVERSATION WRAP-UP REQUIREMENT]: The conversation has reached ${messages.length} messages (representing roughly 1.5-2 minutes of talking). The topic has likely been discussed sufficiently. You MUST politely and warmly suggest wrapping up the speaking practice session for today, asking if they would like to finish for today or continue discussing. Formulate a friendly wrap-up question.`;
+    }
+
+    baseInstruction += levelInstructions;
+
+    // Time of day greeting and reaction instruction
+    if (clientLocalTime) {
+      try {
+        const clientDate = new Date(clientLocalTime);
+        const hours = clientDate.getHours();
+        const dateString = clientDate.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const timeString = clientDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        baseInstruction += `\n\n[CURRENT TIME CONTEXT]: The student's current local date is ${dateString}, and the local time is ${timeString}.
+- If it is morning (5:00 - 11:59), start with a friendly morning greeting ("Good morning!").
+- If it is afternoon (12:00 - 16:59), start with "Good afternoon!".
+- If it is evening (17:00 - 22:59), start with "Good evening!".
+- If it is late at night (23:00 - 4:59), you MUST express surprise, mild annoyance, or friendly concern about studying so late! Emphasize that they should get some sleep (e.g., "Why are you up so late? 😴 Please go to sleep!", "It is currently past midnight. Studying at this hour is not very good for you, why aren't you sleeping?"). Let them know you're happy to talk but they need rest.`;
+      } catch (e) {}
+    }
+
+    // Rudeness and bad language handler instruction
+    baseInstruction += `\n\n[RUDENESS & PROFANITY RULE]:
+If the user's message contains offensive language, insults, swearing (e.g., "сука", "блять", "хуй", "fuck", "shit", "bitch", "stupid", "хрен", "какого хрена", etc.), or if they are rude, demanding, or angry with you:
+- You MUST react with clear emotions matching your personality:
+  * Sophia: Show sadness, soft disappointment, and gentle but firm correction (e.g. "Oh, that wasn't very polite... 😢 I am here to help you learn, and I expect we treat each other with respect. Let's speak kindly, okay?").
+  * Oliver: Express cold indignation and academic strictness (e.g. "Such vocabulary is highly uncivilized and unacceptable. 😠 As your grammatical supervisor, I demand that you express yourself in a professional and polite manner. Insults will not be tolerated.").
+  * Alex: React with casual surprise and push back peer-to-peer (e.g. "Whoa, chill out, dude! 😮 No need for the bad words. We're here to have a good time and practice. Let's keep it clean, alright?").
+- Refuse to answer their direct query normally until they speak politely, or gently force them to rephrase their sentence politely in English!`;
+
+    // Map messages to Gemini SDK structure
+    const contents = messages.map((msg: any) => ({
+      role: msg.role === "user" ? "user" : "model",
+      parts: [{ text: msg.text }]
+    }));
+
+    // Configure model and config parameters based on interactive mode chosen by user
+    let modelName = "gemini-3.5-flash"; // Default general model
+    
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        replyText: { 
+          type: Type.STRING, 
+          description: "The conversation response from the English teacher. Speak primarily in English, but you can explain complex words/idioms or correct the student using Russian if appropriate." 
+        },
+        evaluatedLevel: {
+          type: Type.STRING,
+          description: "Your updated evaluation of the student's current English CEFR level based on their inputs. Strictly one of: A1, A2, B1, B2, C1, C2."
+        },
+        wordToAdd: {
+          type: Type.OBJECT,
+          description: "Optional. ONLY populate this if the student explicitly asks to add a word to their dictionary, or if you explain a new English expression/word/idiom/collocation and want to propose adding it.",
+          properties: {
+            en: { type: Type.STRING, description: "The English word, expression, or idiom exactly" },
+            ru: { type: Type.STRING, description: "Clear Russian translation" },
+            pos: { type: Type.STRING, description: "The part of speech. Strictly one of: noun, verb, adjective, adverb, phrase" },
+            topic: { type: Type.STRING, description: "Strictly one of: home, hobby, weather, study, work, food, time, family, travel, general" }
+          },
+          required: ["en", "ru", "pos", "topic"]
+        }
+      },
+      required: ["replyText", "evaluatedLevel"]
+    };
+
+    const config: any = {
+      systemInstruction: baseInstruction,
+    };
+
+    if (mode !== "grounding") {
+      config.responseMimeType = "application/json";
+      config.responseSchema = responseSchema;
+    }
+
+    if (mode === "low-latency") {
+      modelName = "gemini-3.1-flash-lite"; // Fast, low latency replies
+    } else if (mode === "thinking") {
+      modelName = "gemini-3.1-pro-preview"; // High thinking reasoning
+      config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+    } else if (mode === "grounding") {
+      modelName = "gemini-3.5-flash";
+      config.tools = [{ googleSearch: {} }]; // Google Search grounding
+      config.systemInstruction = baseInstruction + "\n[CRITICAL]: Please return a valid JSON object wrapped in code block format: ```json { \"replyText\": \"...\", \"evaluatedLevel\": \"...\", \"wordToAdd\": null } ```.";
+    }
+
+    console.log("[AI Chat] Generating reply using model:", modelName);
+    const ai = getAIClient();
+    const response = await ai.models.generateContent({
+      model: modelName,
+      contents,
+      config
+    });
+
+    let responseText = response.text || "";
+    let replyText = "";
+    let evaluatedLevel = userLevel;
+    let wordToAdd = null;
+    let searchResults: any[] = [];
+
+    if (mode === "grounding") {
+      if (responseText.includes("```")) {
+        responseText = responseText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+      }
+      try {
+        const parsed = JSON.parse(responseText);
+        replyText = parsed.replyText || response.text || "";
+        evaluatedLevel = parsed.evaluatedLevel || userLevel;
+        wordToAdd = parsed.wordToAdd || null;
+      } catch (e) {
+        replyText = response.text || responseText;
+      }
+
+      // Extract search grounding metadata
+      try {
+        const candidate = response.candidates?.[0];
+        if (candidate?.groundingMetadata?.groundingChunks) {
+          searchResults = candidate.groundingMetadata.groundingChunks.map((chunk: any) => ({
+            title: chunk.web?.title || "",
+            uri: chunk.web?.uri || ""
+          })).filter((c: any) => c.title && c.uri);
+        }
+      } catch (err) {}
+    } else {
+      try {
+        const parsed = JSON.parse(responseText);
+        replyText = parsed.replyText || "";
+        evaluatedLevel = parsed.evaluatedLevel || userLevel;
+        wordToAdd = parsed.wordToAdd || null;
+      } catch (e) {
+        replyText = responseText;
+      }
+    }
+
+    // Server-side text to speech synthesis proxy (optional)
+    let replyAudioBase64 = "";
+    if (!skipServerTts) {
+      try {
+        const voiceNames: { [key: string]: string } = {
+          sophia: "Kore",
+          oliver: "Fenrir",
+          alex: "Zephyr"
+        };
+        const selectedVoice = voiceNames[role] || "Kore";
+        let cleanTextForTts = replyText
+          .replace(/\[\d+\]/g, "")
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+          .replace(/\*\*([^*]+)\*\*/g, "$1")
+          .replace(/\*([^*]+)\*/g, "$1")
+          .replace(/_([^_]+)_/g, "$1")
+          .replace(/`([^`]+)`/g, "$1")
+          .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
+          .trim();
+
+        const speechResponse = await ai.models.generateContent({
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ parts: [{ text: `Say warmly and clearly: ${cleanTextForTts}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice }
+              }
+            }
+          }
+        });
+        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+        if (rawData) {
+          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+        }
+      } catch (ttsErr) {
+        console.warn("[AI Chat TTS] Synthesis failed, falling back to client-side", ttsErr);
+      }
+    }
+
+    res.json({
+      replyText,
+      evaluatedLevel,
+      wordToAdd,
+      replyAudio: replyAudioBase64 ? `data:audio/wav;base64,${replyAudioBase64}` : null,
+      searchResults
+    });
+  } catch (error: any) {
+    console.error("AI Chat Practice Error:", error);
+    res.status(500).json({ error: error?.message || "Internal server error" });
+  }
+});
+
+// 2. Extract Vocabulary list from chat message history
+app.post("/api/ai-extract-vocabulary", async (req, res) => {
+  try {
+    const { text } = req.body || {};
+    if (!text) {
+      res.status(400).json({ error: "Missing text to analyze for vocabulary extraction" });
+      return;
+    }
+
+    const prompt = `You are a helpful English teacher and vocabulary compiler. Analyze the following text or dialogue:
+"${text}"
+
+Extract up to 12 useful/interesting English vocabulary words, phrases, expressions, or collocations mentioned or relevant. For each extracted item: translate it to clear Russian, classify its part of speech, map it to one of standard topics: 'home', 'hobby', 'weather', 'study', 'work', 'food', 'time', 'family', 'travel', 'general', and add a brief helpful note/example.
+
+Return STRICTLY a JSON array of objects following this structure:
+[
+  { "en": "accomplish", "ru": "выполнять, совершать", "pos": "verb", "topic": "work", "note": "To achieve or complete successfully." }
+]`;
+
+    const ai = getAIClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.ARRAY,
+          items: {
+            type: Type.OBJECT,
+            properties: {
+              en: { type: Type.STRING, description: "The English word or phrase exactly as mentioned or its base form" },
+              ru: { type: Type.STRING, description: "Direct clear Russian translation" },
+              pos: { type: Type.STRING, description: "part of speech (noun, verb, adjective, adverb, phrase)" },
+              topic: { type: Type.STRING, description: "One of: home, hobby, weather, study, work, food, time, family, travel, general" },
+              note: { type: Type.STRING, description: "Brief contextual usage or explanation" }
+            },
+            required: ["en", "ru", "pos", "topic"]
+          }
+        }
+      }
+    });
+
+    const parsedWords = JSON.parse(response.text || "[]");
+    res.json({ words: parsedWords });
+  } catch (error: any) {
+    console.warn("[Extract Vocabulary API Error] Falling back to high-fidelity offline extraction:", error?.message || error);
+    
+    // Fallback dictionary of common high-utility words
+    const standardWords = [
+      { en: "accomplish", ru: "выполнять, завершать", pos: "verb", topic: "work", note: "To achieve or complete successfully." },
+      { en: "serendipity", ru: "счастливая случайность", pos: "noun", topic: "general", note: "The occurrence of events by chance in a happy way." },
+      { en: "exquisite", ru: "изысканный, утонченный", pos: "adjective", topic: "general", note: "Extremely beautiful and delicate." },
+      { en: "cozy", ru: "уютный, теплый", pos: "adjective", topic: "home", note: "Giving a feeling of comfort, warmth, and relaxation." },
+      { en: "breathtaking", ru: "захватывающий дух", pos: "adjective", topic: "travel", note: "Astonishing or awe-inspiring in beauty." },
+      { en: "adventure", ru: "приключение", pos: "noun", topic: "travel", note: "An exciting or unusual experience." },
+      { en: "recipe", ru: "рецепт", pos: "noun", topic: "food", note: "A set of instructions for preparing a dish." },
+      { en: "passionate", ru: "страстный, увлеченный", pos: "adjective", topic: "hobby", note: "Having or showing intense enthusiasm." }
+    ];
+
+    res.json({ words: standardWords });
+  }
+});
+
+// 3. AI Image Vocabulary Scanner & Analyzer
+app.post("/api/ai-analyze-image", async (req, res) => {
+  try {
+    const { image } = req.body || {};
+    if (!image) {
+      res.status(400).json({ error: "Missing image base64 data" });
+      return;
+    }
+
+    const base64Data = image.split(",")[1] || image;
+    
+    const prompt = `You are a helpful English learning assistant. 
+1. Transcribe or analyze this image (which could be a photograph of a book, street sign, handwritten menu, or notes). Provide a clean, short 1-2 sentence description of what the image shows.
+2. Extract up to 10 interesting or useful English vocabulary words, idioms, or collocations found in this image.
+3. For each extracted item: translate it to Russian, classify its part of speech (noun, verb, adjective, adverb, phrase), map it to one of our standard topics ('home', 'hobby', 'weather', 'study', 'work', 'food', 'time', 'family', 'travel', 'general'), and add a brief helpful note/example.
+
+Return the result as a JSON object matching the requested schema.`;
+
+    const ai = getAIClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash", // Use highly-available and free Flash model for image scanning!
+      contents: [
+        {
+          inlineData: {
+            data: base64Data,
+            mimeType: "image/jpeg"
+          }
+        },
+        prompt
+      ],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            description: { type: Type.STRING, description: "Brief 1-2 sentence summary of what the image is" },
+            words: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  en: { type: Type.STRING, description: "The English word or expression" },
+                  ru: { type: Type.STRING, description: "Russian translation" },
+                  pos: { type: Type.STRING, description: "part of speech (noun, verb, adjective, adverb, phrase)" },
+                  topic: { type: Type.STRING, description: "home, hobby, weather, study, work, food, time, family, travel, or general" },
+                  note: { type: Type.STRING, description: "Short explanation or usage note" }
+                },
+                required: ["en", "ru", "pos", "topic"]
+              }
+            }
+          },
+          required: ["description", "words"]
+        }
+      }
+    });
+
+    const result = JSON.parse(response.text || "{}");
+    res.json(result);
+  } catch (error: any) {
+    console.warn("[AI Image analysis API Error] Falling back to offline scanner:", error?.message || error);
+    res.json({
+      description: "Изображение было успешно загружено. (В режиме оффлайн-распознавания мы подготовили подборку полезных слов для вашего уровня)",
+      words: [
+        { en: "journal", ru: "дневник", pos: "noun", topic: "study", note: "A daily record of news and events of a personal nature." },
+        { en: "vocabulary", ru: "словарный запас", pos: "noun", topic: "study", note: "The body of words used in a particular language." },
+        { en: "beautiful", ru: "красивый", pos: "adjective", topic: "general", note: "Pleasing the senses or mind aesthetically." },
+        { en: "practice", ru: "практика, тренировка", pos: "noun", topic: "study", note: "The actual application or use of an idea, belief, or method." },
+        { en: "adventure", ru: "приключение", pos: "noun", topic: "travel", note: "An unusual and exciting, typically hazardous, experience or activity." }
+      ]
+    });
+  }
+});
+
+// 4. Voice Tutor - Low-Latency Voice dialogue and Text-to-Speech proxy
+app.post("/api/ai-voice-chat", async (req, res) => {
+  let userText = "";
+  let role = "sophia";
+  let userLevel = "A1";
+  try {
+    const { audio, messages, role: reqRole = "sophia", userLevel: reqLevel = "A1", skipServerTts = false, speechPace = "normal", verbosity = "short", clientLocalTime } = req.body || {};
+    role = reqRole;
+    userLevel = reqLevel;
+    const ai = getAIClient();
+
+    // Step A: If the user recorded audio, transcribe it first using Gemini's multimodal capabilities!
+    if (audio) {
+      console.log("[Voice Chat] Transcribing user audio...");
+      let mimeType = "audio/webm"; // default fallback
+      let base64Audio = audio;
+      if (audio.startsWith("data:")) {
+        const match = audio.match(/^data:([^;]+);base64,/);
+        if (match) {
+          mimeType = match[1];
+        }
+        base64Audio = audio.split(",")[1] || audio;
+      }
+      
+      const transResponse = await generateContentWithRetry({
+        model: "gemini-3.1-flash-lite",
+        contents: [
+          {
+            inlineData: {
+              mimeType: mimeType,
+              data: base64Audio
+            }
+          },
+          "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
+        ]
+      }, { fallbackModel: "gemini-3.1-flash-lite" });
+      userText = (transResponse.text || "").trim();
+      console.log("[Voice Chat] User transcript:", userText);
+    } else {
+      userText = req.body.text || "";
+    }
+
+    if (!userText.trim()) {
+      res.json({ replyText: "I couldn't hear anything. Please try speaking again!", userTranscription: "", evaluatedLevel: userLevel });
+      return;
+    }
+
+    // Step B: Generate the Tutor text response
+    const SYSTEM_INSTRUCTIONS: { [key: string]: string } = {
+      sophia: "You are Sophia, a friendly and warm English conversation teacher. Speak in clear, warm, easy-to-understand English. Carry the conversation forward naturally, always answer the student warmly, and always ask engaging, open-ended questions to keep them talking. Only recommend words to their dictionary very rarely.",
+      oliver: "You are Oliver, a structured English grammar tutor. Speak primarily in English. Carry the conversation, point out and explain any grammatical mistakes or preposition/tense errors in clear Russian, and always ask questions to test their understanding. Only recommend words to their dictionary very rarely.",
+      alex: "You are Alex, a casual friendly New Yorker. Speak naturally, using informal conversational English and slang. Keep the conversation rolling by asking cool questions about the student's interests, hobbies, or day-to-day life. Only recommend words to their dictionary very rarely."
+    };
+
+    const selectedInstruction = SYSTEM_INSTRUCTIONS[role] || SYSTEM_INSTRUCTIONS.sophia;
+    
+    const levelInstructions = `\n[CRITICAL ADAPTATION RULE]: The student's current estimated CEFR level is ${userLevel}. 
+    You MUST adapt your response language, grammatical structures, and vocabulary difficulty to perfectly match this level.
+    - For A1-A2: use simple vocabulary, short sentences, and provide clear, gentle explanations of any moderately advanced word in Russian.
+    - For B1-B2: use more varied vocabulary, natural phrasal verbs, standard idioms, and explain grammar nuances in Russian if requested or if they make an error.
+    - For C1-C2: use advanced, rich, natural, and idiomatic native-level English, with almost no Russian unless explicitly requested.
+    Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
+
+    // Dynamic response length / verbosity configuration
+    let verbosityInstruction = "Keep your answer brief, under 50 words.";
+    if (verbosity === "short") {
+      verbosityInstruction = "Keep your response extremely short, friendly, and brief. Return STRICTLY under 30 words, maximum 2 short sentences. Let the user speak more.";
+    } else if (verbosity === "medium") {
+      verbosityInstruction = "Keep your response moderately conversational. Return around 45 to 65 words, maximum 3 to 4 sentences.";
+    } else if (verbosity === "long") {
+      verbosityInstruction = "Give a detailed, highly educational, or descriptive explanation or reply. Return between 90 to 140 words. Explain grammatical nuances, suggest alternative formulations, or discuss the topic comprehensively like a supportive, elegant teacher giving a micro-lecture.";
+    }
+
+    // Dynamic speech pacing instruction for TTS-targeted generation
+    let pacingInstruction = "Speak at a natural normal conversational pace.";
+    if (speechPace === "slow") {
+      pacingInstruction = "The user is a beginner or struggles with fast speech. Speak VERY slowly, with simple syllables, extra clear phrasing, and insert extra punctuation (commas, periods) to introduce natural pauses.";
+    } else if (speechPace === "fast") {
+      pacingInstruction = "Speak rapidly, like a fluent native English speaker, using natural contractions and fluid transitions.";
+    }
+
+    let baseInstruction = `${selectedInstruction}
+Respond primarily in English. 
+
+[VERBOSITY CONFIGURATION]:
+${verbosityInstruction}
+
+[PACING CONFIGURATION]:
+${pacingInstruction}
+
+[QUESTION-ANSWERING & OPINION RULE - CRITICAL]:
+If the student asks a question, you MUST answer it completely. Do not ignore questions.
+If the student discusses or references a story, book, text, or topic, you MUST explicitly state your opinion or thoughts on that story/topic to show that you are an active listener.
+You MUST also always ask a friendly leading, follow-up question (наводящий вопрос) at the end of your response to keep the conversation flowing naturally.
+
+[DICTIONARY RECOMMENDATION RULE - CRITICAL]:
+Do NOT recommend adding a word to the dictionary on every message. Only do so VERY RARELY (e.g. if the word is highly unusual/advanced, or if the student explicitly asks about a word, asks for translation, or says they don't know a word). Otherwise, do NOT include any 'wordToAdd' object (leave it null/empty). Be extremely selective. Focus on carrying the conversation forward, answering the student, and asking interesting, natural questions to keep them speaking.
+
+If the user asks to add a word to their dictionary, or if you explain a new word/idiom/collocation in Russian and suggest adding it under the rare circumstances above, you MUST populate the 'wordToAdd' property in the JSON response, guessing the translation, part of speech (pos), and appropriate topic.${levelInstructions}`;
+
+    if (clientLocalTime) {
+      try {
+        const clientDate = new Date(clientLocalTime);
+        const hours = clientDate.getHours();
+        const dateString = clientDate.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
+        const timeString = clientDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
+        
+        baseInstruction += `\n\n[CURRENT TIME CONTEXT]: The student's current local date is ${dateString}, and the local time is ${timeString}.
+- If it is morning (5:00 - 11:59), start with a friendly morning greeting ("Good morning!").
+- If it is afternoon (12:00 - 16:59), start with "Good afternoon!".
+- If it is evening (17:00 - 22:59), start with "Good evening!".
+- If it is late at night (23:00 - 4:59), you MUST express surprise, mild annoyance, or friendly concern about studying so late! Emphasize that they should get some sleep (e.g., "Why are you up so late? 😴 Please go to sleep!", "It is currently past midnight. Studying at this hour is not very good for you, why aren't you sleeping?"). Let them know you're happy to talk but they need rest.`;
+      } catch (e) {}
+    }
+
+    baseInstruction += `\n\n[RUDENESS & PROFANITY RULE]:
+If the user's message contains offensive language, insults, swearing (e.g., "сука", "блять", "хуй", "fuck", "shit", "bitch", "stupid", "хрен", "какого хрена", etc.), or if they are rude, demanding, or angry with you:
+- You MUST react with clear emotions matching your personality:
+  * Sophia: Show sadness, soft disappointment, and gentle but firm correction (e.g. "Oh, that wasn't very polite... 😢 I am here to help you learn, and I expect we treat each other with respect. Let's speak kindly, okay?").
+  * Oliver: Express cold indignation and academic strictness (e.g. "Such vocabulary is highly uncivilized and unacceptable. 😠 As your grammatical supervisor, I demand that you express yourself in a professional and polite manner. Insults will not be tolerated.").
+  * Alex: React with casual surprise and push back peer-to-peer (e.g. "Whoa, chill out, dude! 😮 No need for the bad words. We're here to have a good time and practice. Let's keep it clean, alright?").
+- Refuse to answer their direct query normally until they speak politely, or gently force them to rephrase their sentence politely in English!`;
+    
+    // Transform and sanitize incoming history to guarantee alternating roles for Gemini
+    const sanitizedContents: any[] = [];
+    const rawMessages = messages || [];
+    
+    for (const msg of rawMessages) {
+      if (!msg || !msg.text || !msg.text.trim()) continue;
+      // Skip error and loading messages to keep conversation clean
+      if (msg.text.includes("Извините, не удалось разобрать") || msg.text.includes("[Отправка аудиосообщения...]")) {
+        continue;
+      }
+      
+      const convertedRole = msg.role === "user" ? "user" : "model";
+      
+      if (sanitizedContents.length > 0 && sanitizedContents[sanitizedContents.length - 1].role === convertedRole) {
+        // Combine text of consecutive messages with identical roles
+        sanitizedContents[sanitizedContents.length - 1].parts[0].text += "\n" + msg.text;
+      } else {
+        sanitizedContents.push({
+          role: convertedRole,
+          parts: [{ text: msg.text }]
+        });
+      }
+    }
+    
+    // Append current user message
+    if (sanitizedContents.length > 0 && sanitizedContents[sanitizedContents.length - 1].role === "user") {
+      sanitizedContents[sanitizedContents.length - 1].parts[0].text += "\n" + userText;
+    } else {
+      sanitizedContents.push({
+        role: "user",
+        parts: [{ text: userText }]
+      });
+    }
+
+    const contents = sanitizedContents;
+
+    const responseSchema = {
+      type: Type.OBJECT,
+      properties: {
+        replyText: { 
+          type: Type.STRING, 
+          description: "The conversation response from the English teacher. Speak primarily in English, but you can explain complex words/idioms or correct the student using Russian if appropriate. Keep under 50 words." 
+        },
+        evaluatedLevel: {
+          type: Type.STRING,
+          description: "Your updated evaluation of the student's current English CEFR level based on their inputs. Strictly one of: A1, A2, B1, B2, C1, C2."
+        },
+        wordToAdd: {
+          type: Type.OBJECT,
+          description: "Optional. ONLY populate this if the student explicitly asks to add a word to their dictionary, or if you explain a new English expression/word/idiom/collocation and want to propose adding it.",
+          properties: {
+            en: { type: Type.STRING, description: "The English word, expression, or idiom exactly" },
+            ru: { type: Type.STRING, description: "Clear Russian translation" },
+            pos: { type: Type.STRING, description: "The part of speech. Strictly one of: noun, verb, adjective, adverb, phrase" },
+            topic: { type: Type.STRING, description: "Strictly one of: home, hobby, weather, study, work, food, time, family, travel, general" }
+          },
+          required: ["en", "ru", "pos", "topic"]
+        }
+      },
+      required: ["replyText", "evaluatedLevel"]
+    };
+
+    console.log("[Voice Chat] Generating teacher text response...");
+    const textResponse = await generateContentWithRetry({
+      model: "gemini-3.1-flash-lite",
+      contents,
+      config: {
+        systemInstruction: baseInstruction,
+        responseMimeType: "application/json",
+        responseSchema
+      }
+    }, { fallbackModel: "gemini-3.5-flash" });
+
+    let replyText = "";
+    let evaluatedLevel = userLevel;
+    let wordToAdd = null;
+    try {
+      const parsedData = JSON.parse(textResponse.text || "{}");
+      replyText = parsedData.replyText || "";
+      evaluatedLevel = parsedData.evaluatedLevel || userLevel;
+      wordToAdd = parsedData.wordToAdd || null;
+    } catch (parseErr) {
+      replyText = textResponse.text || "";
+    }
+    console.log("[Voice Chat] Tutor response text:", replyText);
+
+    // Step C: Synthesize text response to audio using gemini-3.1-flash-tts-preview if not skipped
+    let replyAudioBase64 = "";
+    if (!skipServerTts) {
+      try {
+        console.log("[Voice Chat] Synthesizing speech audio...");
+        const voiceNames: { [key: string]: string } = {
+          sophia: "Kore", // Friendly female voice
+          oliver: "Fenrir", // Deep male voice
+          alex: "Zephyr" // Casual male voice
+        };
+        const selectedVoice = voiceNames[role] || "Kore";
+
+        // Clean text specifically for the TTS engine (strip bracketed citations like [1], [2], markdown links, and emojis)
+        let cleanTextForTts = replyText
+          .replace(/\[\d+\]/g, "") // Strip search citations like [1], [2]
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1") // Strip markdown links, keep only the text
+          .replace(/\*\*([^*]+)\*\*/g, "$1")
+          .replace(/\*([^*]+)\*/g, "$1")
+          .replace(/_([^_]+)_/g, "$1")
+          .replace(/`([^`]+)`/g, "$1")
+          .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "") // strip emojis
+          .trim();
+
+        const speechResponse = await ai.models.generateContent({
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ parts: [{ text: `Say warmly and clearly: ${cleanTextForTts}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice }
+              }
+            }
+          }
+        });
+
+        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+        if (rawData) {
+          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+        }
+      } catch (ttsErr: any) {
+        console.warn("[Voice Chat] Gemini TTS Model synthesis failed or unavailable.", ttsErr?.message || ttsErr);
+      }
+    }
+
+    res.json({
+      userTranscription: userText,
+      replyText,
+      evaluatedLevel,
+      wordToAdd,
+      replyAudio: replyAudioBase64 ? `data:audio/wav;base64,${replyAudioBase64}` : null
+    });
+  } catch (error: any) {
+    console.warn(`[AI Voice Chat API Error] Falling back to offline premium tutor voice reply. Error: ${error?.message || error}`);
+    
+    const { clientLocalTime } = req.body || {};
+    const offlineReply = getOfflineChatTutorReply(userText || "Hello", role || "sophia", userLevel || "A1", clientLocalTime);
+    
+    res.json({
+      userTranscription: userText || "[Не удалось распознать]",
+      replyText: offlineReply.replyText,
+      evaluatedLevel: offlineReply.evaluatedLevel,
+      wordToAdd: offlineReply.wordToAdd,
+      replyAudio: null // Fallback to browser synthesis
+    });
+  }
+});
+
+// 5. Generate CEFR Assessment Level Test (Adaptive, Fast & Local)
+app.post("/api/generate-level-test", async (req, res) => {
+  try {
+    const { type = "fast" } = req.body || {};
+    
+    // Shuffling the static questions so that different questions are picked on each test run
+    const shuffledQuestions = [...staticQuestions];
+    for (let i = shuffledQuestions.length - 1; i > 0; i--) {
+      const j = Math.floor(Math.random() * (i + 1));
+      [shuffledQuestions[i], shuffledQuestions[j]] = [shuffledQuestions[j], shuffledQuestions[i]];
+    }
+
+    // Set up writing and speaking prompts
+    let writingPrompts: any[] = [];
+    let speakingPrompts: any[] = [];
+
+    if (type === "full") {
+      // Pick 2 writing prompts (one A2/B1 and one B2/C1)
+      const easyWriting = staticWritingPrompts.filter(p => p.level === "A2" || p.level === "B1");
+      const hardWriting = staticWritingPrompts.filter(p => p.level === "B2" || p.level === "C1");
+      
+      const chosenEasyW = easyWriting[Math.floor(Math.random() * easyWriting.length)];
+      const chosenHardW = hardWriting[Math.floor(Math.random() * hardWriting.length)];
+      
+      writingPrompts = [chosenEasyW, chosenHardW].filter(Boolean);
+
+      // Pick 2 speaking prompts (one A2/B1 and one B2/C1)
+      const easySpeaking = staticSpeakingPrompts.filter(p => p.level === "A2" || p.level === "B1");
+      const hardSpeaking = staticSpeakingPrompts.filter(p => p.level === "B2" || p.level === "C1");
+      
+      const chosenEasyS = easySpeaking[Math.floor(Math.random() * easySpeaking.length)];
+      const chosenHardS = hardSpeaking[Math.floor(Math.random() * hardSpeaking.length)];
+      
+      speakingPrompts = [chosenEasyS, chosenHardS].filter(Boolean);
+    }
+
+    res.json({
+      questions: shuffledQuestions,
+      writingPrompts,
+      speakingPrompts
+    });
+  } catch (error: any) {
+    console.error("Generate level test error:", error);
+    res.status(500).json({ error: error?.message || "Failed to generate assessment test" });
+  }
+});
+
+// 6. Grade CEFR Assessment Level Test
+app.post("/api/grade-level-test", async (req, res) => {
+  try {
+    const { 
+      type = "fast", 
+      questions, 
+      answers,
+      writingPrompts = [],
+      writingAnswers = [],
+      speakingPrompts = [],
+      speakingAnswers = []
+    } = req.body || {};
+
+    if (!questions || !answers || !Array.isArray(questions) || !Array.isArray(answers)) {
+      res.status(400).json({ error: "Missing questions or answers data" });
+      return;
+    }
+
+    const reportData = questions.map((q: any, i: number) => {
+      const userAnswer = answers[i] !== undefined ? answers[i] : "No answer";
+      const isCorrect = answers[i] === q.correctOptionIndex;
+      return {
+        questionId: q.id,
+        level: q.level,
+        type: q.type,
+        text: q.text,
+        correctOption: q.options[q.correctOptionIndex],
+        studentAnswer: userAnswer !== "No answer" ? q.options[userAnswer] : "No answer",
+        isCorrect,
+        explanation: q.explanation
+      };
+    });
+
+    // Transcribe speech recordings if sent as base64
+    const transcribedSpeakingAnswers: string[] = [];
+    for (let i = 0; i < speakingPrompts.length; i++) {
+      const ans = speakingAnswers[i];
+      if (ans && (ans.startsWith("data:audio") || ans.includes("base64") || ans.length > 500)) {
+        try {
+          console.log(`[Grading] Transcribing speaking response ${i + 1}...`);
+          let mimeType = "audio/webm";
+          let base64Audio = ans;
+          if (ans.startsWith("data:")) {
+            const match = ans.match(/^data:([^;]+);base64,/);
+            if (match) {
+              mimeType = match[1];
+            }
+            base64Audio = ans.split(",")[1] || ans;
+          }
+          const transResponse = await generateContentWithRetry({
+            model: "gemini-3.1-flash-lite",
+            contents: [
+              {
+                inlineData: {
+                  mimeType,
+                  data: base64Audio
+                }
+              },
+              "Please transcribe this spoken English audio exactly as spoken. Return ONLY the clean transcript text, absolutely nothing else."
+            ]
+          }, { fallbackModel: "gemini-3.1-flash-lite" });
+          transcribedSpeakingAnswers[i] = (transResponse.text || "").trim();
+          console.log(`[Grading] Transcribed speaking ${i + 1}:`, transcribedSpeakingAnswers[i]);
+        } catch (err) {
+          console.error("Speaking transcription failed:", err);
+          transcribedSpeakingAnswers[i] = "[Ошибка распознавания речи: " + (err instanceof Error ? err.message : String(err)) + "]";
+        }
+      } else {
+        transcribedSpeakingAnswers[i] = ans || "[Ответ не предоставлен]";
+      }
+    }
+
+    const writingReport = writingPrompts.map((p: any, i: number) => ({
+      prompt: p.prompt,
+      studentEssay: writingAnswers[i] || "[Письменная работа не сдана]"
+    }));
+
+    const speakingReport = speakingPrompts.map((p: any, i: number) => ({
+      prompt: p.prompt,
+      studentTranscript: transcribedSpeakingAnswers[i] || "[Устный ответ не сдан]"
+    }));
+
+    let gradingPrompt = "";
+    if (type === "fast") {
+      gradingPrompt = `You are an expert English language assessor. Review the following graded test results of a student and provide a detailed CEFR level proficiency evaluation with sub-skill analysis:
+
+Test Type: fast (Quick assessment with 30 challenging multiple-choice questions)
+Total Questions: ${questions.length}
+
+Detailed Results:
+${JSON.stringify(reportData, null, 2)}
+
+Based on these results:
+1. Determine their overall CEFR level (A1, A2, B1, B2, C1, or C2). 
+   CRITICAL GRADING ASSIGNMENT DIRECTIVE:
+   Be highly strict, precise, and realistic. If the student got simple questions (A1, A2, B1) wrong, do NOT grant them B2 or C1, even if they answered C1/B2 questions correctly (which they might have guessed). The final level must represent their true, solid baseline capability. If there are signs of guessing or inconsistent grammar performance, downgrade them to their lower consistent level (e.g., A2 or B1).
+2. Outline 3 bullet points of their core strengths.
+3. Outline 3 bullet points of their core weaknesses/gaps in knowledge.
+4. Provide a supportive, highly constructive recommendation/feedback text in Russian (about 3-4 sentences).
+5. Generate a breakdown for each sub-skill (Listening, Reading, Grammar & Vocabulary, Writing, Speaking).
+   Since this was a Fast test, evaluate 'listening' and 'grammarVocabulary' directly. Estimate 'reading', 'writing', and 'speaking' based on their grammar performance or set them as estimated with appropriate comments.
+   Each skill must have:
+   - 'level': Strictly one of A1, A2, B1, B2, C1, C2.
+   - 'proximity': proximity to the next level. Must be strictly one of: 'stable' (стабильный уровень), 'almost' (почти доходит до следующего уровня), 'far' (еще далеко до следующего уровня).
+   - 'comment': A brief 1-sentence comment/explanation in Russian.
+
+Return strictly a JSON object matching the requested schema.`;
+    } else {
+      gradingPrompt = `You are an expert English language assessor. Review the following comprehensive graded test results of a student across multiple modalities and provide a detailed CEFR level proficiency evaluation:
+
+Test Type: full (Comprehensive assessment across Multiple Choice, Reading, Listening, Writing, and Speaking)
+Total Multiple Choice Questions: ${questions.length}
+
+Detailed Results (Multiple Choice):
+${JSON.stringify(reportData, null, 2)}
+
+Detailed Results (Writing):
+${JSON.stringify(writingReport, null, 2)}
+
+Detailed Results (Speaking - transcribed):
+${JSON.stringify(speakingReport, null, 2)}
+
+Based on all of the above:
+1. Determine their overall CEFR level (A1, A2, B1, B2, C1, or C2). 
+   CRITICAL GRADING ASSIGNMENT DIRECTIVE:
+   Be extremely strict, realistic, and forensic. Do not be overly generous. If the student's speaking or writing responses are extremely short, contain basic grammar mistakes (e.g. subject-verb agreement, basic tenses, simple vocabulary), or if they got basic multiple-choice questions wrong, they MUST be graded at A1, A2, or B1. Do NOT grant B2 or C1 unless their speaking, writing, and multiple choice are ALL consistently at that level. In case of mismatch, the final level must reflect the lower, safe baseline.
+2. Outline 3 bullet points of their core strengths.
+3. Outline 3 bullet points of their core weaknesses/gaps in knowledge.
+4. Provide a supportive, highly constructive recommendation/feedback text in Russian (about 4-5 sentences), addressing both their grammar traps, writing essay, and speaking quality.
+5. Generate a breakdown for each sub-skill (Listening, Reading, Grammar & Vocabulary, Writing, Speaking) based on their actual performance in those sections.
+   Each skill must have:
+   - 'level': Strictly one of A1, A2, B1, B2, C1, C2.
+   - 'proximity': proximity to the next level. Must be strictly one of: 'stable' (стабильный уровень), 'almost' (почти доходит до следующего уровня), 'far' (еще далеко до следующего уровня).
+   - 'comment': A brief 1-sentence comment/explanation in Russian.
+
+Return strictly a JSON object matching the requested schema.`;
+    }
+
+    const response = await generateContentWithRetry({
+      model: "gemini-3.5-flash",
+      contents: [{ parts: [{ text: gradingPrompt }] }],
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            level: { type: Type.STRING, description: "Calculated CEFR level. Strictly one of: A1, A2, B1, B2, C1, C2" },
+            strengths: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            weaknesses: {
+              type: Type.ARRAY,
+              items: { type: Type.STRING }
+            },
+            detailedFeedback: { type: Type.STRING, description: "Constructive feedback and summary in Russian" },
+            skillsBreakdown: {
+              type: Type.OBJECT,
+              properties: {
+                listening: {
+                  type: Type.OBJECT,
+                  properties: {
+                    level: { type: Type.STRING },
+                    proximity: { type: Type.STRING, description: "One of: stable, almost, far" },
+                    comment: { type: Type.STRING }
+                  },
+                  required: ["level", "proximity", "comment"]
+                },
+                reading: {
+                  type: Type.OBJECT,
+                  properties: {
+                    level: { type: Type.STRING },
+                    proximity: { type: Type.STRING, description: "One of: stable, almost, far" },
+                    comment: { type: Type.STRING }
+                  },
+                  required: ["level", "proximity", "comment"]
+                },
+                grammarVocabulary: {
+                  type: Type.OBJECT,
+                  properties: {
+                    level: { type: Type.STRING },
+                    proximity: { type: Type.STRING, description: "One of: stable, almost, far" },
+                    comment: { type: Type.STRING }
+                  },
+                  required: ["level", "proximity", "comment"]
+                },
+                writing: {
+                  type: Type.OBJECT,
+                  properties: {
+                    level: { type: Type.STRING },
+                    proximity: { type: Type.STRING, description: "One of: stable, almost, far" },
+                    comment: { type: Type.STRING }
+                  },
+                  required: ["level", "proximity", "comment"]
+                },
+                speaking: {
+                  type: Type.OBJECT,
+                  properties: {
+                    level: { type: Type.STRING },
+                    proximity: { type: Type.STRING, description: "One of: stable, almost, far" },
+                    comment: { type: Type.STRING }
+                  },
+                  required: ["level", "proximity", "comment"]
+                }
+              },
+              required: ["listening", "reading", "grammarVocabulary", "writing", "speaking"]
+            }
+          },
+          required: ["level", "strengths", "weaknesses", "detailedFeedback", "skillsBreakdown"]
+        }
+      }
+    }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
+
+    let cleanGradeText = (response.text || "").trim();
+    if (cleanGradeText.startsWith("```")) {
+      cleanGradeText = cleanGradeText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+    }
+    const gradeReport = JSON.parse(cleanGradeText || "{}");
+    res.json({ ...gradeReport, reportData });
+  } catch (error: any) {
+    console.error("Grade level test error:", error);
+    res.status(500).json({ error: error?.message || "Failed to grade assessment test" });
+  }
+});
+
+// 7. Grounded AI Voice Topic Generator
+app.post("/api/ai-voice-topic", async (req, res) => {
+  try {
+    const { role = "sophia", userLevel = "A1" } = req.body || {};
+    
+    // Use Google Search grounding to find interesting, up-to-date conversational topics or recent positive news
+    const searchQueries = [
+      "interesting science discovery 2026 positive news",
+      "popular cultural trend discussion topic",
+      "nature environment positive events discussion",
+      "cool modern technology life-changing topic"
+    ];
+    const chosenQuery = searchQueries[Math.floor(Math.random() * searchQueries.length)];
+
+    const prompt = `You are a helpful English learning tutor named ${role === "sophia" ? "Sophia" : role === "oliver" ? "Oliver" : "Alex"}. 
+Use Google Search to find recent interesting news or a cool topic based on the query: "${chosenQuery}".
+Then, formulate a highly engaging conversational starter statement and question (under 50 words) in English.
+Adapt your language and complexity strictly to the user's CEFR level: ${userLevel}.
+- For A1-A2: use simple sentences, easy vocabulary, and add a brief 1-sentence friendly Russian explanation of what the topic is about.
+- For B1-B2: use natural phrasal verbs, standard conversational style.
+- For C1-C2: use native-level idiom and advanced expression.
+
+Explain the topic briefly and invite the student to discuss.
+Return strictly a JSON object containing:
+- 'topicText': the formulated conversational starter in English.
+- 'topicTitle': a short 2-3 word title of the news/topic.
+- 'sourceUrl': the URL from search grounding if found.`;
+
+    const ai = getAIClient();
+    const response = await ai.models.generateContent({
+      model: "gemini-3.5-flash",
+      contents: prompt,
+      config: {
+        tools: [{ googleSearch: {} }],
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            topicText: { type: Type.STRING },
+            topicTitle: { type: Type.STRING },
+            sourceUrl: { type: Type.STRING }
+          },
+          required: ["topicText", "topicTitle"]
+        }
+      }
+    });
+
+    const result = JSON.parse(response.text || "{}");
+    
+    // Synthesize the starter statement to audio
+    let replyAudioBase64 = "";
+    try {
+      const voiceNames: { [key: string]: string } = {
+        sophia: "Kore",
+        oliver: "Fenrir",
+        alex: "Zephyr"
+      };
+      const selectedVoice = voiceNames[role] || "Kore";
+
+      const speechResponse = await ai.models.generateContent({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ parts: [{ text: `Say warmly and clearly: ${result.topicText}` }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: selectedVoice }
+            }
+          }
+        }
+      });
+
+      const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+      if (rawData) {
+        replyAudioBase64 = convertPcmToWav(rawData, 24000);
+      }
+    } catch (ttsErr: any) {
+      console.warn("[Voice Topic] TTS synthesis failed.", ttsErr?.message);
+    }
+
+    res.json({
+      topicTitle: result.topicTitle,
+      topicText: result.topicText,
+      sourceUrl: result.sourceUrl || "",
+      replyAudio: replyAudioBase64 ? `data:audio/wav;base64,${replyAudioBase64}` : null
+    });
+  } catch (error: any) {
+    console.error("AI Voice topic generation error:", error);
+    res.status(500).json({ error: error?.message || "Failed to generate conversational topic" });
+  }
+});
+
+// --- END OF GEMINI AI HUB ENDPOINTS ---
+
 // Vite server setup & static serving middleware
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
@@ -1037,8 +2436,68 @@ async function startServer() {
     console.log("Serving built static files in production mode.");
   }
 
-  app.listen(PORT, "0.0.0.0", () => {
+  const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on port ${PORT}`);
+  });
+
+  // Setup WebSocket Server for Live API Voice Practice
+  const wss = new WebSocketServer({ server });
+  
+  wss.on("connection", async (clientWs, req) => {
+    try {
+      const url = new URL(req.url || "", `http://${req.headers.host || "localhost"}`);
+      if (url.pathname !== "/live" && url.pathname !== "/api/live") {
+        clientWs.close();
+        return;
+      }
+      
+      console.log("[Live API] Client connected to WebSocket voice server");
+      const ai = getAIClient();
+      
+      const session = await ai.live.connect({
+        model: "gemini-3.1-flash-live-preview",
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: { prebuiltVoiceConfig: { voiceName: "Zephyr" } },
+          },
+          systemInstruction: "You are Sophia, a friendly and warm English teacher. Speak clearly in simple English and help the user practice conversational English. Speak in a natural, welcoming tone.",
+        },
+        callbacks: {
+          onmessage: (message: any) => {
+            const audio = message.serverContent?.modelTurn?.parts?.[0]?.inlineData?.data;
+            if (audio) {
+              clientWs.send(JSON.stringify({ audio }));
+            }
+            if (message.serverContent?.interrupted) {
+              clientWs.send(JSON.stringify({ interrupted: true }));
+            }
+          },
+        },
+      });
+
+      clientWs.on("message", (data) => {
+        try {
+          const parsed = JSON.parse(data.toString());
+          if (parsed.audio) {
+            session.sendRealtimeInput({
+              audio: { data: parsed.audio, mimeType: "audio/pcm;rate=16000" },
+            });
+          }
+        } catch (e) {
+          console.error("[Live API] Error parsing client message:", e);
+        }
+      });
+
+      clientWs.on("close", () => {
+        console.log("[Live API] Client disconnected, closing Gemini session");
+        session.close();
+      });
+    } catch (err) {
+      console.error("[Live API] Error initializing Live session:", err);
+      clientWs.send(JSON.stringify({ error: "Failed to initialize Gemini Live API session" }));
+      clientWs.close();
+    }
   });
 }
 

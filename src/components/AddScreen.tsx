@@ -985,6 +985,29 @@ export default function AddScreen({
             </div>
           )}
           <input ref={fileRef} type="file" accept="image/*" onChange={handleFileChange} className="hidden-input" />
+
+          {/* Tip to supercharged scanner */}
+          <div 
+            style={{ 
+              marginTop: 16, 
+              padding: "12px 14px", 
+              borderRadius: "1rem", 
+              background: "linear-gradient(135deg, rgba(143,160,128,0.06) 0%, rgba(214,128,96,0.06) 100%)", 
+              border: "1px dashed rgba(143,160,128,0.25)",
+              display: "flex",
+              alignItems: "flex-start",
+              gap: 8,
+              textAlign: "left",
+              fontSize: 11,
+              color: "var(--muted)",
+              lineHeight: 1.4
+            }}
+          >
+            <span style={{ fontSize: 14, marginTop: -1 }}>🔮</span>
+            <div>
+              <strong>Рекомендуем:</strong> Попробуйте суперфункциональный <span style={{ color: "var(--sage)", fontWeight: 600 }}>Scanner</span> в разделе <strong>Gemini AI Hub</strong> на главном экране. Он автоматически распознаёт части речи, переводит, находит новые выражения и позволяет сохранять их одним кликом!
+            </div>
+          </div>
         </div>
       )}
 
