@@ -541,6 +541,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const voiceEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -868,6 +869,23 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
     prevMessagesCountRef.current = chatMessages.length;
   }, [chatMessages, chatLoading, activeChatSessionId]);
+
+  const prevVoiceSessionIdRef = useRef<string | null>(null);
+  const prevVoiceMessagesCountRef = useRef<number>(0);
+
+  // Auto-scroll voice chat to bottom on new messages
+  useEffect(() => {
+    if (activeVoiceSessionId !== prevVoiceSessionIdRef.current) {
+      prevVoiceSessionIdRef.current = activeVoiceSessionId;
+      prevVoiceMessagesCountRef.current = voiceMessages.length;
+      return;
+    }
+
+    if (voiceMessages.length > prevVoiceMessagesCountRef.current || voiceLoading) {
+      voiceEndRef.current?.scrollIntoView({ behavior: "smooth" });
+    }
+    prevVoiceMessagesCountRef.current = voiceMessages.length;
+  }, [voiceMessages, voiceLoading, activeVoiceSessionId]);
 
   // Robust client-side speech synthesizer fallback
   const speakText = (text: string, onEnd?: () => void) => {
@@ -2968,13 +2986,16 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
           {/* Messages Display */}
           <div 
+            className="styled-scrollbar-y"
             style={{
               display: "flex",
               flexDirection: "column",
               gap: 18,
               marginTop: 12,
               marginBottom: 16,
-              padding: "4px"
+              padding: "4px 8px 4px 4px",
+              maxHeight: "480px",
+              overflowY: "auto"
             }}
           >
             {chatMessages.map((msg, index) => (
@@ -3716,72 +3737,85 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               </div>
             </div>
             
-            {voiceMessages.map((msg, index) => (
-              <div 
-                key={index} 
-                style={{ 
-                  display: "flex", 
-                  flexDirection: "column", 
-                  alignItems: msg.role === "user" ? "flex-end" : "flex-start",
-                  gap: 4,
-                  position: "relative"
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: "90%", alignItems: "center" }}>
-                  <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>
-                    {msg.role === "user" ? "Вы:" : "ИИ-Тьютор:"}
-                  </span>
-                  <button
-                    style={{
-                      background: "transparent",
-                      color: "rgba(255,255,255,0.2)",
-                      border: "none",
-                      fontSize: 10,
-                      cursor: "pointer",
-                      padding: "0 4px"
-                    }}
-                    title="Удалить"
-                    onClick={() => {
-                      setVoiceMessages(prev => {
-                        const updated = prev.filter((_, i) => i !== index);
-                        if (updated.length === 0) {
-                          return [{ role: "model", text: "Welcome to the Voice Club! Let's talk." }];
-                        }
-                        return updated;
-                      });
-                      setToastMessage("Сообщение удалено");
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div style={{
-                  background: msg.role === "user" ? "rgba(143,160,128,0.15)" : "rgba(255,255,255,0.04)",
-                  padding: "10px 12px",
-                  borderRadius: "1rem",
-                  fontSize: 13,
-                  maxWidth: "90%",
-                  color: "var(--text-color)"
-                }}>
-                  {renderFormattedText(msg.text, msg.role === "user")}
-                  
-                  {/* Message Timestamp */}
-                  {(msg.timestamp || activeVoiceSession?.created) && (
-                    <div 
-                      style={{ 
-                        fontSize: 9, 
-                        textAlign: "right", 
-                        marginTop: 4, 
-                        color: "var(--muted)",
-                        opacity: 0.8
+            <div
+              className="styled-scrollbar-y"
+              style={{
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+                padding: "4px 8px 4px 4px",
+                maxHeight: "480px",
+                overflowY: "auto"
+              }}
+            >
+              {voiceMessages.map((msg, index) => (
+                <div
+                  key={index}
+                  style={{
+                    display: "flex",
+                    flexDirection: "column",
+                    alignItems: msg.role === "user" ? "flex-end" : "flex-start",
+                    gap: 4,
+                    position: "relative"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: "90%", alignItems: "center" }}>
+                    <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>
+                      {msg.role === "user" ? "Вы:" : "ИИ-Тьютор:"}
+                    </span>
+                    <button
+                      style={{
+                        background: "transparent",
+                        color: "rgba(255,255,255,0.2)",
+                        border: "none",
+                        fontSize: 10,
+                        cursor: "pointer",
+                        padding: "0 4px"
+                      }}
+                      title="Удалить"
+                      onClick={() => {
+                        setVoiceMessages(prev => {
+                          const updated = prev.filter((_, i) => i !== index);
+                          if (updated.length === 0) {
+                            return [{ role: "model", text: "Welcome to the Voice Club! Let's talk." }];
+                          }
+                          return updated;
+                        });
+                        setToastMessage("Сообщение удалено");
                       }}
                     >
-                      {formatMessageTimestamp(msg.timestamp || activeVoiceSession?.created)}
-                    </div>
-                  )}
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{
+                    background: msg.role === "user" ? "rgba(143,160,128,0.15)" : "rgba(255,255,255,0.04)",
+                    padding: "10px 12px",
+                    borderRadius: "1rem",
+                    fontSize: 13,
+                    maxWidth: "90%",
+                    color: "var(--text-color)"
+                  }}>
+                    {renderFormattedText(msg.text, msg.role === "user")}
+
+                    {/* Message Timestamp */}
+                    {(msg.timestamp || activeVoiceSession?.created) && (
+                      <div
+                        style={{
+                          fontSize: 9,
+                          textAlign: "right",
+                          marginTop: 4,
+                          color: "var(--muted)",
+                          opacity: 0.8
+                        }}
+                      >
+                        {formatMessageTimestamp(msg.timestamp || activeVoiceSession?.created)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+              <div ref={voiceEndRef} />
+            </div>
           </div>
 
           {showDictionaryButton && pendingWordToAdd && !wordConfirmModal && (
