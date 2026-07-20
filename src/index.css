@@ -300,6 +300,27 @@ body::before {
   scrollbar-color: var(--sage) rgba(0, 0, 0, 0.05) !important;
 }
 
+.styled-scrollbar-y::-webkit-scrollbar {
+  width: 6px !important;
+  display: block !important;
+}
+.styled-scrollbar-y::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 99px;
+}
+.styled-scrollbar-y::-webkit-scrollbar-thumb {
+  background: var(--sage);
+  border-radius: 99px;
+}
+.styled-scrollbar-y::-webkit-scrollbar-thumb:hover {
+  background: var(--rose);
+}
+.styled-scrollbar-y {
+  -ms-overflow-style: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--sage) rgba(0, 0, 0, 0.05) !important;
+}
+
 @keyframes fi {
   from {
     opacity: 0;
