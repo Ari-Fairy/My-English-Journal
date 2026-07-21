@@ -300,6 +300,27 @@ body::before {
   scrollbar-color: var(--sage) rgba(0, 0, 0, 0.05) !important;
 }
 
+.styled-scrollbar-y::-webkit-scrollbar {
+  width: 6px !important;
+  display: block !important;
+}
+.styled-scrollbar-y::-webkit-scrollbar-track {
+  background: rgba(0, 0, 0, 0.05);
+  border-radius: 99px;
+}
+.styled-scrollbar-y::-webkit-scrollbar-thumb {
+  background: var(--sage);
+  border-radius: 99px;
+}
+.styled-scrollbar-y::-webkit-scrollbar-thumb:hover {
+  background: var(--rose);
+}
+.styled-scrollbar-y {
+  -ms-overflow-style: auto !important;
+  scrollbar-width: thin !important;
+  scrollbar-color: var(--sage) rgba(0, 0, 0, 0.05) !important;
+}
+
 @keyframes fi {
   from {
     opacity: 0;
@@ -941,4 +962,35 @@ body::before {
     font-size: 16px;
     line-height: 1.8;
   }
+}
+
+/* Custom beautiful scrollbar styles */
+.styled-scrollbar-y::-webkit-scrollbar {
+  width: 8px;
+}
+
+.styled-scrollbar-y::-webkit-scrollbar-track {
+  background: rgba(143, 160, 128, 0.08);
+  border-radius: 999px;
+  border-left: 1px solid rgba(143, 160, 128, 0.18);
+}
+
+.styled-scrollbar-y::-webkit-scrollbar-thumb {
+  background: rgba(143, 160, 128, 0.5); /* Pronounced sage color */
+  border-radius: 999px;
+  border: 1.5px solid transparent;
+  background-clip: padding-box;
+  transition: background 0.2s ease;
+}
+
+.styled-scrollbar-y::-webkit-scrollbar-thumb:hover {
+  background: rgba(143, 160, 128, 0.8);
+  border: 1.5px solid transparent;
+  background-clip: padding-box;
+}
+
+/* Firefox compatibility */
+.styled-scrollbar-y {
+  scrollbar-width: thin;
+  scrollbar-color: rgba(143, 160, 128, 0.5) rgba(143, 160, 128, 0.08);
 }

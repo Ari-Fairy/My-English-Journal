@@ -514,10 +514,10 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const chatMessages = activeChatSession ? activeChatSession.messages : [];
   const voiceMessages = activeVoiceSession ? activeVoiceSession.voiceMessages : [];
 
-  const setChatMessages = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+  const setChatMessagesForSession = (sessionId: string, updater: Message[] | ((prev: Message[]) => Message[])) => {
     setChatSessions(prev => {
       return prev.map(s => {
-        if (s.id === activeChatSessionId) {
+        if (s.id === sessionId) {
           const updatedMessages = typeof updater === "function" ? updater(s.messages) : updater;
           return { ...s, messages: updatedMessages };
         }
@@ -526,10 +526,10 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     });
   };
 
-  const setVoiceMessages = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+  const setVoiceMessagesForSession = (sessionId: string, updater: Message[] | ((prev: Message[]) => Message[])) => {
     setVoiceSessions(prev => {
       return prev.map(s => {
-        if (s.id === activeVoiceSessionId) {
+        if (s.id === sessionId) {
           const updatedVoice = typeof updater === "function" ? updater(s.voiceMessages) : updater;
           return { ...s, voiceMessages: updatedVoice };
         }
@@ -538,9 +538,24 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     });
   };
 
+  const setChatMessages = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+    if (activeChatSessionId) {
+      setChatMessagesForSession(activeChatSessionId, updater);
+    }
+  };
+
+  const setVoiceMessages = (updater: Message[] | ((prev: Message[]) => Message[])) => {
+    if (activeVoiceSessionId) {
+      setVoiceMessagesForSession(activeVoiceSessionId, updater);
+    }
+  };
+
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
+  const [loadingSessionId, setLoadingSessionId] = useState<string | null>(null);
+  const [loadingVoiceSessionId, setLoadingVoiceSessionId] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const voiceEndRef = useRef<HTMLDivElement>(null);
   const textareaRef = useRef<HTMLTextAreaElement>(null);
 
   useEffect(() => {
@@ -565,6 +580,17 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     const saved = localStorage.getItem("ai_hub_voice_voice_enabled");
     return saved !== null ? JSON.parse(saved) : true;
   });
+
+  const chatVoiceEnabledRef = useRef(chatVoiceEnabled);
+  const voiceVoiceEnabledRef = useRef(voiceVoiceEnabled);
+
+  useEffect(() => {
+    chatVoiceEnabledRef.current = chatVoiceEnabled;
+  }, [chatVoiceEnabled]);
+
+  useEffect(() => {
+    voiceVoiceEnabledRef.current = voiceVoiceEnabled;
+  }, [voiceVoiceEnabled]);
 
   useEffect(() => {
     localStorage.setItem("ai_hub_chat_voice_enabled", JSON.stringify(chatVoiceEnabled));
@@ -607,9 +633,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
   // Voice Settings & Topic Generation
   const [speechPace, setSpeechPace] = useState<"slow" | "normal" | "fast">("normal");
-  const [verbosity, setVerbosity] = useState<"short" | "medium" | "long">("short");
+  const [verbosity, setVerbosity] = useState<"short" | "medium" | "long">("medium");
   const [isGeneratingTopic, setIsGeneratingTopic] = useState(false);
-  const [voiceTopic, setVoiceTopic] = useState<{ title: string; text: string; sourceUrl?: string; audio?: string } | null>(null);
+  const [voiceTopic, setVoiceTopic] = useState<{ title: string; text: string; translation?: string; sourceUrl?: string; audio?: string } | null>({
+    title: "Smart Glasses (Умные очки)",
+    text: "These are smart glasses that display information right before your eyes.",
+    translation: "Это умные очки, которые показывают информацию прямо перед глазами.",
+    sourceUrl: "https://google.com"
+  });
   const [showTopicTranslation, setShowTopicTranslation] = useState(false);
 
   // CEFR Assessment Level Test State
@@ -784,6 +815,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     const saved = localStorage.getItem("voice_use_native_synth_v2");
     return saved !== null ? JSON.parse(saved) : false;
   });
+  const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [speechRecLang, setSpeechRecLang] = useState<"en-US" | "ru-RU">("en-US");
 
   useEffect(() => {
@@ -793,6 +825,16 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   useEffect(() => {
     localStorage.setItem("voice_use_native_synth_v2", JSON.stringify(useNativeSpeechSynth));
   }, [useNativeSpeechSynth]);
+
+  useEffect(() => {
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      const updateVoices = () => {
+        setBrowserVoices(window.speechSynthesis.getVoices());
+      };
+      updateVoices();
+      window.speechSynthesis.onvoiceschanged = updateVoices;
+    }
+  }, []);
 
   // Auto-clear toast helper
   useEffect(() => {
@@ -821,6 +863,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       try {
         currentAudioRef.current.pause();
         currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current.src = "";
       } catch (err) {
         console.warn("Error pausing currentAudioRef:", err);
       }
@@ -829,6 +872,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       try {
         audioPlayerRef.current.pause();
         audioPlayerRef.current.currentTime = 0;
+        audioPlayerRef.current.src = "";
       } catch (err) {
         console.warn("Error pausing audioPlayerRef:", err);
       }
@@ -864,12 +908,35 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
 
     if (chatMessages.length > prevMessagesCountRef.current || chatLoading) {
-      chatEndRef.current?.scrollIntoView({ behavior: "smooth" });
+      const timer = setTimeout(() => {
+        chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
+      return () => clearTimeout(timer);
     }
     prevMessagesCountRef.current = chatMessages.length;
   }, [chatMessages, chatLoading, activeChatSessionId]);
 
-  // Robust client-side speech synthesizer fallback
+  const prevVoiceSessionIdRef = useRef<string | null>(null);
+  const prevVoiceMessagesCountRef = useRef<number>(0);
+
+  // Auto-scroll voice to bottom on new messages
+  useEffect(() => {
+    if (activeVoiceSessionId !== prevVoiceSessionIdRef.current) {
+      prevVoiceSessionIdRef.current = activeVoiceSessionId;
+      prevVoiceMessagesCountRef.current = voiceMessages.length;
+      return;
+    }
+
+    if (voiceMessages.length > prevVoiceMessagesCountRef.current || voiceLoading) {
+      const timer = setTimeout(() => {
+        voiceEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
+      }, 100);
+      return () => clearTimeout(timer);
+    }
+    prevVoiceMessagesCountRef.current = voiceMessages.length;
+  }, [voiceMessages, voiceLoading, activeVoiceSessionId]);
+
+  // Robust client-side speech synthesizer fallback with premium voices
   const speakText = (text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
@@ -884,18 +951,72 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = "en-US";
       
-      const voices = window.speechSynthesis.getVoices();
+      // Load voices dynamically from reactive browserVoices or fallback direct call
+      const voices = browserVoices.length > 0 ? browserVoices : window.speechSynthesis.getVoices();
       let voice = null;
+      
       if (tutor === "sophia") {
-        voice = voices.find(v => v.lang.startsWith("en") && (v.name.includes("Google US English") || v.name.includes("Female") || v.name.includes("Samantha") || v.name.includes("Zira") || v.name.includes("samantha") || v.name.includes("Victoria")));
+        // Preferred female English voices for Sophia
+        voice = voices.find(v => {
+          const name = v.name.toLowerCase();
+          const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
+          return isEn && (
+            name.includes("google us english") || 
+            name.includes("samantha") || 
+            name.includes("zira") || 
+            name.includes("aria") || 
+            name.includes("female") || 
+            name.includes("victoria") ||
+            name.includes("siri")
+          );
+        });
+        if (!voice) {
+          voice = voices.find(v => v.lang.startsWith("en") && (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("google")));
+        }
+      } else if (tutor === "oliver") {
+        // Preferred British/Academic English voices for Oliver
+        voice = voices.find(v => {
+          const name = v.name.toLowerCase();
+          const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
+          return isEn && (
+            name.includes("google uk english male") || 
+            name.includes("daniel") || 
+            name.includes("david") || 
+            name.includes("george") || 
+            name.includes("male")
+          );
+        });
+        if (!voice) {
+          voice = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"));
+        }
       } else {
-        voice = voices.find(v => v.lang.startsWith("en") && (v.name.includes("Google UK English Male") || v.name.includes("Male") || v.name.includes("David") || v.name.includes("Daniel") || v.name.includes("Hazel")));
+        // Preferred casual American English male voices for Alex
+        voice = voices.find(v => {
+          const name = v.name.toLowerCase();
+          const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
+          return isEn && (
+            name.includes("alex") || 
+            name.includes("google us english male") || 
+            name.includes("david") || 
+            name.includes("mark") || 
+            name.includes("male")
+          );
+        });
+        if (!voice) {
+          voice = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"));
+        }
+      }
+      
+      // Ultimate fallback: any English voice
+      if (!voice) {
+        voice = voices.find(v => v.lang.startsWith("en"));
       }
       
       if (voice) {
         utterance.voice = voice;
       }
-      utterance.rate = speechPace === "slow" ? 0.70 : speechPace === "fast" ? 1.25 : 0.95; // Custom adaptive rate based on user choice!
+      
+      utterance.rate = speechPace === "slow" ? 0.70 : speechPace === "fast" ? 1.25 : 0.95;
       utterance.onstart = () => {
         setIsSpeechPlaying(true);
       };
@@ -922,16 +1043,24 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   };
 
   // --- 1. CHAT LOGIC ---
-  const handleSendChatMessage = async () => {
-    if (!chatInput.trim() || chatLoading) return;
+  const handleSendChatMessage = async (textOverride?: string | React.MouseEvent | React.KeyboardEvent) => {
+    const isStringOverride = typeof textOverride === "string";
+    const userMsgText = isStringOverride ? textOverride : chatInput;
+    if (!userMsgText.trim() || chatLoading) return;
     
-    const userMsgText = chatInput;
-    setChatInput("");
-    setChatMessages(prev => [...prev, { role: "user", text: userMsgText, timestamp: new Date().toISOString() }]);
+    const targetSessionId = activeChatSessionId;
+    const targetMessages = chatMessages;
+    if (!targetSessionId) return;
+
+    if (!isStringOverride) {
+      setChatInput("");
+    }
+    setChatMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: userMsgText, timestamp: new Date().toISOString() }]);
     setChatLoading(true);
+    setLoadingSessionId(targetSessionId);
 
     try {
-      const history = chatMessages.concat({ role: "user", text: userMsgText });
+      const history = targetMessages.concat({ role: "user", text: userMsgText });
       
       const response = await fetch(getApiUrl("/api/ai-chat"), {
         method: "POST",
@@ -949,7 +1078,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       if (!response.ok) throw new Error("Ошибка связи с сервером ИИ.");
       const data = await response.json();
 
-      setChatMessages(prev => [...prev, { 
+      setChatMessagesForSession(targetSessionId, prev => [...prev, { 
         role: "model", 
         text: data.replyText,
         sources: data.sources,
@@ -1004,13 +1133,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(true);
       }
     } catch (err: any) {
-      setChatMessages(prev => [...prev, { 
+      setChatMessagesForSession(targetSessionId, prev => [...prev, { 
         role: "model", 
         text: `⚠️ Не удалось получить ответ: ${err.message || "Ошибка соединения."}`,
         timestamp: new Date().toISOString()
       }]);
     } finally {
       setChatLoading(false);
+      setLoadingSessionId(null);
     }
   };
 
@@ -1233,12 +1363,17 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   };
 
   const executeVoiceDialogueRequest = async (payload: { audio?: string; text?: string }) => {
+    const targetSessionId = activeVoiceSessionId;
+    const targetVoiceMessages = voiceMessages;
+    if (!targetSessionId) return;
+
     setVoiceLoading(true);
+    setLoadingVoiceSessionId(targetSessionId);
     try {
       if (payload.text) {
-        setVoiceMessages(prev => [...prev, { role: "user", text: payload.text!, timestamp: new Date().toISOString() }]);
+        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text!, timestamp: new Date().toISOString() }]);
       } else {
-        setVoiceMessages(prev => [...prev, { role: "user", text: "🎙️ [Голосовое сообщение]", timestamp: new Date().toISOString() }]);
+        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: "🎙️ [Голосовое сообщение]", timestamp: new Date().toISOString() }]);
       }
 
       const response = await fetch(getApiUrl("/api/ai-voice-chat"), {
@@ -1247,7 +1382,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         body: JSON.stringify({
           audio: payload.audio,
           text: payload.text,
-          messages: voiceMessages.filter(m => !m.text.includes("🎙️")).map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp || new Date().toISOString() })),
+          messages: targetVoiceMessages.filter(m => !m.text.includes("🎙️")).map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp || new Date().toISOString() })),
           role: tutor,
           userLevel: stats.level || "A1",
           speechPace,
@@ -1261,7 +1396,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       const data = await response.json();
 
       if (data.userTranscription) {
-        setVoiceMessages(prev => {
+        setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
           if (copy[copy.length - 1].text.includes("🎙️")) {
             copy[copy.length - 1] = { role: "user", text: data.userTranscription, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
@@ -1270,7 +1405,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         });
       }
 
-      setVoiceMessages(prev => [...prev, { role: "model", text: data.replyText, timestamp: new Date().toISOString() }]);
+      setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: data.replyText, timestamp: new Date().toISOString() }]);
 
       if (data.evaluatedLevel && data.evaluatedLevel !== stats.level) {
         const updatedStats = { ...stats, level: data.evaluatedLevel };
@@ -1292,7 +1427,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(false);
       }
 
-      if (voiceVoiceEnabled) {
+      if (voiceVoiceEnabledRef.current) {
         if (!useNativeSpeechSynth && data.replyAudio) {
           setIsSpeechPlaying(true);
           const onPlaybackEnd = () => {
@@ -1310,6 +1445,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
             });
           } else {
             const audio = new Audio(data.replyAudio);
+            currentAudioRef.current = audio;
             audio.playbackRate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.25 : 1.0;
             audio.onended = onPlaybackEnd;
             audio.onerror = onPlaybackEnd;
@@ -1330,9 +1466,10 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }
     } catch (err: any) {
       console.error(err);
-      setVoiceMessages(prev => [...prev, { role: "model", text: "⚠️ Извините, не удалось разобрать звук." }]);
+      setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: "⚠️ Извините, не удалось разобрать звук." }]);
     } finally {
       setVoiceLoading(false);
+      setLoadingVoiceSessionId(null);
     }
   };
 
@@ -2721,9 +2858,6 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 style={{ fontSize: 11.5, padding: "8px 4px", display: "flex", flexDirection: "column", gap: 4, alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.01)" }}
                 onClick={() => {
                   setChatInput("📝 Проведи для меня упражнение на грамматику английского языка на моем уровне. Напиши предложение с пропуском, чтобы я вставил правильную форму, а если я ошибусь — подробно объясни правило на русском!");
-                  setTimeout(() => {
-                    textareaRef.current?.focus();
-                  }, 50);
                 }}
               >
                 <span style={{ fontSize: 16 }}>📝</span>
@@ -2734,9 +2868,6 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 style={{ fontSize: 11.5, padding: "8px 4px", display: "flex", flexDirection: "column", gap: 4, alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.01)" }}
                 onClick={() => {
                   setChatInput("🎙️ Давай проведем словарный диктант. Называй по одному слову на английском из моего словаря, чтобы я писал перевод, либо называй на русском, чтобы я переводил на английский!");
-                  setTimeout(() => {
-                    textareaRef.current?.focus();
-                  }, 50);
                 }}
               >
                 <span style={{ fontSize: 16 }}>🎙️</span>
@@ -2747,9 +2878,6 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 style={{ fontSize: 11.5, padding: "8px 4px", display: "flex", flexDirection: "column", gap: 4, alignItems: "center", justifyContent: "center", background: "rgba(255,255,255,0.01)" }}
                 onClick={() => {
                   setChatInput("🗣️ Предложи мне интересную тему для обсуждения на английском языке на моем уровне и задай мне первый вопрос!");
-                  setTimeout(() => {
-                    textareaRef.current?.focus();
-                  }, 50);
                 }}
               >
                 <span style={{ fontSize: 16 }}>🗣️</span>
@@ -2968,13 +3096,16 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
           {/* Messages Display */}
           <div 
+            className="styled-scrollbar-y"
             style={{
               display: "flex",
               flexDirection: "column",
               gap: 18,
               marginTop: 12,
               marginBottom: 16,
-              padding: "4px"
+              padding: "4px 8px 4px 4px",
+              maxHeight: "500px",
+              overflowY: "auto"
             }}
           >
             {chatMessages.map((msg, index) => (
@@ -3077,7 +3208,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 )}
               </div>
             ))}
-            {chatLoading && (
+            {chatLoading && loadingSessionId === activeChatSessionId && (
               <div style={{ alignSelf: "flex-start", padding: "12px 14px", background: "rgba(255,255,255,0.02)", borderRadius: "1.2rem", display: "flex", alignItems: "center", gap: 6 }}>
                 <Loader2 size={16} className="animate-spin" style={{ color: "var(--sage)" }} />
                 <span style={{ fontSize: 12, color: "var(--muted)" }}>Печатает ответ...</span>
@@ -3444,7 +3575,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 >
                   <option value="short">💬 Короткие ответы (Компактный)</option>
                   <option value="medium">🗣️ Диалог (Средняя длина)</option>
-                  <option value="long">📖 Мини-лекция (С разбором правил)</option>
+                  <option value="long">📖 Mini-лекция (С разбором правил)</option>
                 </select>
               </div>
             </div>
@@ -3527,6 +3658,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     setVoiceTopic({
                       title: data.topicTitle,
                       text: data.topicText,
+                      translation: data.topicTranslation,
                       sourceUrl: data.sourceUrl,
                       audio: data.replyAudio
                     });
@@ -3566,7 +3698,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     className="btn btn-primary"
                     style={{ fontSize: 11.5, padding: "6px 12px", background: "var(--sage)", border: "none" }}
                     onClick={() => {
-                      setVoiceMessages(prev => [...prev, { role: "model", text: `[Grounded Topic: ${voiceTopic.title}] ${voiceTopic.text}` }]);
+                      setVoiceMessages(prev => [...prev, { role: "model", text: voiceTopic.text }]);
                       
                       if (voiceTopic.audio && voiceVoiceEnabled) {
                         setIsSpeechPlaying(true);
@@ -3574,6 +3706,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                           setIsSpeechPlaying(false);
                         };
                         const audio = new Audio(voiceTopic.audio);
+                        currentAudioRef.current = audio;
                         audio.playbackRate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.25 : 1.0;
                         audio.onended = onPlaybackEnd;
                         audio.onerror = onPlaybackEnd;
@@ -3597,8 +3730,13 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 </div>
 
                 {showTopicTranslation && (
-                  <div style={{ fontSize: 11.5, color: "var(--muted)", background: "rgba(255,255,255,0.02)", padding: 10, borderRadius: 8, lineHeight: 1.4 }} className="fade-in">
-                    <strong>Подсказка преподавателя:</strong> Тема посвящена последним новостям и тенденциям. Попробуйте высказать свое мнение на английском, используя простые предложения. Если не знаете слово, спросите меня на русском!
+                  <div style={{ fontSize: 13, color: "var(--warm)", background: "rgba(255,255,255,0.03)", padding: 12, borderRadius: 8, lineHeight: 1.4, borderLeft: "3px solid var(--sage)" }} className="fade-in">
+                    {voiceTopic.translation ? (
+                      <p style={{ margin: "0 0 8px 0", fontSize: 13.5, fontWeight: 500, color: "var(--warm)" }}>{voiceTopic.translation}</p>
+                    ) : null}
+                    <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                      <strong>Подсказка преподавателя:</strong> Тема посвящена последним новостям и тенденциям. Попробуйте высказать свое мнение на английском, используя простые предложения. Если не знаете слово, спросите меня на русском!
+                    </div>
                   </div>
                 )}
               </div>
@@ -3656,12 +3794,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
             </div>
           )}
 
-          {voiceLoading && (
-            <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-              <Loader2 className="animate-spin text-sage" size={18} style={{ color: "var(--sage)" }} />
-              <span style={{ fontSize: 13, color: "var(--muted)", fontWeight: 500 }}>Обрабатываем вашу речь и готовим ответ... Пожалуйста, подождите 🎙️</span>
-            </div>
-          )}
+
 
           {/* Transcription Scroll Log */}
           <div style={{
@@ -3686,7 +3819,13 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     cursor: "pointer",
                     fontWeight: 600
                   }}
-                  onClick={() => setVoiceVoiceEnabled(!voiceVoiceEnabled)}
+                  onClick={() => {
+                    const nextVal = !voiceVoiceEnabled;
+                    setVoiceVoiceEnabled(nextVal);
+                    if (!nextVal) {
+                      stopAllSpeech();
+                    }
+                  }}
                 >
                   {voiceVoiceEnabled ? "🔊 Авто: ВКЛ" : "🔇 Авто: ВЫКЛ"}
                 </button>
@@ -3716,72 +3855,92 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               </div>
             </div>
             
-            {voiceMessages.map((msg, index) => (
-              <div 
-                key={index} 
-                style={{ 
-                  display: "flex", 
-                  flexDirection: "column", 
-                  alignItems: msg.role === "user" ? "flex-end" : "flex-start",
-                  gap: 4,
-                  position: "relative"
-                }}
-              >
-                <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: "90%", alignItems: "center" }}>
-                  <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>
-                    {msg.role === "user" ? "Вы:" : "ИИ-Тьютор:"}
-                  </span>
-                  <button
-                    style={{
-                      background: "transparent",
-                      color: "rgba(255,255,255,0.2)",
-                      border: "none",
-                      fontSize: 10,
-                      cursor: "pointer",
-                      padding: "0 4px"
-                    }}
-                    title="Удалить"
-                    onClick={() => {
-                      setVoiceMessages(prev => {
-                        const updated = prev.filter((_, i) => i !== index);
-                        if (updated.length === 0) {
-                          return [{ role: "model", text: "Welcome to the Voice Club! Let's talk." }];
-                        }
-                        return updated;
-                      });
-                      setToastMessage("Сообщение удалено");
-                    }}
-                  >
-                    ✕
-                  </button>
-                </div>
-                <div style={{
-                  background: msg.role === "user" ? "rgba(143,160,128,0.15)" : "rgba(255,255,255,0.04)",
-                  padding: "10px 12px",
-                  borderRadius: "1rem",
-                  fontSize: 13,
-                  maxWidth: "90%",
-                  color: "var(--text-color)"
-                }}>
-                  {renderFormattedText(msg.text, msg.role === "user")}
-                  
-                  {/* Message Timestamp */}
-                  {(msg.timestamp || activeVoiceSession?.created) && (
-                    <div 
-                      style={{ 
-                        fontSize: 9, 
-                        textAlign: "right", 
-                        marginTop: 4, 
-                        color: "var(--muted)",
-                        opacity: 0.8
+            <div 
+              className="styled-scrollbar-y"
+              style={{
+                width: "100%",
+                display: "flex",
+                flexDirection: "column",
+                gap: 16,
+                maxHeight: "350px",
+                overflowY: "auto",
+                paddingRight: "8px"
+              }}
+            >
+              {voiceMessages.map((msg, index) => (
+                <div 
+                  key={index} 
+                  style={{ 
+                    display: "flex", 
+                    flexDirection: "column", 
+                    alignItems: msg.role === "user" ? "flex-end" : "flex-start",
+                    gap: 4,
+                    position: "relative"
+                  }}
+                >
+                  <div style={{ display: "flex", justifyContent: "space-between", width: "100%", maxWidth: "90%", alignItems: "center" }}>
+                    <span style={{ fontSize: 10, color: "var(--muted)", fontWeight: 600 }}>
+                      {msg.role === "user" ? "Вы:" : "ИИ-Тьютор:"}
+                    </span>
+                    <button
+                      style={{
+                        background: "transparent",
+                        color: "rgba(255,255,255,0.2)",
+                        border: "none",
+                        fontSize: 10,
+                        cursor: "pointer",
+                        padding: "0 4px"
+                      }}
+                      title="Удалить"
+                      onClick={() => {
+                        setVoiceMessages(prev => {
+                          const updated = prev.filter((_, i) => i !== index);
+                          if (updated.length === 0) {
+                            return [{ role: "model", text: "Welcome to the Voice Club! Let's talk." }];
+                          }
+                          return updated;
+                        });
+                        setToastMessage("Сообщение удалено");
                       }}
                     >
-                      {formatMessageTimestamp(msg.timestamp || activeVoiceSession?.created)}
-                    </div>
-                  )}
+                      ✕
+                    </button>
+                  </div>
+                  <div style={{
+                    background: msg.role === "user" ? "rgba(143,160,128,0.15)" : "rgba(255,255,255,0.04)",
+                    padding: "10px 12px",
+                    borderRadius: "1rem",
+                    fontSize: 13,
+                    maxWidth: "90%",
+                    color: "var(--text-color)"
+                  }}>
+                    {renderFormattedText(msg.text, msg.role === "user")}
+                    
+                    {/* Message Timestamp */}
+                    {(msg.timestamp || activeVoiceSession?.created) && (
+                      <div 
+                        style={{ 
+                          fontSize: 9, 
+                          textAlign: "right", 
+                          marginTop: 4, 
+                          color: "var(--muted)",
+                          opacity: 0.8
+                        }}
+                      >
+                        {formatMessageTimestamp(msg.timestamp || activeVoiceSession?.created)}
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              ))}
+              {voiceLoading && loadingVoiceSessionId === activeVoiceSessionId && (
+                <div style={{ alignSelf: "flex-start", padding: "12px 14px", background: "rgba(255,255,255,0.02)", borderRadius: "1.2rem", display: "flex", alignItems: "center", gap: 6 }}>
+                  <Loader2 size={16} className="animate-spin" style={{ color: "var(--sage)" }} />
+                  <span style={{ fontSize: 12, color: "var(--muted)" }}>Обрабатываем вашу речь и готовим ответ... Пожалуйста, подождите 🎙️</span>
+                </div>
+              )}
+              <div ref={voiceEndRef} />
+            </div>
           </div>
 
           {showDictionaryButton && pendingWordToAdd && !wordConfirmModal && (

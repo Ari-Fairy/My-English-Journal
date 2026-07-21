@@ -94,6 +94,24 @@ const translationMemoryCache = new Map<string, string>();
 // Helper to pause execution
 const delay = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
+// Helper to wrap a promise with a timeout to prevent hanging API requests
+function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T): Promise<T> {
+  let timeoutId: any;
+  const timeoutPromise = new Promise<T>((resolve) => {
+    timeoutId = setTimeout(() => {
+      console.warn(`[Timeout] Operation exceeded ${timeoutMs}ms. Continuing with fallback/default value.`);
+      resolve(defaultValue);
+    }, timeoutMs);
+  });
+  return Promise.race([
+    promise.then((val) => {
+      clearTimeout(timeoutId);
+      return val;
+    }),
+    timeoutPromise
+  ]);
+}
+
 // Helper for generating content with retry and fallback model
 async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string } = {}): Promise<any> {
   const { maxRetries = 3, fallbackModel = "gemini-3.1-flash-lite" } = options;
@@ -108,10 +126,14 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
       console.log(`[Gemini API] Attempt ${attempt} using model "${currentModel}"`);
-      const response = await ai.models.generateContent({
+      const responsePromise = ai.models.generateContent({
         ...params,
         model: currentModel
       });
+      const response = await withTimeout(responsePromise, 40000, null);
+      if (!response) {
+        throw new Error("Gemini API call timed out after 40 seconds");
+      }
       return response;
     } catch (error: any) {
       lastError = error;
@@ -149,10 +171,14 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   if (fallbackModel && currentModel !== fallbackModel) {
     console.log(`[Gemini API] Desperation fallback attempt using "${fallbackModel}"...`);
     try {
-      const response = await ai.models.generateContent({
+      const responsePromise = ai.models.generateContent({
         ...params,
         model: fallbackModel
       });
+      const response = await withTimeout(responsePromise, 40000, null);
+      if (!response) {
+        throw new Error("Desperation fallback API call timed out after 40 seconds");
+      }
       return response;
     } catch (fallbackError: any) {
       console.error(`[Gemini API Error] Desperation fallback model "${fallbackModel}" also failed:`, fallbackError);
@@ -1444,6 +1470,13 @@ If the student asks a question, you MUST answer it completely. Do not ignore que
 If the student discusses or references a story, book, text, or topic, you MUST explicitly state your opinion or thoughts on that story/topic to show that you are an active listener and peer/teacher.
 You MUST also always ask a friendly leading, follow-up question (наводящий вопрос) at the end of your response to keep the conversation flowing naturally.
 
+[EXPLANATIONS & FORMATTING RULE - CRITICAL]:
+If the student asks you to explain a grammar rule, a vocabulary word, a difference between words (such as "little" vs "a little", prepositions, tenses, etc.), or asks a question about how English works:
+- You MUST provide a highly detailed, comprehensive, beautifully formatted, and structured explanation.
+- Use Markdown formatting: headers (###), bold text, bullet points, numbered lists, or comparison blocks.
+- Provide clear, side-by-side examples of correct usage with their Russian translations in parentheses.
+- Keep the explanation engaging, rich, educational, and structured, rather than a single flat paragraph of plain text. This is extremely important for a great learning experience.
+
 [DICTIONARY RECOMMENDATION RULE]:
 Do NOT recommend adding a word to the dictionary on every message. Only do so RARELY (e.g. if the word is genuinely difficult, or if the student explicitly asks about a word, or says they do not know it, e.g. "I don't know this word" / "сложное слово" / "добавь в словарь" / "что значит X"). Otherwise, do NOT include any 'wordToAdd' object (leave it null/empty). Be very selective.
 
@@ -1530,18 +1563,18 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
       modelName = "gemini-3.1-pro-preview"; // High thinking reasoning
       config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
     } else if (mode === "grounding") {
-      modelName = "gemini-3.5-flash";
+      modelName = "gemini-2.5-flash";
       config.tools = [{ googleSearch: {} }]; // Google Search grounding
       config.systemInstruction = baseInstruction + "\n[CRITICAL]: Please return a valid JSON object wrapped in code block format: ```json { \"replyText\": \"...\", \"evaluatedLevel\": \"...\", \"wordToAdd\": null } ```.";
     }
 
     console.log("[AI Chat] Generating reply using model:", modelName);
     const ai = getAIClient();
-    const response = await ai.models.generateContent({
+    const response = await generateContentWithRetry({
       model: modelName,
       contents,
       config
-    });
+    }, { maxRetries: 2, fallbackModel: mode === "grounding" ? "gemini-2.5-flash" : "gemini-3.1-flash-lite" });
 
     let responseText = response.text || "";
     let replyText = "";
@@ -1603,8 +1636,8 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
           .trim();
 
-        const speechResponse = await ai.models.generateContent({
-          model: "gemini-3.1-flash-tts-preview",
+        const speechPromise = ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
           contents: [{ parts: [{ text: `Say warmly and clearly: ${cleanTextForTts}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
@@ -1615,9 +1648,13 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
             }
           }
         });
-        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-        if (rawData) {
-          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+
+        const speechResponse = await withTimeout(speechPromise, 15000, null);
+        if (speechResponse) {
+          const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+          if (rawData) {
+            replyAudioBase64 = convertPcmToWav(rawData, 24000);
+          }
         }
       } catch (ttsErr) {
         console.warn("[AI Chat TTS] Synthesis failed, falling back to client-side", ttsErr);
@@ -1779,7 +1816,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
   let role = "sophia";
   let userLevel = "A1";
   try {
-    const { audio, messages, role: reqRole = "sophia", userLevel: reqLevel = "A1", skipServerTts = false, speechPace = "normal", verbosity = "short", clientLocalTime } = req.body || {};
+    const { audio, messages, role: reqRole = "sophia", userLevel: reqLevel = "A1", skipServerTts = false, speechPace = "normal", verbosity = "medium", clientLocalTime } = req.body || {};
     role = reqRole;
     userLevel = reqLevel;
     const ai = getAIClient();
@@ -1837,13 +1874,15 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
 
     // Dynamic response length / verbosity configuration
-    let verbosityInstruction = "Keep your answer brief, under 50 words.";
+    let verbosityInstruction = "Determine the optimal length for your response naturally based on the conversation context. If the student made errors or asked a question, provide a helpful explanation of appropriate length (typically 45-80 words). If the conversation is simple, keep it light and easy (around 40 words). Speak naturally, do not artificially truncate your thoughts.";
     if (verbosity === "short") {
       verbosityInstruction = "Keep your response extremely short, friendly, and brief. Return STRICTLY under 30 words, maximum 2 short sentences. Let the user speak more.";
     } else if (verbosity === "medium") {
       verbosityInstruction = "Keep your response moderately conversational. Return around 45 to 65 words, maximum 3 to 4 sentences.";
     } else if (verbosity === "long") {
       verbosityInstruction = "Give a detailed, highly educational, or descriptive explanation or reply. Return between 90 to 140 words. Explain grammatical nuances, suggest alternative formulations, or discuss the topic comprehensively like a supportive, elegant teacher giving a micro-lecture.";
+    } else if (verbosity === "auto") {
+      verbosityInstruction = "Determine the optimal length for your response naturally based on the conversation context. If the student made errors or asked a question, provide a helpful explanation of appropriate length (typically 45-80 words). If the conversation is simple, keep it light and easy (around 40 words). Speak naturally, do not artificially truncate your thoughts.";
     }
 
     // Dynamic speech pacing instruction for TTS-targeted generation
@@ -2006,7 +2045,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .trim();
 
         const speechResponse = await ai.models.generateContent({
-          model: "gemini-3.1-flash-tts-preview",
+          model: "gemini-2.5-flash-preview-tts",
           contents: [{ parts: [{ text: `Say warmly and clearly: ${cleanTextForTts}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
@@ -2340,36 +2379,64 @@ app.post("/api/ai-voice-topic", async (req, res) => {
 Use Google Search to find recent interesting news or a cool topic based on the query: "${chosenQuery}".
 Then, formulate a highly engaging conversational starter statement and question (under 50 words) in English.
 Adapt your language and complexity strictly to the user's CEFR level: ${userLevel}.
-- For A1-A2: use simple sentences, easy vocabulary, and add a brief 1-sentence friendly Russian explanation of what the topic is about.
+- For A1-A2: use simple sentences, easy vocabulary.
 - For B1-B2: use natural phrasal verbs, standard conversational style.
 - For C1-C2: use native-level idiom and advanced expression.
 
-Explain the topic briefly and invite the student to discuss.
+Explain the topic briefly in English and invite the student to discuss.
 Return strictly a JSON object containing:
-- 'topicText': the formulated conversational starter in English.
-- 'topicTitle': a short 2-3 word title of the news/topic.
+- 'topicText': the formulated conversational starter strictly in English ONLY. Absolutely no Russian words should be in this field.
+- 'topicTranslation': a brief 1-sentence Russian translation/explanation of the entire topicText statement (strictly in Russian, absolutely no English words).
+- 'topicTitle': a short 2-3 word title of the news/topic (in English).
 - 'sourceUrl': the URL from search grounding if found.`;
 
     const ai = getAIClient();
-    const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
-      contents: prompt,
-      config: {
-        tools: [{ googleSearch: {} }],
-        responseMimeType: "application/json",
-        responseSchema: {
-          type: Type.OBJECT,
-          properties: {
-            topicText: { type: Type.STRING },
-            topicTitle: { type: Type.STRING },
-            sourceUrl: { type: Type.STRING }
-          },
-          required: ["topicText", "topicTitle"]
+    let response;
+    try {
+      response = await generateContentWithRetry({
+        model: "gemini-3.5-flash",
+        contents: prompt,
+        config: {
+          tools: [{ googleSearch: {} }],
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              topicText: { type: Type.STRING },
+              topicTranslation: { type: Type.STRING },
+              topicTitle: { type: Type.STRING },
+              sourceUrl: { type: Type.STRING }
+            },
+            required: ["topicText", "topicTranslation", "topicTitle"]
+          }
         }
-      }
-    });
+      }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
+    } catch (groundingErr: any) {
+      console.warn("[Voice Topic] Search grounding failed, falling back to standard prompt...", groundingErr?.message || groundingErr);
+      response = await generateContentWithRetry({
+        model: "gemini-3.5-flash",
+        contents: prompt + "\nDo not use external tools. Generate a high-quality discussion topic directly as JSON.",
+        config: {
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              topicText: { type: Type.STRING },
+              topicTranslation: { type: Type.STRING },
+              topicTitle: { type: Type.STRING },
+              sourceUrl: { type: Type.STRING }
+            },
+            required: ["topicText", "topicTranslation", "topicTitle"]
+          }
+        }
+      }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
+    }
 
-    const result = JSON.parse(response.text || "{}");
+    let cleanText = (response.text || "").trim();
+    if (cleanText.startsWith("```")) {
+      cleanText = cleanText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+    }
+    const result = JSON.parse(cleanText || "{}");
     
     // Synthesize the starter statement to audio
     let replyAudioBase64 = "";
@@ -2381,8 +2448,8 @@ Return strictly a JSON object containing:
       };
       const selectedVoice = voiceNames[role] || "Kore";
 
-      const speechResponse = await ai.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
+      const speechPromise = ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: `Say warmly and clearly: ${result.topicText}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2394,9 +2461,13 @@ Return strictly a JSON object containing:
         }
       });
 
-      const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-      if (rawData) {
-        replyAudioBase64 = convertPcmToWav(rawData, 24000);
+      const speechResponse = await withTimeout(speechPromise, 15000, null);
+
+      if (speechResponse) {
+        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+        if (rawData) {
+          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+        }
       }
     } catch (ttsErr: any) {
       console.warn("[Voice Topic] TTS synthesis failed.", ttsErr?.message);
@@ -2405,6 +2476,7 @@ Return strictly a JSON object containing:
     res.json({
       topicTitle: result.topicTitle,
       topicText: result.topicText,
+      topicTranslation: result.topicTranslation || "",
       sourceUrl: result.sourceUrl || "",
       replyAudio: replyAudioBase64 ? `data:audio/wav;base64,${replyAudioBase64}` : null
     });
