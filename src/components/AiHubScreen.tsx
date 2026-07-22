@@ -554,6 +554,32 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     localStorage.setItem("ai_hub_active_voice_session_id_v3", activeVoiceSessionId);
   }, [activeVoiceSessionId]);
 
+  const getCurrentTutorLevel = (roleName: "sophia" | "oliver" | "alex") => {
+    return stats.tutorLevels?.[roleName] || stats.level || "A1";
+  };
+
+  const handleUpdateTutorLevel = (roleName: "sophia" | "oliver" | "alex", newLevel: string) => {
+    const currentLevels = stats.tutorLevels || {
+      sophia: stats.level || "A1",
+      oliver: stats.level || "A1",
+      alex: stats.level || "A1"
+    };
+    if (currentLevels[roleName] !== newLevel) {
+      const updatedTutorLevels = {
+        ...currentLevels,
+        [roleName]: newLevel
+      };
+      const updatedStats = {
+        ...stats,
+        tutorLevels: updatedTutorLevels,
+        level: newLevel
+      };
+      onSaveProgress(updatedStats);
+      const tutorTitle = roleName === "sophia" ? "Sophia" : roleName === "oliver" ? "Oliver" : "Alex";
+      setToastMessage(`Уровень у преподавателя ${tutorTitle} адаптирован: ${newLevel}! 📊`);
+    }
+  };
+
   // Find active sessions or default
   const activeChatSession = chatSessions.find(s => s.id === activeChatSessionId) || chatSessions.find(s => s.tutor === tutor) || chatSessions[0];
   const activeVoiceSession = voiceSessions.find(s => s.id === activeVoiceSessionId) || voiceSessions.find(s => s.tutor === tutor) || voiceSessions[0];
@@ -1203,7 +1229,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
           messages: history.map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp || new Date().toISOString() })),
           role: tutor,
           mode: chatMode,
-          userLevel: stats.level || "A1",
+          userLevel: getCurrentTutorLevel(tutor),
           skipServerTts: useNativeSpeechSynth,
           clientLocalTime: new Date().toISOString()
         })
@@ -1219,10 +1245,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         timestamp: new Date().toISOString()
       }]);
 
-      if (data.evaluatedLevel && data.evaluatedLevel !== stats.level) {
-        const updatedStats = { ...stats, level: data.evaluatedLevel };
-        onSaveProgress(updatedStats);
-        setToastMessage(`Ваш уровень адаптирован: ${data.evaluatedLevel}! 📊`);
+      if (data.evaluatedLevel) {
+        handleUpdateTutorLevel(tutor, data.evaluatedLevel);
       }
 
       if (data.wordToAdd) {
@@ -1323,21 +1347,24 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const startVoiceRecording = async () => {
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
+    isExplicitlyStoppedRef.current = false;
+    accumulatedTranscriptRef.current = "";
+    setVoiceInputText("Слушаю вас...");
+
+    // Always start MediaRecorder for reliable audio capture across mobile and desktop
+    await startFallbackMediaRecorder();
+
+    // Optionally start native SpeechRecognition in parallel if enabled for instant UI feedback
     if (useNativeSpeechRec && SpeechRecognition) {
       try {
         if (recognitionRef.current) {
-          recognitionRef.current.abort();
+          try { recognitionRef.current.abort(); } catch (e) {}
         }
-        
-        isExplicitlyStoppedRef.current = false;
-        accumulatedTranscriptRef.current = "";
         
         const rec = new SpeechRecognition();
         rec.continuous = true;
         rec.interimResults = true;
         rec.lang = speechRecLang;
-        
-        setVoiceInputText("Слушаю вас...");
         
         rec.onresult = (event: any) => {
           let interimTranscript = "";
@@ -1357,53 +1384,13 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         
         rec.onerror = (e: any) => {
           console.error("Speech recognition error:", e);
-          if (e.error === "no-speech") {
-            // Keep going, don't stop recording
-            console.log("No speech detected, continuing listening...");
-          }
-        };
-        
-        rec.onend = async () => {
-          // If the user did not click stop, the browser stopped it on silence. We auto-restart it!
-          if (!isExplicitlyStoppedRef.current) {
-            try {
-              rec.start();
-            } catch (err) {
-              console.warn("SpeechRecognition auto-restart failed:", err);
-            }
-            return;
-          }
-          
-          setIsRecording(false);
-          if (recordingTimerRef.current) {
-            clearInterval(recordingTimerRef.current);
-          }
-          
-          const finalResult = accumulatedTranscriptRef.current.trim();
-          if (finalResult) {
-            setVoiceInputText("");
-            await executeVoiceDialogueRequest({ text: finalResult });
-            accumulatedTranscriptRef.current = "";
-          } else {
-            setVoiceInputText("");
-          }
         };
         
         recognitionRef.current = rec;
         rec.start();
-        setIsRecording(true);
-        setRecordingTime(0);
-        
-        recordingTimerRef.current = setInterval(() => {
-          setRecordingTime(t => t + 1);
-        }, 1000);
-        
       } catch (err) {
-        console.warn("SpeechRecognition initiation failed, falling back to MediaRecorder", err);
-        startFallbackMediaRecorder();
+        console.warn("SpeechRecognition initiation failed:", err);
       }
-    } else {
-      startFallbackMediaRecorder();
     }
   };
 
@@ -1412,7 +1399,6 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
       
-      // Dynamic mimeType matching for Safari and other browsers
       let mimeType = "audio/webm";
       if (typeof MediaRecorder !== "undefined" && MediaRecorder.isTypeSupported) {
         if (MediaRecorder.isTypeSupported("audio/webm;codecs=opus")) {
@@ -1463,19 +1449,22 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   };
 
   const stopVoiceRecording = () => {
-    if (useNativeSpeechRec && recognitionRef.current) {
-      isExplicitlyStoppedRef.current = true;
-      recognitionRef.current.stop();
-      setIsRecording(false);
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
-    } else if (mediaRecorderRef.current && isRecording) {
-      mediaRecorderRef.current.stop();
-      setIsRecording(false);
-      if (recordingTimerRef.current) {
-        clearInterval(recordingTimerRef.current);
-      }
+    isExplicitlyStoppedRef.current = true;
+    setIsRecording(false);
+    if (recordingTimerRef.current) {
+      clearInterval(recordingTimerRef.current);
+    }
+
+    if (recognitionRef.current) {
+      try {
+        recognitionRef.current.stop();
+      } catch (e) {}
+    }
+
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+      try {
+        mediaRecorderRef.current.stop();
+      } catch (e) {}
     }
   };
 
@@ -1485,7 +1474,13 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     reader.readAsDataURL(blob);
     reader.onloadend = async () => {
       const base64Audio = reader.result as string;
-      await executeVoiceDialogueRequest({ audio: base64Audio });
+      const recognizedText = accumulatedTranscriptRef.current.trim();
+      accumulatedTranscriptRef.current = "";
+      setVoiceInputText("");
+      await executeVoiceDialogueRequest({ 
+        audio: base64Audio, 
+        text: recognizedText || undefined 
+      });
     };
   };
 
@@ -1518,7 +1513,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
           text: payload.text,
           messages: targetVoiceMessages.filter(m => !m.text.includes("🎙️")).map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp || new Date().toISOString() })),
           role: tutor,
-          userLevel: stats.level || "A1",
+          userLevel: getCurrentTutorLevel(tutor),
           speechPace,
           verbosity,
           skipServerTts: useNativeSpeechSynth, // Skip server TTS if native synthesis is active
@@ -1532,7 +1527,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       if (data.userTranscription) {
         setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
-          if (copy[copy.length - 1].text.includes("🎙️")) {
+          if (copy[copy.length - 1] && copy[copy.length - 1].text.includes("🎙️")) {
             copy[copy.length - 1] = { role: "user", text: data.userTranscription, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
           }
           return copy;
@@ -1541,10 +1536,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
       setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: data.replyText, timestamp: new Date().toISOString() }]);
 
-      if (data.evaluatedLevel && data.evaluatedLevel !== stats.level) {
-        const updatedStats = { ...stats, level: data.evaluatedLevel };
-        onSaveProgress(updatedStats);
-        setToastMessage(`Ваш уровень адаптирован: ${data.evaluatedLevel}! 📊`);
+      if (data.evaluatedLevel) {
+        handleUpdateTutorLevel(tutor, data.evaluatedLevel);
       }
 
       if (data.wordToAdd) {
@@ -2727,7 +2720,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                   }}
                   onClick={() => handleTutorChange(roleName)}
                 >
-                  {roleName === "sophia" ? "Sophia" : roleName === "oliver" ? "Oliver" : "Alex"}
+                  {roleName === "sophia" ? `Sophia (${getCurrentTutorLevel("sophia")})` : roleName === "oliver" ? `Oliver (${getCurrentTutorLevel("oliver")})` : `Alex (${getCurrentTutorLevel("alex")})`}
                 </button>
               ))}
             </div>
@@ -2740,10 +2733,10 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
           </p>
           <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
             <span style={{ fontSize: 10, background: "rgba(143,160,128,0.18)", color: "var(--sage)", padding: "2px 8px", borderRadius: "99px", fontWeight: 600 }}>
-              Уровень: {stats.level || "A1"}
+              Уровень у {tutor === "sophia" ? "Sophia" : tutor === "oliver" ? "Oliver" : "Alex"}: {getCurrentTutorLevel(tutor)}
             </span>
             <span style={{ fontSize: 10, color: "var(--text-muted)" }}>
-              (ИИ подстраивается под вас автоматически 📊)
+              (Индивидуальная оценка у каждого учителя 📊)
             </span>
           </div>
         </div>

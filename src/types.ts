@@ -69,4 +69,9 @@ export interface UserProgress {
   secondLastReviewSessionTime?: number;
   firstStudyDate?: string;
   level?: string;
+  tutorLevels?: {
+    sophia?: string;
+    oliver?: string;
+    alex?: string;
+  };
 }

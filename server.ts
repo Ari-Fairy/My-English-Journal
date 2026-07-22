@@ -1574,8 +1574,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "—Å—
     if (mode === "low-latency") {
       modelName = "gemini-3.1-flash-lite"; // Fast, low latency replies
     } else if (mode === "thinking") {
-      modelName = "gemini-3.1-pro-preview"; // High thinking reasoning
-      config.thinkingConfig = { thinkingLevel: ThinkingLevel.HIGH };
+      modelName = "gemini-2.5-pro"; // Reliable high reasoning model
     } else if (mode === "grounding") {
       modelName = "gemini-2.5-flash";
       config.tools = [{ googleSearch: {} }]; // Google Search grounding
@@ -1584,11 +1583,26 @@ If the user's message contains offensive language, insults, swearing (e.g., "—Å—
 
     console.log("[AI Chat] Generating reply using model:", modelName);
     const ai = getAIClient();
-    const response = await generateContentWithRetry({
-      model: modelName,
-      contents,
-      config
-    }, { maxRetries: 2, fallbackModel: mode === "grounding" ? "gemini-2.5-flash" : "gemini-3.1-flash-lite" });
+    let response: any = null;
+    try {
+      response = await generateContentWithRetry({
+        model: modelName,
+        contents,
+        config
+      }, { maxRetries: 2, fallbackModel: "gemini-3.5-flash" });
+    } catch (primaryErr) {
+      console.warn("[AI Chat] Primary model call failed, falling back to gemini-3.5-flash standard JSON:", primaryErr);
+      const fallbackConfig: any = {
+        systemInstruction: baseInstruction,
+        responseMimeType: "application/json",
+        responseSchema: responseSchema
+      };
+      response = await generateContentWithRetry({
+        model: "gemini-3.5-flash",
+        contents,
+        config: fallbackConfig
+      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
+    }
 
     let responseText = response.text || "";
     let replyText = "";
