@@ -114,14 +114,18 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T)
 
 // Helper for generating content with retry and fallback model
 async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string } = {}): Promise<any> {
-  const { maxRetries = 3, fallbackModel = "gemini-3.1-flash-lite" } = options;
+  const { maxRetries = 3, fallbackModel = "gemini-2.5-flash" } = options;
   const ai = getAIClient();
   let lastError: any = null;
   let currentDelay = 500;
 
   // Try with the requested model (or default)
-  const initialModel = params.model || "gemini-3.5-flash";
-  let currentModel = initialModel;
+  let requestedModel = params.model || "gemini-2.5-flash";
+  // Replace legacy or non-existent model aliases with valid Gemini models
+  if (requestedModel === "gemini-3.5-flash" || requestedModel === "gemini-3.1-flash-lite") {
+    requestedModel = "gemini-2.5-flash";
+  }
+  let currentModel = requestedModel;
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -468,7 +472,7 @@ app.post("/api/translate", async (req, res) => {
     prompt += ` Return ONLY the direct translation, single word or short list of synonym translations (like "пыль, вытирать пыль"), with no extra words, explanations, quotation marks, or markdown formatting. Just the clean Russian translation string.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [prompt]
     });
 
@@ -530,7 +534,7 @@ For example: [{"en": "genius", "ru": "гений"}, {"en": "such", "ru": "так
 Return absolutely nothing else, no markdown wrapping, no explanation, just raw valid JSON.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [
         {
           inlineData: {
@@ -985,7 +989,7 @@ For example:
 Always prioritize mapping to the custom keys in the provided list based on their labels. Only if a word absolutely does not fit any of the provided keys or custom labels, you can invent a new lowercase key for POS or Topic. If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа").`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-3.1-flash-lite",
+      model: "gemini-2.5-flash",
       contents: `Word: "${en}" -> Translation: "${ru}"`,
       config: {
         systemInstruction: systemInstruction,
@@ -1534,7 +1538,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
     }));
 
     // Configure model and config parameters based on interactive mode chosen by user
-    let modelName = "gemini-3.5-flash"; // Default general model
+    let modelName = "gemini-2.5-flash"; // Default general model
     
     const responseSchema = {
       type: Type.OBJECT,
@@ -1572,7 +1576,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
     }
 
     if (mode === "low-latency") {
-      modelName = "gemini-3.1-flash-lite"; // Fast, low latency replies
+      modelName = "gemini-2.5-flash"; // Fast, low latency replies
     } else if (mode === "thinking") {
       modelName = "gemini-2.5-pro"; // Reliable high reasoning model
     } else if (mode === "grounding") {
@@ -1589,16 +1593,16 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         model: modelName,
         contents,
         config
-      }, { maxRetries: 2, fallbackModel: "gemini-3.5-flash" });
+      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
     } catch (primaryErr) {
-      console.warn("[AI Chat] Primary model call failed, falling back to gemini-3.5-flash standard JSON:", primaryErr);
+      console.warn("[AI Chat] Primary model call failed, falling back to gemini-2.5-flash standard JSON:", primaryErr);
       const fallbackConfig: any = {
         systemInstruction: baseInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema
       };
       response = await generateContentWithRetry({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents,
         config: fallbackConfig
       }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
@@ -2065,14 +2069,14 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
 
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
-      model: "gemini-3.1-flash-lite",
+      model: "gemini-2.5-flash",
       contents,
       config: {
         systemInstruction: baseInstruction,
         responseMimeType: "application/json",
         responseSchema
       }
-    }, { fallbackModel: "gemini-3.5-flash" });
+    }, { fallbackModel: "gemini-2.5-flash" });
 
     let replyText = "";
     let evaluatedLevel = userLevel;
@@ -2466,28 +2470,41 @@ Return strictly a JSON object containing:
     let response;
     try {
       response = await generateContentWithRetry({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }]
         }
-      }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
+      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
     } catch (groundingErr: any) {
       console.warn("[Voice Topic] Search grounding failed, falling back to standard prompt...", groundingErr?.message || groundingErr);
       response = await generateContentWithRetry({
-        model: "gemini-3.5-flash",
+        model: "gemini-2.5-flash",
         contents: prompt + "\nDo not use external tools. Generate a high-quality discussion topic directly as clean JSON.",
         config: {
           responseMimeType: "application/json"
         }
-      }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
+      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
     }
 
-    let cleanText = (response.text || "").trim();
+    let cleanText = (response?.text || "").trim();
     if (cleanText.includes("```")) {
-      cleanText = cleanText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
+      cleanText = cleanText.replace(/```json\s*/gi, "").replace(/```\s*/g, "").trim();
     }
-    const result = JSON.parse(cleanText || "{}");
+    
+    let result: any = {};
+    try {
+      result = JSON.parse(cleanText || "{}");
+    } catch (e) {}
+
+    if (!result.topicText) {
+      result = {
+        topicTitle: "Daily Practice",
+        topicText: "What was the most interesting or memorable part of your day today?",
+        topicTranslation: "Что было самым интересным или запоминающимся событием вашего сегодняшнего дня?",
+        sourceUrl: ""
+      };
+    }
     
     // Synthesize the starter statement to audio
     let replyAudioBase64 = "";
@@ -2538,7 +2555,13 @@ Return strictly a JSON object containing:
     });
   } catch (error: any) {
     console.error("AI Voice topic generation error:", error);
-    res.status(500).json({ error: error?.message || "Failed to generate conversational topic" });
+    res.json({
+      topicTitle: "Free Time & Hobbies",
+      topicText: "Do you prefer listening to music or reading books in your free time?",
+      topicTranslation: "Вы предпочитаете слушать музыку или читать книги в свободное время?",
+      sourceUrl: "",
+      replyAudio: null
+    });
   }
 });
 
