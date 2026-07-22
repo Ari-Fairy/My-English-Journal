@@ -261,6 +261,71 @@ export async function saveUserProgress(progress: UserProgress): Promise<void> {
   }
 }
 
+// Save user AI chat & voice sessions to Firestore under users/{userId}/ai_sessions
+export async function saveUserAiSessions(userId: string, chatSessions: any[], voiceSessions: any[]): Promise<void> {
+  try {
+    const chatDocRef = doc(db, `users/${userId}/ai_sessions`, "chat_sessions");
+    const voiceDocRef = doc(db, `users/${userId}/ai_sessions`, "voice_sessions");
+    
+    await setDoc(chatDocRef, cleanForFirestore({
+      id: "chat_sessions",
+      userId,
+      type: "chat",
+      updatedAt: new Date().toISOString(),
+      sessions: chatSessions
+    }));
+
+    await setDoc(voiceDocRef, cleanForFirestore({
+      id: "voice_sessions",
+      userId,
+      type: "voice",
+      updatedAt: new Date().toISOString(),
+      sessions: voiceSessions
+    }));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, `users/${userId}/ai_sessions`);
+  }
+}
+
+// Fetch user AI chat & voice sessions from Firestore
+export async function fetchUserAiSessions(userId: string): Promise<{ chatSessions: any[]; voiceSessions: any[] } | null> {
+  try {
+    const chatDocRef = doc(db, `users/${userId}/ai_sessions`, "chat_sessions");
+    const voiceDocRef = doc(db, `users/${userId}/ai_sessions`, "voice_sessions");
+
+    const [chatSnap, voiceSnap] = await Promise.all([
+      getDoc(chatDocRef),
+      getDoc(voiceDocRef)
+    ]);
+
+    let chatSessions: any[] = [];
+    let voiceSessions: any[] = [];
+
+    if (chatSnap.exists()) {
+      const data = chatSnap.data();
+      if (Array.isArray(data.sessions)) {
+        chatSessions = data.sessions;
+      }
+    }
+
+    if (voiceSnap.exists()) {
+      const data = voiceSnap.data();
+      if (Array.isArray(data.sessions)) {
+        voiceSessions = data.sessions;
+      }
+    }
+
+    if (chatSessions.length === 0 && voiceSessions.length === 0) {
+      return null;
+    }
+
+    return { chatSessions, voiceSessions };
+  } catch (error) {
+    handleFirestoreError(error, OperationType.GET, `users/${userId}/ai_sessions`);
+    return null;
+  }
+}
+
 // Batch reset user study data atomically using writeBatch to avoid connection limits and timeouts
 export async function batchResetUserData(userId: string, resetWords: Word[], resetVerbs: IrregularVerb[], resetProgress: UserProgress): Promise<void> {
   const batch = writeBatch(db);

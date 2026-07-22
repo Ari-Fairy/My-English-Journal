@@ -120,6 +120,10 @@ service cloud.firestore {
 
       allow delete: if isSignedIn()
         && userId == request.auth.uid;
+
+      match /ai_sessions/{sessionId} {
+        allow read, write, delete: if isOwner(userId);
+      }
     }
   }
 }

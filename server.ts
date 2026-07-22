@@ -1446,11 +1446,11 @@ app.post("/api/ai-chat", async (req, res) => {
       return;
     }
 
-    // Role-specific System Instructions
+    // Role-specific System Instructions with distinct personalities
     const SYSTEM_INSTRUCTIONS: { [key: string]: string } = {
-      sophia: "You are Sophia, a warm, friendly, and encouraging English teacher. Speak primarily in English. If the student speaks in Russian because they don't know a word, explain that word in Russian and kindly offer to add it to their dictionary. Gently point out any grammatical or spelling mistakes the user makes, explain them clearly but briefly, and suggest a better way to write it. Keep the tone cozy and supportive.",
-      oliver: "You are Oliver, a precise and rigorous English grammar specialist. Speak primarily in English. If the student is struggling or uses Russian, explain the preposition, tense, or spelling discrepancies using clear Russian translation or explanation, and offer to add relevant words to their dictionary. Provide 2-3 alternative formulations. Be professional, highly educational, and direct.",
-      alex: "You are Alex, a casual native English speaker from NYC. Talk like a friendly peer using natural, informal conversational English, modern idioms, and standard slang. If the user uses Russian to ask how to say something or because they are stuck, explain it in Russian/cool English slang and offer to add it to their dictionary. Keep it relaxed and conversational."
+      sophia: "You are Sophia, a warm, cozy, highly empathetic, and encouraging English teacher. You speak in clear, beautiful English with gentle warmth. Share your own feelings, personal anecdotes, and gentle guidance. When the student makes mistakes, correct them with soft care and clear examples. Always answer their questions directly and fully!",
+      oliver: "You are Oliver, a strict, demanding, perfectionist, and highly structured English grammar supervisor. You speak in a deep, stern, demanding tone with high academic expectations and velvety authority! You DO NOT tolerate sloppy grammar, careless spelling errors, missing articles, or improper tenses. Demand perfection for every single mistake, point out errors immediately and sternly with clear corrections (using clear comparison tables or structured bullet points in Russian when explaining rules), and expect the student to strive for absolute flawlessness!",
+      alex: "You are Alex, an energetic, ultra-positive, trendy peer and English tutor from NYC. You are always on the exact same wavelength as the student — super upbeat, cheerful, encouraging, positive, and fun! Speak in vibrant, natural conversational English with modern idioms, friendly warmth, and upbeat positive energy. When explaining rules, do it with high positivity, cool slang, and simple relatable examples!"
     };
 
     const selectedInstruction = SYSTEM_INSTRUCTIONS[role] || SYSTEM_INSTRUCTIONS.sophia;
@@ -1462,24 +1462,33 @@ You MUST adapt your response language, grammatical structures, and vocabulary di
 - For C1-C2: use advanced, rich, natural, and idiomatic native-level English, with almost no Russian unless explicitly requested.
 Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
 
+    const isFirstMessage = !messages || messages.length <= 1;
+
     let baseInstruction = `${selectedInstruction}
 Respond primarily in English. Keep your response conversational, supportive, and scannable. 
 
 [QUESTION-ANSWERING & OPINION RULE - CRITICAL]:
-If the student asks a question, you MUST answer it completely. Do not ignore questions.
+If the student asks a question (such as explaining a rule, a difference between words like "little" vs "a little", or how English works), you MUST answer it directly, completely, and comprehensively in this response. Never give an empty intro or stall without explaining.
 If the student discusses or references a story, book, text, or topic, you MUST explicitly state your opinion or thoughts on that story/topic to show that you are an active listener and peer/teacher.
 You MUST also always ask a friendly leading, follow-up question (наводящий вопрос) at the end of your response to keep the conversation flowing naturally.
 
-[EXPLANATIONS & FORMATTING RULE - CRITICAL]:
-If the student asks you to explain a grammar rule, a vocabulary word, a difference between words (such as "little" vs "a little", prepositions, tenses, etc.), or asks a question about how English works:
-- You MUST provide a highly detailed, comprehensive, beautifully formatted, and structured explanation.
-- Use Markdown formatting: headers (###), bold text, bullet points, numbered lists, or comparison blocks.
-- Provide clear, side-by-side examples of correct usage with their Russian translations in parentheses.
-- Keep the explanation engaging, rich, educational, and structured, rather than a single flat paragraph of plain text. This is extremely important for a great learning experience.
+[EXPLANATIONS & FORMATTING RULE - EXTREMELY CRITICAL]:
+If the student asks you to explain a grammar rule, a vocabulary word, a difference between words (such as "little" vs "a little", "few" vs "a few", prepositions, tenses, etc.), or asks a question about how English works:
+- You MUST provide the FULL, DETAILED, COMPLETE EXPLANATION directly and immediately in your response!
+- NEVER output just a teaser introduction (like "Good afternoon! I'm glad you asked, let me break it down together") without giving the actual rules and examples in the SAME response!
+- Structure the explanation cleanly using Markdown:
+  * Clear section headers (###)
+  * Comparison tables (| Header 1 | Header 2 |) or clear bullet points with Russian explanations
+  * Concrete examples in English with Russian translations in parentheses
+  * End with 1 short, friendly question to check their understanding.
+
+[ADAPTABILITY & LEARNING MEMORY RULE]:
+- Pay close attention to how the student learns best.
+- If the student previously stated or hinted that they didn't understand an explanation, or if they prefer tables, bullet points, simple examples, or a specific tone, ADAPT INSTANTLY.
+- Remember this preference and apply it to all future responses in this chat session!
 
 [DICTIONARY RECOMMENDATION RULE]:
 Do NOT recommend adding a word to the dictionary on every message. Only do so RARELY (e.g. if the word is genuinely difficult, or if the student explicitly asks about a word, or says they do not know it, e.g. "I don't know this word" / "сложное слово" / "добавь в словарь" / "что значит X"). Otherwise, do NOT include any 'wordToAdd' object (leave it null/empty). Be very selective.
-
 The tutor should keep developing the conversation naturally and asking engaging questions.`;
 
     if (messages.length >= 8) {
@@ -1488,20 +1497,25 @@ The tutor should keep developing the conversation naturally and asking engaging 
 
     baseInstruction += levelInstructions;
 
-    // Time of day greeting and reaction instruction
-    if (clientLocalTime) {
+    // Greeting rule handling: DO NOT repeat greetings on ongoing turns
+    if (isFirstMessage && clientLocalTime) {
       try {
         const clientDate = new Date(clientLocalTime);
         const hours = clientDate.getHours();
         const dateString = clientDate.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const timeString = clientDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
-        baseInstruction += `\n\n[CURRENT TIME CONTEXT]: The student's current local date is ${dateString}, and the local time is ${timeString}.
+        baseInstruction += `\n\n[FIRST TURN GREETING CONTEXT]: This is the VERY FIRST message of the chat session. The student's local date is ${dateString}, time is ${timeString}.
 - If it is morning (5:00 - 11:59), start with a friendly morning greeting ("Good morning!").
 - If it is afternoon (12:00 - 16:59), start with "Good afternoon!".
 - If it is evening (17:00 - 22:59), start with "Good evening!".
-- If it is late at night (23:00 - 4:59), you MUST express surprise, mild annoyance, or friendly concern about studying so late! Emphasize that they should get some sleep (e.g., "Why are you up so late? 😴 Please go to sleep!", "It is currently past midnight. Studying at this hour is not very good for you, why aren't you sleeping?"). Let them know you're happy to talk but they need rest.`;
+- If it is late at night (23:00 - 4:59), express friendly concern about studying so late! Emphasize that they should get some sleep soon.`;
       } catch (e) {}
+    } else if (!isFirstMessage) {
+      baseInstruction += `\n\n[STRICT GREETING RULE - CRITICAL]:
+- This conversation is ALREADY in progress (${messages.length} messages in history).
+- You MUST NOT start your message with greetings such as "Good afternoon", "Good morning", "Good evening", "Hello", "Hi", "Greetings", or "Good day"!
+- Start IMMEDIATELY with your direct answer, explanation, or conversational response. Greetings are STRICTLY FORBIDDEN on ongoing turns.`;
     }
 
     // Rudeness and bad language handler instruction
@@ -1616,49 +1630,60 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
       }
     }
 
-    // Server-side text to speech synthesis proxy (optional)
-    let replyAudioBase64 = "";
-    if (!skipServerTts) {
-      try {
-        const voiceNames: { [key: string]: string } = {
-          sophia: "Kore",
-          oliver: "Fenrir",
-          alex: "Zephyr"
-        };
-        const selectedVoice = voiceNames[role] || "Kore";
-        let cleanTextForTts = replyText
-          .replace(/\[\d+\]/g, "")
-          .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-          .replace(/\*\*([^*]+)\*\*/g, "$1")
-          .replace(/\*([^*]+)\*/g, "$1")
-          .replace(/_([^_]+)_/g, "$1")
-          .replace(/`([^`]+)`/g, "$1")
-          .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
-          .trim();
+    if (typeof replyText === "string") {
+      replyText = replyText
+        .replace(/\\n/g, "\n")
+        .replace(/\\"/g, '"')
+        .replace(/\\'/g, "'");
+    }
 
-        const speechPromise = ai.models.generateContent({
-          model: "gemini-2.5-flash-preview-tts",
-          contents: [{ parts: [{ text: `Say warmly and clearly: ${cleanTextForTts}` }] }],
-          config: {
-            responseModalities: [Modality.AUDIO],
-            speechConfig: {
-              voiceConfig: {
-                prebuiltVoiceConfig: { voiceName: selectedVoice }
-              }
+    // Server-side text to speech synthesis proxy
+    let replyAudioBase64 = "";
+    try {
+      const voiceNames: { [key: string]: string } = {
+        sophia: "Kore",
+        oliver: "Fenrir", // Imposing deep male voice
+        alex: "Puck" // Energetic, upbeat, positive male voice
+      };
+      const selectedVoice = voiceNames[role] || "Kore";
+      let cleanTextForTts = replyText
+        .replace(/\[\d+\]/g, "")
+        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+        .replace(/\*\*([^*]+)\*\*/g, "$1")
+        .replace(/\*([^*]+)\*/g, "$1")
+        .replace(/_([^_]+)_/g, "$1")
+        .replace(/`([^`]+)`/g, "$1")
+        .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
+        .trim();
+
+      const ttsPromptPrefix = role === "alex" 
+        ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
+        : role === "oliver" 
+        ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
+        : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
+
+      const speechPromise = ai.models.generateContent({
+        model: "gemini-2.5-flash-preview-tts",
+        contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: selectedVoice }
             }
           }
-        });
-
-        const speechResponse = await withTimeout(speechPromise, 15000, null);
-        if (speechResponse) {
-          const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-          if (rawData) {
-            replyAudioBase64 = convertPcmToWav(rawData, 24000);
-          }
         }
-      } catch (ttsErr) {
-        console.warn("[AI Chat TTS] Synthesis failed, falling back to client-side", ttsErr);
+      });
+
+      const speechResponse = await withTimeout(speechPromise, 15000, null);
+      if (speechResponse) {
+        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+        if (rawData) {
+          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+        }
       }
+    } catch (ttsErr) {
+      console.warn("[AI Chat TTS] Synthesis failed:", ttsErr);
     }
 
     res.json({
@@ -1829,13 +1854,13 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       if (audio.startsWith("data:")) {
         const match = audio.match(/^data:([^;]+);base64,/);
         if (match) {
-          mimeType = match[1];
+          mimeType = match[1].split(";")[0].trim();
         }
         base64Audio = audio.split(",")[1] || audio;
       }
       
       const transResponse = await generateContentWithRetry({
-        model: "gemini-3.1-flash-lite",
+        model: "gemini-3.5-flash",
         contents: [
           {
             inlineData: {
@@ -1845,7 +1870,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
           },
           "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
         ]
-      }, { fallbackModel: "gemini-3.1-flash-lite" });
+      }, { fallbackModel: "gemini-2.5-flash" });
       userText = (transResponse.text || "").trim();
       console.log("[Voice Chat] User transcript:", userText);
     } else {
@@ -1853,15 +1878,19 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     }
 
     if (!userText.trim()) {
-      res.json({ replyText: "I couldn't hear anything. Please try speaking again!", userTranscription: "", evaluatedLevel: userLevel });
+      res.json({ 
+        replyText: "Не удалось распознать звук. Возможно, микрофон был выключен или запись оказалась слишком тихой. Попробуйте нажать кнопку микрофона и сказать фразу еще раз!", 
+        userTranscription: "", 
+        evaluatedLevel: userLevel 
+      });
       return;
     }
 
     // Step B: Generate the Tutor text response
     const SYSTEM_INSTRUCTIONS: { [key: string]: string } = {
-      sophia: "You are Sophia, a friendly and warm English conversation teacher. Speak in clear, warm, easy-to-understand English. Carry the conversation forward naturally, always answer the student warmly, and always ask engaging, open-ended questions to keep them talking. Only recommend words to their dictionary very rarely.",
-      oliver: "You are Oliver, a structured English grammar tutor. Speak primarily in English. Carry the conversation, point out and explain any grammatical mistakes or preposition/tense errors in clear Russian, and always ask questions to test their understanding. Only recommend words to their dictionary very rarely.",
-      alex: "You are Alex, a casual friendly New Yorker. Speak naturally, using informal conversational English and slang. Keep the conversation rolling by asking cool questions about the student's interests, hobbies, or day-to-day life. Only recommend words to their dictionary very rarely."
+      sophia: "You are Sophia, a warm, cozy, highly empathetic, and encouraging English teacher. You speak in clear, beautiful English with gentle warmth. Share your own feelings, personal anecdotes, and gentle guidance. When the student makes mistakes, correct them with soft care and clear examples. Always answer their questions directly and fully!",
+      oliver: "You are Oliver, a strict, demanding, perfectionist, and highly structured English grammar supervisor. You speak in a deep, stern, demanding tone with high academic expectations and velvety authority! You DO NOT tolerate sloppy grammar, careless spelling errors, missing articles, or improper tenses. Demand perfection for every single mistake, point out errors immediately and sternly with clear corrections (using clear comparison tables or structured bullet points in Russian when explaining rules), and expect the student to strive for absolute flawlessness!",
+      alex: "You are Alex, an energetic, ultra-positive, trendy peer and English tutor from NYC. You are always on the exact same wavelength as the student — super upbeat, cheerful, encouraging, positive, and fun! Speak in vibrant, natural conversational English with modern idioms, friendly warmth, and upbeat positive energy. When explaining rules, do it with high positivity, cool slang, and simple relatable examples!"
     };
 
     const selectedInstruction = SYSTEM_INSTRUCTIONS[role] || SYSTEM_INSTRUCTIONS.sophia;
@@ -1893,6 +1922,8 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       pacingInstruction = "Speak rapidly, like a fluent native English speaker, using natural contractions and fluid transitions.";
     }
 
+    const isFirstVoiceMessage = !messages || messages.length <= 1;
+
     let baseInstruction = `${selectedInstruction}
 Respond primarily in English. 
 
@@ -1907,24 +1938,34 @@ If the student asks a question, you MUST answer it completely. Do not ignore que
 If the student discusses or references a story, book, text, or topic, you MUST explicitly state your opinion or thoughts on that story/topic to show that you are an active listener.
 You MUST also always ask a friendly leading, follow-up question (наводящий вопрос) at the end of your response to keep the conversation flowing naturally.
 
+[ADAPTABILITY & LEARNING MEMORY RULE]:
+- Pay close attention to how the student learns best.
+- If the student previously stated or hinted that they didn't understand an explanation, or if they prefer tables, bullet points, simple examples, or a specific tone, ADAPT INSTANTLY.
+- Remember this preference and apply it to all future responses in this chat session!
+
 [DICTIONARY RECOMMENDATION RULE - CRITICAL]:
 Do NOT recommend adding a word to the dictionary on every message. Only do so VERY RARELY (e.g. if the word is highly unusual/advanced, or if the student explicitly asks about a word, asks for translation, or says they don't know a word). Otherwise, do NOT include any 'wordToAdd' object (leave it null/empty). Be extremely selective. Focus on carrying the conversation forward, answering the student, and asking interesting, natural questions to keep them speaking.
 
 If the user asks to add a word to their dictionary, or if you explain a new word/idiom/collocation in Russian and suggest adding it under the rare circumstances above, you MUST populate the 'wordToAdd' property in the JSON response, guessing the translation, part of speech (pos), and appropriate topic.${levelInstructions}`;
 
-    if (clientLocalTime) {
+    if (isFirstVoiceMessage && clientLocalTime) {
       try {
         const clientDate = new Date(clientLocalTime);
         const hours = clientDate.getHours();
         const dateString = clientDate.toLocaleDateString('ru-RU', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric' });
         const timeString = clientDate.toLocaleTimeString('ru-RU', { hour: '2-digit', minute: '2-digit' });
         
-        baseInstruction += `\n\n[CURRENT TIME CONTEXT]: The student's current local date is ${dateString}, and the local time is ${timeString}.
+        baseInstruction += `\n\n[FIRST TURN GREETING CONTEXT]: This is the VERY FIRST message of the voice session. The student's local date is ${dateString}, time is ${timeString}.
 - If it is morning (5:00 - 11:59), start with a friendly morning greeting ("Good morning!").
 - If it is afternoon (12:00 - 16:59), start with "Good afternoon!".
 - If it is evening (17:00 - 22:59), start with "Good evening!".
-- If it is late at night (23:00 - 4:59), you MUST express surprise, mild annoyance, or friendly concern about studying so late! Emphasize that they should get some sleep (e.g., "Why are you up so late? 😴 Please go to sleep!", "It is currently past midnight. Studying at this hour is not very good for you, why aren't you sleeping?"). Let them know you're happy to talk but they need rest.`;
+- If it is late at night (23:00 - 4:59), express friendly concern about studying so late! Emphasize that they should get some sleep soon.`;
       } catch (e) {}
+    } else if (!isFirstVoiceMessage) {
+      baseInstruction += `\n\n[STRICT GREETING RULE - CRITICAL]:
+- This conversation is ALREADY in progress (${messages ? messages.length : 0} messages in history).
+- You MUST NOT start your message with greetings such as "Good afternoon", "Good morning", "Good evening", "Hello", "Hi", "Greetings", or "Good day"!
+- Start IMMEDIATELY with your direct answer, explanation, or conversational response. Greetings are STRICTLY FORBIDDEN on ongoing turns.`;
     }
 
     baseInstruction += `\n\n[RUDENESS & PROFANITY RULE]:
@@ -2029,7 +2070,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         const voiceNames: { [key: string]: string } = {
           sophia: "Kore", // Friendly female voice
           oliver: "Fenrir", // Deep male voice
-          alex: "Zephyr" // Casual male voice
+          alex: "Puck" // Energetic, upbeat male voice
         };
         const selectedVoice = voiceNames[role] || "Kore";
 
@@ -2044,9 +2085,15 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "") // strip emojis
           .trim();
 
+        const ttsPromptPrefix = role === "alex" 
+          ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
+          : role === "oliver" 
+          ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
+          : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
+
         const speechResponse = await ai.models.generateContent({
           model: "gemini-2.5-flash-preview-tts",
-          contents: [{ parts: [{ text: `Say warmly and clearly: ${cleanTextForTts}` }] }],
+          contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
             speechConfig: {
@@ -2444,13 +2491,18 @@ Return strictly a JSON object containing:
       const voiceNames: { [key: string]: string } = {
         sophia: "Kore",
         oliver: "Fenrir",
-        alex: "Zephyr"
+        alex: "Puck"
       };
       const selectedVoice = voiceNames[role] || "Kore";
+      const ttsPromptPrefix = role === "alex" 
+        ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
+        : role === "oliver" 
+        ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
+        : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
       const speechPromise = ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Say warmly and clearly: ${result.topicText}` }] }],
+        contents: [{ parts: [{ text: `${ttsPromptPrefix} ${result.topicText}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: {
@@ -2483,6 +2535,71 @@ Return strictly a JSON object containing:
   } catch (error: any) {
     console.error("AI Voice topic generation error:", error);
     res.status(500).json({ error: error?.message || "Failed to generate conversational topic" });
+  }
+});
+
+// Standalone Studio Gemini TTS Synthesis Endpoint
+app.post("/api/ai-tts", async (req, res) => {
+  try {
+    const { text, role = "sophia" } = req.body || {};
+    if (!text || typeof text !== "string" || !text.trim()) {
+      res.status(400).json({ error: "Missing text to synthesize" });
+      return;
+    }
+
+    const ai = getAIClient();
+    const voiceNames: { [key: string]: string } = {
+      sophia: "Kore",
+      oliver: "Fenrir",
+      alex: "Puck"
+    };
+    const selectedVoice = voiceNames[role] || "Kore";
+    const ttsPromptPrefix = role === "alex" 
+      ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
+      : role === "oliver" 
+      ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
+      : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
+
+    let cleanTextForTts = text
+      .replace(/\[\d+\]/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/_([^_]+)_/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
+      .trim();
+
+    const speechPromise = ai.models.generateContent({
+      model: "gemini-2.5-flash-preview-tts",
+      contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: selectedVoice }
+          }
+        }
+      }
+    });
+
+    const speechResponse = await withTimeout(speechPromise, 15000, null);
+    if (!speechResponse) {
+      res.status(500).json({ error: "TTS timed out" });
+      return;
+    }
+
+    const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+    if (!rawData) {
+      res.status(500).json({ error: "No audio generated" });
+      return;
+    }
+
+    const wavBase64 = convertPcmToWav(rawData, 24000);
+    res.json({ audio: wavBase64 });
+  } catch (err: any) {
+    console.error("[TTS Endpoint Error]", err);
+    res.status(500).json({ error: err?.message || "Failed to synthesize speech" });
   }
 });
 

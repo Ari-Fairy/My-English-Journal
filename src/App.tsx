@@ -1019,6 +1019,7 @@ export default function App() {
           onSaveWord={handleSaveWord}
           onSaveProgress={handleSaveProgress}
           onBack={() => setView("home")}
+          user={user}
         />
       )}
     </div>

@@ -25,6 +25,8 @@ import {
 } from "lucide-react";
 import { Word, UserProgress } from "../types";
 import { getApiUrl } from "../utils";
+import { User } from "firebase/auth";
+import { fetchUserAiSessions, saveUserAiSessions } from "../firebaseSync";
 
 function formatMessageTimestamp(isoString?: string) {
   if (!isoString) return "";
@@ -53,6 +55,7 @@ interface AiHubScreenProps {
   onSaveWord: (word: Word) => void;
   onSaveProgress: (stats: UserProgress) => void;
   onBack: () => void;
+  user?: User | null;
 }
 
 interface Message {
@@ -74,88 +77,172 @@ interface ExtractedWord {
 function renderFormattedText(text: string, isUser: boolean) {
   if (!text) return null;
 
-  // Split text by lines to parse block elements
-  const lines = text.split("\n");
-  
+  // Unescape double-escaped string sequences if present
+  const cleanText = text
+    .replace(/\\n/g, "\n")
+    .replace(/\\"/g, '"')
+    .replace(/\\'/g, "'")
+    .replace(/\\t/g, "  ");
+
+  // First, parse out Markdown tables if any exist
+  const lines = cleanText.split("\n");
+  const blocks: Array<{ type: "lines" | "table"; content: string[] }> = [];
+
+  let currentTableLines: string[] = [];
+  let currentNormalLines: string[] = [];
+
+  const flushNormal = () => {
+    if (currentNormalLines.length > 0) {
+      blocks.push({ type: "lines", content: currentNormalLines });
+      currentNormalLines = [];
+    }
+  };
+
+  const flushTable = () => {
+    if (currentTableLines.length > 0) {
+      blocks.push({ type: "table", content: currentTableLines });
+      currentTableLines = [];
+    }
+  };
+
+  for (const line of lines) {
+    const trimmed = line.trim();
+    if (trimmed.startsWith("|") && trimmed.endsWith("|") && trimmed.length > 2) {
+      flushNormal();
+      currentTableLines.push(trimmed);
+    } else {
+      flushTable();
+      currentNormalLines.push(line);
+    }
+  }
+  flushNormal();
+  flushTable();
+
   return (
-    <div style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
-      {lines.map((line, lIdx) => {
-        let trimmed = line.trim();
-        if (!trimmed) {
-          return <div key={lIdx} style={{ height: "4px" }} />;
-        }
-
-        // 1. Check for headings: e.g., ### Title, ## Title, # Title
-        const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
-        if (headingMatch) {
-          const level = headingMatch[1].length;
-          const content = headingMatch[2];
-          const fontSize = level === 1 ? "1.4rem" : level === 2 ? "1.25rem" : level === 3 ? "1.1rem" : "1rem";
-          return (
-            <h4
-              key={lIdx}
-              style={{
-                margin: "8px 0 2px 0",
-                fontSize,
-                fontWeight: "700",
-                color: isUser ? "#fff" : "var(--sage)",
-                lineHeight: 1.3,
-                fontFamily: "Lora, serif"
-              }}
-            >
-              {renderInlineStyles(content, isUser)}
-            </h4>
+    <div style={{ display: "flex", flexDirection: "column", gap: "6px", width: "100%" }}>
+      {blocks.map((block, bIdx) => {
+        if (block.type === "table") {
+          // Parse table rows and filter out delimiter rows like | :--- | :--- |
+          const tableRows = block.content.map(rowStr => 
+            rowStr.split("|").map(cell => cell.trim()).filter((_, idx, arr) => idx > 0 && idx < arr.length - 1)
           );
-        }
+          
+          const headerRow = tableRows[0] || [];
+          const dataRows = tableRows.slice(1).filter(row => !row.every(cell => /^[:\-\s]+$/.test(cell)));
 
-        // 2. Check for list items: starting with "* ", "- ", "• " or numbering "1. "
-        const bulletMatch = line.match(/^[\*\-•]\s+(.*)$/);
-        if (bulletMatch) {
           return (
-            <div
-              key={lIdx}
-              style={{
-                display: "flex",
-                gap: "6px",
-                paddingLeft: "6px",
-                alignItems: "flex-start",
-                lineHeight: 1.5,
-                margin: "1px 0"
-              }}
-            >
-              <span style={{ color: isUser ? "#fff" : "var(--sage)", fontSize: "14px", flexShrink: 0 }}>•</span>
-              <span style={{ flex: 1 }}>{renderInlineStyles(bulletMatch[1], isUser)}</span>
+            <div key={bIdx} style={{ overflowX: "auto", margin: "8px 0", borderRadius: "8px", border: "1px solid rgba(143,160,128,0.25)" }}>
+              <table style={{ borderCollapse: "collapse", width: "100%", fontSize: 12.5, background: isUser ? "rgba(0,0,0,0.1)" : "rgba(255,255,255,0.03)" }}>
+                {headerRow.length > 0 && (
+                  <thead>
+                    <tr style={{ background: isUser ? "rgba(255,255,255,0.15)" : "rgba(143,160,128,0.15)", borderBottom: "1.5px solid var(--sage)" }}>
+                      {headerRow.map((cell, cIdx) => (
+                        <th key={cIdx} style={{ padding: "6px 10px", textAlign: "left", color: isUser ? "#fff" : "var(--sage)", fontWeight: 700 }}>
+                          {renderInlineStyles(cell, isUser)}
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                )}
+                <tbody>
+                  {dataRows.map((row, rIdx) => (
+                    <tr key={rIdx} style={{ borderBottom: "1px solid rgba(255,255,255,0.08)" }}>
+                      {row.map((cell, cIdx) => (
+                        <td key={cIdx} style={{ padding: "6px 10px" }}>
+                          {renderInlineStyles(cell, isUser)}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           );
         }
 
-        const numberedMatch = line.match(/^(\d+)\.\s+(.*)$/);
-        if (numberedMatch) {
-          return (
-            <div
-              key={lIdx}
-              style={{
-                display: "flex",
-                gap: "6px",
-                paddingLeft: "6px",
-                alignItems: "flex-start",
-                lineHeight: 1.5,
-                margin: "1px 0"
-              }}
-            >
-              <span style={{ color: isUser ? "#fff" : "var(--sage)", fontWeight: "600", fontSize: "12px", flexShrink: 0 }}>
-                {numberedMatch[1]}.
-              </span>
-              <span style={{ flex: 1 }}>{renderInlineStyles(numberedMatch[2], isUser)}</span>
-            </div>
-          );
-        }
-
-        // 3. Regular paragraph line
+        // Normal text lines
         return (
-          <p key={lIdx} style={{ margin: 0, lineHeight: 1.5 }}>
-            {renderInlineStyles(line, isUser)}
-          </p>
+          <div key={bIdx} style={{ display: "flex", flexDirection: "column", gap: "6px" }}>
+            {block.content.map((line, lIdx) => {
+              let trimmed = line.trim();
+              if (!trimmed) {
+                return <div key={lIdx} style={{ height: "4px" }} />;
+              }
+
+              // 1. Check for headings: e.g., ### Title, ## Title, # Title
+              const headingMatch = line.match(/^(#{1,6})\s+(.*)$/);
+              if (headingMatch) {
+                const level = headingMatch[1].length;
+                const content = headingMatch[2];
+                const fontSize = level === 1 ? "1.3rem" : level === 2 ? "1.15rem" : level === 3 ? "1.05rem" : "1rem";
+                return (
+                  <h4
+                    key={lIdx}
+                    style={{
+                      margin: "8px 0 2px 0",
+                      fontSize,
+                      fontWeight: "700",
+                      color: isUser ? "#fff" : "var(--sage)",
+                      lineHeight: 1.3,
+                      fontFamily: "Lora, serif"
+                    }}
+                  >
+                    {renderInlineStyles(content, isUser)}
+                  </h4>
+                );
+              }
+
+              // 2. Check for list items: starting with "* ", "- ", "• " or numbering "1. "
+              const bulletMatch = line.match(/^[\*\-•]\s+(.*)$/);
+              if (bulletMatch) {
+                return (
+                  <div
+                    key={lIdx}
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      paddingLeft: "6px",
+                      alignItems: "flex-start",
+                      lineHeight: 1.5,
+                      margin: "1px 0"
+                    }}
+                  >
+                    <span style={{ color: isUser ? "#fff" : "var(--sage)", fontSize: "14px", flexShrink: 0 }}>•</span>
+                    <span style={{ flex: 1 }}>{renderInlineStyles(bulletMatch[1], isUser)}</span>
+                  </div>
+                );
+              }
+
+              const numberedMatch = line.match(/^(\d+)\.\s+(.*)$/);
+              if (numberedMatch) {
+                return (
+                  <div
+                    key={lIdx}
+                    style={{
+                      display: "flex",
+                      gap: "6px",
+                      paddingLeft: "6px",
+                      alignItems: "flex-start",
+                      lineHeight: 1.5,
+                      margin: "1px 0"
+                    }}
+                  >
+                    <span style={{ color: isUser ? "#fff" : "var(--sage)", fontWeight: "600", fontSize: "12px", flexShrink: 0 }}>
+                      {numberedMatch[1]}.
+                    </span>
+                    <span style={{ flex: 1 }}>{renderInlineStyles(numberedMatch[2], isUser)}</span>
+                  </div>
+                );
+              }
+
+              // 3. Regular paragraph line
+              return (
+                <p key={lIdx} style={{ margin: 0, lineHeight: 1.5 }}>
+                  {renderInlineStyles(line, isUser)}
+                </p>
+              );
+            })}
+          </div>
         );
       })}
     </div>
@@ -275,7 +362,7 @@ function formatMessageTime(isoString?: string) {
   }
 }
 
-export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, onBack }: AiHubScreenProps) {
+export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, onBack, user }: AiHubScreenProps) {
   const [activeTab, setActiveTab] = useState<"chat" | "voice" | "scanner">("chat");
   const [tutor, setTutor] = useState<"sophia" | "oliver" | "alex">("sophia");
   
@@ -429,6 +516,35 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   useEffect(() => {
     localStorage.setItem("ai_hub_voice_sessions_v3", JSON.stringify(voiceSessions));
   }, [voiceSessions]);
+
+  // Firestore session account synchronization for logged-in users
+  useEffect(() => {
+    if (!user || !user.uid) return;
+    let isMounted = true;
+    fetchUserAiSessions(user.uid).then(data => {
+      if (isMounted && data) {
+        if (Array.isArray(data.chatSessions) && data.chatSessions.length > 0) {
+          setChatSessions(data.chatSessions);
+        }
+        if (Array.isArray(data.voiceSessions) && data.voiceSessions.length > 0) {
+          setVoiceSessions(data.voiceSessions);
+        }
+      }
+    }).catch(err => {
+      console.warn("Could not fetch user AI sessions from Firestore:", err);
+    });
+    return () => { isMounted = false; };
+  }, [user?.uid]);
+
+  useEffect(() => {
+    if (!user || !user.uid) return;
+    const saveTimer = setTimeout(() => {
+      saveUserAiSessions(user.uid, chatSessions, voiceSessions).catch(err => {
+        console.warn("Could not save user AI sessions to Firestore:", err);
+      });
+    }, 1200);
+    return () => clearTimeout(saveTimer);
+  }, [chatSessions, voiceSessions, user?.uid]);
 
   useEffect(() => {
     localStorage.setItem("ai_hub_active_chat_session_id_v2", activeChatSessionId);
@@ -936,12 +1052,58 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     prevVoiceMessagesCountRef.current = voiceMessages.length;
   }, [voiceMessages, voiceLoading, activeVoiceSessionId]);
 
-  // Robust client-side speech synthesizer fallback with premium voices
-  const speakText = (text: string, onEnd?: () => void) => {
+  // Studio AI speech synthesis with browser fallback
+  const speakText = async (text: string, onEnd?: () => void) => {
+    if (!text || !text.trim()) {
+      if (onEnd) onEnd();
+      return;
+    }
+
+    if (typeof window !== "undefined" && window.speechSynthesis) {
+      window.speechSynthesis.cancel();
+    }
+
+    if (currentAudioRef.current) {
+      try {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+      } catch (e) {}
+      currentAudioRef.current = null;
+    }
+
+    setIsSpeechPlaying(true);
+
+    try {
+      const response = await fetch(getApiUrl("/api/ai-tts"), {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ text, role: tutor })
+      });
+      const data = await response.json();
+      if (data.audio) {
+        const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
+        currentAudioRef.current = audio;
+        audio.onended = () => {
+          setIsSpeechPlaying(false);
+          if (onEnd) onEnd();
+        };
+        audio.onerror = () => {
+          fallbackBrowserSpeak(text, onEnd);
+        };
+        await audio.play();
+        return;
+      }
+    } catch (e) {
+      console.warn("[Studio TTS] API call failed, using fallback synthesizer:", e);
+    }
+
+    fallbackBrowserSpeak(text, onEnd);
+  };
+
+  const fallbackBrowserSpeak = (text: string, onEnd?: () => void) => {
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       
-      // Remove emojis and simple markdown
       const cleanText = text
         .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
         .replace(/\*\*([^*]+)\*\*/g, "$1")
@@ -951,75 +1113,46 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = "en-US";
       
-      // Load voices dynamically from reactive browserVoices or fallback direct call
       const voices = browserVoices.length > 0 ? browserVoices : window.speechSynthesis.getVoices();
       let voice = null;
       
       if (tutor === "sophia") {
-        // Preferred female English voices for Sophia
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
           const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (
-            name.includes("google us english") || 
-            name.includes("samantha") || 
-            name.includes("zira") || 
-            name.includes("aria") || 
-            name.includes("female") || 
-            name.includes("victoria") ||
-            name.includes("siri")
-          );
+          return isEn && (name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female"));
         });
-        if (!voice) {
-          voice = voices.find(v => v.lang.startsWith("en") && (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("google")));
-        }
       } else if (tutor === "oliver") {
-        // Preferred British/Academic English voices for Oliver
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
           const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (
-            name.includes("google uk english male") || 
-            name.includes("daniel") || 
-            name.includes("david") || 
-            name.includes("george") || 
-            name.includes("male")
-          );
+          return isEn && (name.includes("google uk english male") || name.includes("daniel") || name.includes("david") || name.includes("george") || name.includes("male"));
         });
-        if (!voice) {
-          voice = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"));
-        }
       } else {
-        // Preferred casual American English male voices for Alex
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
           const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (
-            name.includes("alex") || 
-            name.includes("google us english male") || 
-            name.includes("david") || 
-            name.includes("mark") || 
-            name.includes("male")
-          );
+          return isEn && (name.includes("alex") || name.includes("google us english male") || name.includes("david") || name.includes("male"));
         });
-        if (!voice) {
-          voice = voices.find(v => v.lang.startsWith("en") && v.name.toLowerCase().includes("male"));
-        }
       }
       
-      // Ultimate fallback: any English voice
       if (!voice) {
         voice = voices.find(v => v.lang.startsWith("en"));
       }
+      if (voice) utterance.voice = voice;
       
-      if (voice) {
-        utterance.voice = voice;
+      if (tutor === "alex") {
+        utterance.pitch = 1.15;
+        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.30 : 1.05;
+      } else if (tutor === "oliver") {
+        utterance.pitch = 0.70; // Deep demanding tone
+        utterance.rate = speechPace === "slow" ? 0.65 : speechPace === "fast" ? 1.15 : 0.85;
+      } else {
+        utterance.pitch = 1.00;
+        utterance.rate = speechPace === "slow" ? 0.70 : speechPace === "fast" ? 1.25 : 0.95;
       }
-      
-      utterance.rate = speechPace === "slow" ? 0.70 : speechPace === "fast" ? 1.25 : 0.95;
-      utterance.onstart = () => {
-        setIsSpeechPlaying(true);
-      };
+
+      utterance.onstart = () => setIsSpeechPlaying(true);
       utterance.onend = () => {
         setIsSpeechPlaying(false);
         if (onEnd) onEnd();
@@ -1030,6 +1163,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       };
       window.speechSynthesis.speak(utterance);
     } else {
+      setIsSpeechPlaying(false);
       if (onEnd) onEnd();
     }
   };
@@ -1316,7 +1450,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         stream.getTracks().forEach(t => t.stop());
       };
 
-      recorder.start();
+      recorder.start(250);
       setIsRecording(true);
       setRecordingTime(0);
 
@@ -3698,24 +3832,40 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     className="btn btn-primary"
                     style={{ fontSize: 11.5, padding: "6px 12px", background: "var(--sage)", border: "none" }}
                     onClick={() => {
-                      setVoiceMessages(prev => [...prev, { role: "model", text: voiceTopic.text }]);
+                      if (!voiceTopic) return;
                       
-                      if (voiceTopic.audio && voiceVoiceEnabled) {
+                      setVoiceMessagesForSession(activeVoiceSessionId, prev => [
+                        ...prev, 
+                        { role: "model", text: voiceTopic.text, timestamp: new Date().toISOString() }
+                      ]);
+                      
+                      if (useNativeSpeechSynth || !voiceTopic.audio) {
+                        speakText(voiceTopic.text, () => {
+                          setIsSpeechPlaying(false);
+                        });
+                      } else if (voiceTopic.audio && voiceVoiceEnabled) {
                         setIsSpeechPlaying(true);
                         const onPlaybackEnd = () => {
                           setIsSpeechPlaying(false);
                         };
+                        stopAllSpeech();
                         const audio = new Audio(voiceTopic.audio);
                         currentAudioRef.current = audio;
                         audio.playbackRate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.25 : 1.0;
                         audio.onended = onPlaybackEnd;
-                        audio.onerror = onPlaybackEnd;
-                        audio.play().catch(e => {
-                          console.warn("Topic audio play blocked:", e);
+                        audio.onerror = () => {
                           onPlaybackEnd();
+                          speakText(voiceTopic.text);
+                        };
+                        audio.play().catch(e => {
+                          console.warn("Topic audio play blocked, falling back to local speech:", e);
+                          onPlaybackEnd();
+                          speakText(voiceTopic.text);
                         });
+                      } else {
+                        speakText(voiceTopic.text);
                       }
-                      setToastMessage("Тема добавлена в диалог! Нажмите 'Говорить' для ответа.");
+                      setToastMessage("Тема добавлена в диалог! Преподаватель озвучивает тему.");
                     }}
                   >
                     🗣️ Начать обсуждение

@@ -56,6 +56,20 @@
         "customPos": { "type": "object" }
       },
       "required": ["userId"]
+    },
+    "AiSession": {
+      "title": "AiSession",
+      "description": "A user's saved AI chat or voice dialogue session.",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "type": { "type": "string" },
+        "title": { "type": "string" },
+        "updatedAt": { "type": "string" },
+        "messages": { "type": "array" }
+      },
+      "required": ["id", "userId", "type", "updatedAt", "messages"]
     }
   },
   "firestore": {
@@ -70,6 +84,10 @@
     "/users/{userId}": {
       "schema": "UserProgress",
       "description": "User progress statistics and settings."
+    },
+    "/users/{userId}/ai_sessions/{sessionId}": {
+      "schema": "AiSession",
+      "description": "User's AI chat and voice practice session history."
     }
   }
 }
