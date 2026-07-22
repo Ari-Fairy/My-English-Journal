@@ -524,10 +524,30 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     fetchUserAiSessions(user.uid).then(data => {
       if (isMounted && data) {
         if (Array.isArray(data.chatSessions) && data.chatSessions.length > 0) {
-          setChatSessions(data.chatSessions);
+          setChatSessions(prevLocal => {
+            const mergedMap = new Map<string, ChatSession>();
+            prevLocal.forEach(s => mergedMap.set(s.id, s));
+            data.chatSessions.forEach((remoteSession: ChatSession) => {
+              const local = mergedMap.get(remoteSession.id);
+              if (!local || (remoteSession.messages?.length || 0) >= (local.messages?.length || 0)) {
+                mergedMap.set(remoteSession.id, remoteSession);
+              }
+            });
+            return Array.from(mergedMap.values());
+          });
         }
         if (Array.isArray(data.voiceSessions) && data.voiceSessions.length > 0) {
-          setVoiceSessions(data.voiceSessions);
+          setVoiceSessions(prevLocal => {
+            const mergedMap = new Map<string, VoiceSession>();
+            prevLocal.forEach(s => mergedMap.set(s.id, s));
+            data.voiceSessions.forEach((remoteSession: VoiceSession) => {
+              const local = mergedMap.get(remoteSession.id);
+              if (!local || (remoteSession.voiceMessages?.length || 0) >= (local.voiceMessages?.length || 0)) {
+                mergedMap.set(remoteSession.id, remoteSession);
+              }
+            });
+            return Array.from(mergedMap.values());
+          });
         }
       }
     }).catch(err => {

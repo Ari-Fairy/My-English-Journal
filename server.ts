@@ -10,7 +10,7 @@ import { staticQuestions, staticWritingPrompts, staticSpeakingPrompts } from "./
 dotenv.config();
 
 const PORT = 3000;
-const app = express();
+export const app = express();
 
 // Custom CORS middleware to allow Vercel or local frontend to call this backend
 app.use((req, res, next) => {

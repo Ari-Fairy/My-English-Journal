@@ -92,24 +92,17 @@ export function getCurrentWeekKey(): string {
   return `${d.getFullYear()}-W${weekNo}`;
 }
 
-// Получение полного URL для API запросов при развертывании на внешних платформах (Vercel)
+// Получение полного URL для API запросов при развертывании на любых платформах (Vercel, Cloud Run, local, etc.)
 export function getApiUrl(path: string): string {
-  const hostname = window.location.hostname;
-  // Если мы запущены в превью AI Studio, гитподе, локально или в контейнере Cloud Run, запросы должны идти относительно текущего хоста (relative).
-  // Только если мы развернуты на внешнем статическом хостинге (например, Vercel), мы перенаправляем их на бэкенд Cloud Run.
-  const isLocalOrWorkspace = hostname.includes("localhost") || 
-                             hostname.includes("127.0.0.1") || 
-                             hostname.includes("run.app") ||
-                             hostname.includes("aistudio") ||
-                             hostname.includes("google") ||
-                             hostname.includes("gitpod") ||
-                             hostname.includes("webcontainer") ||
-                             hostname.includes("stackblitz");
-
-  if (!isLocalOrWorkspace) {
-    const backendUrl = "https://ais-dev-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
-    return `${backendUrl}${path.startsWith("/") ? "" : "/"}${path}`;
+  // Если задан VITE_BACKEND_URL через переменные окружения, используем его
+  const customBackend = import.meta.env.VITE_BACKEND_URL;
+  if (customBackend && typeof customBackend === "string" && customBackend.trim().length > 0) {
+    const baseUrl = customBackend.trim().replace(/\/+$/, "");
+    const cleanPath = path.startsWith("/") ? path : `/${path}`;
+    return `${baseUrl}${cleanPath}`;
   }
+  
+  // В остальных случаях используем относительный путь (относительно текущего хоста)
   return path;
 }
 
