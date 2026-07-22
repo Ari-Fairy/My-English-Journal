@@ -1873,27 +1873,38 @@ app.post("/api/ai-voice-chat", async (req, res) => {
         base64Audio = audio.split(",")[1] || audio;
       }
       
-      const transResponse = await generateContentWithRetry({
-        model: "gemini-3.5-flash",
-        contents: [
-          {
-            inlineData: {
-              mimeType: mimeType,
-              data: base64Audio
-            }
-          },
-          "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
-        ]
-      }, { fallbackModel: "gemini-2.5-flash" });
-      userText = (transResponse.text || "").trim();
-      console.log("[Voice Chat] User transcript:", userText);
-    } else {
-      userText = req.body.text || "";
+      // Clean mimeType of extra codecs parameters for Gemini inlineData
+      mimeType = mimeType.split(";")[0].trim();
+      
+      try {
+        const transResponse = await generateContentWithRetry({
+          model: "gemini-3.5-flash",
+          contents: [
+            {
+              inlineData: {
+                mimeType: mimeType,
+                data: base64Audio
+              }
+            },
+            "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
+          ]
+        }, { fallbackModel: "gemini-2.5-flash" });
+        userText = (transResponse.text || "").trim();
+        console.log("[Voice Chat] User transcript from audio:", userText);
+      } catch (transcribeErr) {
+        console.warn("[Voice Chat] Audio transcription error, will check fallback text:", transcribeErr);
+      }
+    }
+
+    // Fallback: If audio transcription was empty or failed, use client-provided text if available
+    if (!userText.trim() && req.body.text && typeof req.body.text === "string") {
+      userText = req.body.text.trim();
+      console.log("[Voice Chat] Using client-provided fallback transcript:", userText);
     }
 
     if (!userText.trim()) {
       res.json({ 
-        replyText: "Не удалось распознать звук. Возможно, микрофон был выключен или запись оказалась слишком тихой. Попробуйте нажать кнопку микрофона и сказать фразу еще раз!", 
+        replyText: "Не удалось распознать звук. Возможно, запись оказалась слишком тихой или микрофон на телефоне отключен. Попробуйте нажать микрофон еще раз или отправить текст!", 
         userTranscription: "", 
         evaluatedLevel: userLevel 
       });
@@ -2437,10 +2448,10 @@ app.post("/api/ai-voice-topic", async (req, res) => {
     const chosenQuery = searchQueries[Math.floor(Math.random() * searchQueries.length)];
 
     const prompt = `You are a helpful English learning tutor named ${role === "sophia" ? "Sophia" : role === "oliver" ? "Oliver" : "Alex"}. 
-Use Google Search to find recent interesting news or a cool topic based on the query: "${chosenQuery}".
+Find recent interesting news or a cool topic based on the query: "${chosenQuery}".
 Then, formulate a highly engaging conversational starter statement and question (under 50 words) in English.
 Adapt your language and complexity strictly to the user's CEFR level: ${userLevel}.
-- For A1-A2: use simple sentences, easy vocabulary.
+- For A1-A2: use simple short sentences, easy vocabulary.
 - For B1-B2: use natural phrasal verbs, standard conversational style.
 - For C1-C2: use native-level idiom and advanced expression.
 
@@ -2458,44 +2469,23 @@ Return strictly a JSON object containing:
         model: "gemini-3.5-flash",
         contents: prompt,
         config: {
-          tools: [{ googleSearch: {} }],
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              topicText: { type: Type.STRING },
-              topicTranslation: { type: Type.STRING },
-              topicTitle: { type: Type.STRING },
-              sourceUrl: { type: Type.STRING }
-            },
-            required: ["topicText", "topicTranslation", "topicTitle"]
-          }
+          tools: [{ googleSearch: {} }]
         }
       }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
     } catch (groundingErr: any) {
       console.warn("[Voice Topic] Search grounding failed, falling back to standard prompt...", groundingErr?.message || groundingErr);
       response = await generateContentWithRetry({
         model: "gemini-3.5-flash",
-        contents: prompt + "\nDo not use external tools. Generate a high-quality discussion topic directly as JSON.",
+        contents: prompt + "\nDo not use external tools. Generate a high-quality discussion topic directly as clean JSON.",
         config: {
-          responseMimeType: "application/json",
-          responseSchema: {
-            type: Type.OBJECT,
-            properties: {
-              topicText: { type: Type.STRING },
-              topicTranslation: { type: Type.STRING },
-              topicTitle: { type: Type.STRING },
-              sourceUrl: { type: Type.STRING }
-            },
-            required: ["topicText", "topicTranslation", "topicTitle"]
-          }
+          responseMimeType: "application/json"
         }
       }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
     }
 
     let cleanText = (response.text || "").trim();
-    if (cleanText.startsWith("```")) {
-      cleanText = cleanText.replace(/^```json\s*/i, "").replace(/```$/, "").trim();
+    if (cleanText.includes("```")) {
+      cleanText = cleanText.replace(/```json\s*/g, "").replace(/```\s*/g, "").trim();
     }
     const result = JSON.parse(cleanText || "{}");
     
@@ -2504,7 +2494,7 @@ Return strictly a JSON object containing:
     try {
       const voiceNames: { [key: string]: string } = {
         sophia: "Kore",
-        oliver: "Fenrir",
+        oliver: "Charon",
         alex: "Puck"
       };
       const selectedVoice = voiceNames[role] || "Kore";
@@ -2540,9 +2530,9 @@ Return strictly a JSON object containing:
     }
 
     res.json({
-      topicTitle: result.topicTitle,
-      topicText: result.topicText,
-      topicTranslation: result.topicTranslation || "",
+      topicTitle: result.topicTitle || "Discussion Topic",
+      topicText: result.topicText || "Let's talk about something interesting today!",
+      topicTranslation: result.topicTranslation || "Давайте обсудим сегодня кое-что интересное!",
       sourceUrl: result.sourceUrl || "",
       replyAudio: replyAudioBase64 ? `data:audio/wav;base64,${replyAudioBase64}` : null
     });
@@ -2564,7 +2554,7 @@ app.post("/api/ai-tts", async (req, res) => {
     const ai = getAIClient();
     const voiceNames: { [key: string]: string } = {
       sophia: "Kore",
-      oliver: "Fenrir",
+      oliver: "Charon",
       alex: "Puck"
     };
     const selectedVoice = voiceNames[role] || "Kore";

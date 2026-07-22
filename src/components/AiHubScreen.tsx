@@ -1038,45 +1038,34 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  const prevSessionIdRef = useRef<string | null>(null);
-  const prevMessagesCountRef = useRef<number>(0);
+  // Helper to force scroll container to the absolute bottom
+  const scrollToBottomContainer = (containerId: string, endRef?: React.RefObject<HTMLDivElement | null>) => {
+    const doScroll = () => {
+      const el = document.getElementById(containerId);
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+      endRef?.current?.scrollIntoView({ behavior: "smooth", block: "end" });
+    };
+    doScroll();
+    const t1 = setTimeout(doScroll, 60);
+    const t2 = setTimeout(doScroll, 200);
+    return () => { clearTimeout(t1); clearTimeout(t2); };
+  };
 
-  // Auto-scroll chat to bottom on new messages
+  // Auto-scroll chat to bottom on new messages, session switch, or tab switch
   useEffect(() => {
-    if (activeChatSessionId !== prevSessionIdRef.current) {
-      prevSessionIdRef.current = activeChatSessionId;
-      prevMessagesCountRef.current = chatMessages.length;
-      return;
+    if (activeTab === "chat") {
+      scrollToBottomContainer("ai_chat_scroll_container", chatEndRef);
     }
+  }, [chatMessages, chatLoading, activeChatSessionId, activeTab]);
 
-    if (chatMessages.length > prevMessagesCountRef.current || chatLoading) {
-      const timer = setTimeout(() => {
-        chatEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-    prevMessagesCountRef.current = chatMessages.length;
-  }, [chatMessages, chatLoading, activeChatSessionId]);
-
-  const prevVoiceSessionIdRef = useRef<string | null>(null);
-  const prevVoiceMessagesCountRef = useRef<number>(0);
-
-  // Auto-scroll voice to bottom on new messages
+  // Auto-scroll voice to bottom on new messages, session switch, or tab switch
   useEffect(() => {
-    if (activeVoiceSessionId !== prevVoiceSessionIdRef.current) {
-      prevVoiceSessionIdRef.current = activeVoiceSessionId;
-      prevVoiceMessagesCountRef.current = voiceMessages.length;
-      return;
+    if (activeTab === "voice") {
+      scrollToBottomContainer("ai_voice_scroll_container", voiceEndRef);
     }
-
-    if (voiceMessages.length > prevVoiceMessagesCountRef.current || voiceLoading) {
-      const timer = setTimeout(() => {
-        voiceEndRef.current?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      }, 100);
-      return () => clearTimeout(timer);
-    }
-    prevVoiceMessagesCountRef.current = voiceMessages.length;
-  }, [voiceMessages, voiceLoading, activeVoiceSessionId]);
+  }, [voiceMessages, voiceLoading, activeVoiceSessionId, activeTab]);
 
   // Studio AI speech synthesis with browser fallback
   const speakText = async (text: string, onEnd?: () => void) => {
@@ -1149,16 +1138,24 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
           return isEn && (name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female"));
         });
       } else if (tutor === "oliver") {
+        utterance.lang = "en-GB";
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
-          const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (name.includes("google uk english male") || name.includes("daniel") || name.includes("david") || name.includes("george") || name.includes("male"));
+          const lang = v.lang.toLowerCase();
+          return (lang.includes("gb") || lang.includes("uk")) && (name.includes("male") || name.includes("daniel") || name.includes("george") || name.includes("oliver"));
+        }) || voices.find(v => {
+          const name = v.name.toLowerCase();
+          return name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("uk english");
         });
       } else {
+        utterance.lang = "en-US";
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
-          const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (name.includes("alex") || name.includes("google us english male") || name.includes("david") || name.includes("male"));
+          const lang = v.lang.toLowerCase();
+          return lang.includes("us") && (name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("us english male"));
+        }) || voices.find(v => {
+          const name = v.name.toLowerCase();
+          return name.includes("alex") || name.includes("fred") || name.includes("guy");
         });
       }
       
@@ -1168,13 +1165,13 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       if (voice) utterance.voice = voice;
       
       if (tutor === "alex") {
-        utterance.pitch = 1.15;
-        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.30 : 1.05;
+        utterance.pitch = 1.25; // Upbeat, youthful tone
+        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.30 : 1.08;
       } else if (tutor === "oliver") {
-        utterance.pitch = 0.70; // Deep demanding tone
+        utterance.pitch = 0.60; // Deep stern, demanding tone
         utterance.rate = speechPace === "slow" ? 0.65 : speechPace === "fast" ? 1.15 : 0.85;
       } else {
-        utterance.pitch = 1.00;
+        utterance.pitch = 1.02;
         utterance.rate = speechPace === "slow" ? 0.70 : speechPace === "fast" ? 1.25 : 0.95;
       }
 
@@ -1463,6 +1460,9 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
     if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
       try {
+        if (typeof mediaRecorderRef.current.requestData === "function") {
+          mediaRecorderRef.current.requestData();
+        }
         mediaRecorderRef.current.stop();
       } catch (e) {}
     }
@@ -1470,13 +1470,19 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
   const handleProcessSpokenAudio = async (blob: Blob) => {
     setVoiceLoading(true);
+    const recognizedText = accumulatedTranscriptRef.current.trim();
+    accumulatedTranscriptRef.current = "";
+    setVoiceInputText("");
+
+    if (blob.size < 100 && recognizedText) {
+      await executeVoiceDialogueRequest({ text: recognizedText });
+      return;
+    }
+
     const reader = new FileReader();
     reader.readAsDataURL(blob);
     reader.onloadend = async () => {
       const base64Audio = reader.result as string;
-      const recognizedText = accumulatedTranscriptRef.current.trim();
-      accumulatedTranscriptRef.current = "";
-      setVoiceInputText("");
       await executeVoiceDialogueRequest({ 
         audio: base64Audio, 
         text: recognizedText || undefined 
@@ -3223,6 +3229,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
           {/* Messages Display */}
           <div 
+            id="ai_chat_scroll_container"
             className="styled-scrollbar-y"
             style={{
               display: "flex",
@@ -3778,7 +3785,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     const response = await fetch(getApiUrl("/api/ai-voice-topic"), {
                       method: "POST",
                       headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ role: tutor, userLevel: stats.level || "A1" })
+                      body: JSON.stringify({ role: tutor, userLevel: getCurrentTutorLevel(tutor) })
                     });
                     if (!response.ok) throw new Error("Failed to generate topic");
                     const data = await response.json();
@@ -3885,7 +3892,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               </div>
             ) : (
               <p style={{ fontSize: 12, color: "var(--text-muted)", margin: 0, lineHeight: 1.4 }}>
-                Нажмите «Найти новую тему», и ИИ просканирует интернет на наличие свежих событий, чтобы начать живое, увлекательное обсуждение на вашем уровне (<b>{stats.level || "A1"}</b>).
+                Нажмите «Найти новую тему», и ИИ просканирует интернет на наличие свежих событий, чтобы начать живое, увлекательное обсуждение на вашем уровне (<b>{getCurrentTutorLevel(tutor)}</b>).
               </p>
             )}
           </div>
@@ -3999,6 +4006,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
             </div>
             
             <div 
+              id="ai_voice_scroll_container"
               className="styled-scrollbar-y"
               style={{
                 width: "100%",
