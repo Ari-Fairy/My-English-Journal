@@ -1134,6 +1134,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
   // Studio AI speech synthesis with browser fallback
   const speakText = async (text: string, onEnd?: () => void) => {
+    // Respect speaker toggle: do not speak if muted
+    if ((activeTab === "chat" && !chatVoiceEnabledRef.current) || (activeTab === "voice" && !voiceVoiceEnabledRef.current)) {
+      stopAllSpeech();
+      setIsSpeechPlaying(false);
+      if (onEnd) onEnd();
+      return;
+    }
+
     if (!text || !text.trim()) {
       if (onEnd) onEnd();
       return;
@@ -1346,7 +1354,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(false);
       }
 
-      if (chatVoiceEnabled) {
+      if (chatVoiceEnabledRef.current) {
         if (!useNativeSpeechSynth && data.replyAudio) {
           stopAllSpeech();
           setIsSpeechPlaying(true);
@@ -1401,7 +1409,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(false);
       }
 
-      if (chatVoiceEnabled) {
+      if (chatVoiceEnabledRef.current) {
         speakText(offlineReply.replyText, () => {
           setShowDictionaryButton(true);
         });
@@ -3343,6 +3351,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 }}
                 onClick={() => {
                   const newState = !chatVoiceEnabled;
+                  chatVoiceEnabledRef.current = newState;
                   setChatVoiceEnabled(newState);
                   if (!newState) {
                     stopAllSpeech();
@@ -4134,6 +4143,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                   }}
                   onClick={() => {
                     const nextVal = !voiceVoiceEnabled;
+                    voiceVoiceEnabledRef.current = nextVal;
                     setVoiceVoiceEnabled(nextVal);
                     if (!nextVal) {
                       stopAllSpeech();

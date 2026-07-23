@@ -121,9 +121,10 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
 
   // Try with the requested model (or default)
   const sanitizeModelName = (m?: string) => {
-    if (!m) return "gemini-2.5-flash";
-    if (m.includes("gemini-3") || m.includes("3.5-flash") || m.includes("3.1-flash")) {
-      return "gemini-2.5-flash";
+    if (!m) return "gemini-3.6-flash";
+    if (m === "gemini-3.1-flash-tts-preview") return "gemini-3.1-flash-tts-preview";
+    if (m.includes("gemini-2.5") || m.includes("gemini-3.5") || m === "gemini-flash-latest") {
+      return "gemini-3.6-flash";
     }
     return m;
   };
@@ -1690,7 +1691,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "ÑÑ
         : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
       const speechPromise = ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2139,7 +2140,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "ÑÑ
           : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
         const speechResponse = await ai.models.generateContent({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.1-flash-tts-preview",
           contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
@@ -2540,7 +2541,7 @@ Return strictly a JSON object containing:
         : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
       const speechPromise = ai.models.generateContent({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.1-flash-tts-preview",
         contents: [{ parts: [{ text: `${ttsPromptPrefix} ${result.topicText}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2616,7 +2617,7 @@ app.post("/api/ai-tts", async (req, res) => {
       .trim();
 
     const speechPromise = ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.1-flash-tts-preview",
       contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],

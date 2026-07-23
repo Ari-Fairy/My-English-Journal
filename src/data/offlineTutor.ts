@@ -128,13 +128,45 @@ export function getOfflineChatTutorReply(
   let replyText = "";
   let wordToAdd = null;
 
-  // 1. User submitting numbered answers or translations (e.g. "1. friend 2. read 3. city 4. water 5. allways" or words like friend, read, city, water, always)
-  const isNumberedAnswers = /1[\s\.\)].*2[\s\.\)]/i.test(msg) || (msg.includes("friend") && msg.includes("water")) || (msg.includes("friend") && msg.includes("read"));
+  // 1. User submitting numbered answers or translations
+  const isSunTaskSet = msg.includes("sun") || msg.includes("family") || msg.includes("quckly") || msg.includes("quickly") || msg.includes("не знаю") || msg.includes("dream");
+  const isFriendTaskSet = msg.includes("friend") || msg.includes("water") || msg.includes("city") || msg.includes("read");
+  const isNumberedAnswers = /1[\s\.\)].*2[\s\.\)]/i.test(msg) || isSunTaskSet || isFriendTaskSet;
   const isAskingIfCorrect = (msg.includes("правильно") || msg.includes("перевел") || msg.includes("перевела") || msg.includes("проверь") || msg.includes("correct") || msg.includes("right"));
 
-  if (isNumberedAnswers) {
+  if (isSunTaskSet) {
+    wordToAdd = { en: "dream", ru: "мечта, мечтать", pos: "noun", topic: "general" };
+    const hasQucklySpelling = msg.includes("quckly");
+    const spellingNote = hasQucklySpelling ? " (обрати внимание на опечатку: *quckly* ➔ **quickly**!)" : "";
+    const hasNeZnayu = msg.includes("не знаю") || msg.includes("незнаю") || msg.includes("don't know");
+    const dreamEval = hasNeZnayu ? "**dream** (ты написала 'не знаю' — запомни: Мечта = dream! 🌸)" : "**dream** ✅";
+
+    if (role === "sophia") {
+      replyText = `${timeGreetingPrefix}Отличная попытка! 🌟 Разберём твой перевод:
+1. Солнце ➔ **sun** ✅
+2. Семья ➔ **family** ✅
+3. Время ➔ **time** ✅
+4. Мечта ➔ ${dreamEval}
+5. Быстро ➔ **quickly / fast** ✅${spellingNote}
+
+Ты большая молодец! 4 из 5 переведены верно, а про мечту теперь запомнишь. Хочешь ещё упражнение или обсудим интересную тему?`;
+    } else if (role === "oliver") {
+      replyText = `${timeGreetingPrefix}Good effort. Here is the evaluation of your answers:
+1. Солнце ➔ **sun** (Correct)
+2. Семья ➔ **family** (Correct)
+3. Время ➔ **time** (Correct)
+4. Мечта ➔ **dream** (Note: "не знаю" was entered; 'dream' is the correct noun)
+5. Быстро ➔ **quickly**${hasQucklySpelling ? " (Spelling correction: 'quckly' ➔ 'quickly')" : " (Correct)"}
+
+Accuracy score: 80%. Would you like to proceed with another set?`;
+    } else {
+      replyText = `${timeGreetingPrefix}Nice job! 🚀 Check out your translations:
+1. sun ✅  2. family ✅  3. time ✅  4. dream (Мечта!)  5. quickly ✅${spellingNote}
+
+High five! ✋ What would you like to practice next?`;
+    }
+  } else if (isNumberedAnswers) {
     wordToAdd = { en: "accurate", ru: "точный, правильный", pos: "adjective", topic: "study" };
-    const hasAlwaysOrAllways = msg.includes("always") || msg.includes("allways");
     const spellingNote = msg.includes("allways") ? " (всегда — 'always', с одной 'l'!)" : "";
 
     if (role === "sophia") {
