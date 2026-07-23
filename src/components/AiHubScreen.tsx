@@ -1211,8 +1211,24 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       return;
     }
 
-    // Split text into line chunks so Russian explanations and English words are spoken by their matching natural voices
-    const rawChunks = cleanText.split(/(\n+)/).map(c => c.trim()).filter(Boolean);
+    // Group lines into coherent paragraph chunks so numbers and lists flow smoothly as complete sentences
+    const rawLines = cleanText.split(/\n+/).map(c => c.trim()).filter(Boolean);
+    const rawChunks: string[] = [];
+    let currentChunk = "";
+
+    for (const line of rawLines) {
+      if (!currentChunk) {
+        currentChunk = line;
+      } else if (/^\d+[\.\)]/.test(line) || currentChunk.length < 40) {
+        // Append numbered items or short lines to previous chunk so they don't break into isolated robotic fragments
+        currentChunk += " " + line;
+      } else {
+        rawChunks.push(currentChunk);
+        currentChunk = line;
+      }
+    }
+    if (currentChunk) rawChunks.push(currentChunk);
+
     const voices = browserVoices.length > 0 ? browserVoices : window.speechSynthesis.getVoices();
 
     // English tutor voice
@@ -1221,19 +1237,28 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       englishVoice = voices.find(v => {
         const name = v.name.toLowerCase();
         const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-        return isEn && (name.includes("natural") || name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female") || name.includes("victoria") || name.includes("karen"));
+        const isFemale = name.includes("female") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("victoria") || name.includes("karen") || name.includes("google us english") || name.includes("natural");
+        return isEn && isFemale;
       }) || voices.find(v => v.lang.startsWith("en")) || null;
     } else if (tutor === "oliver") {
       englishVoice = voices.find(v => {
         const name = v.name.toLowerCase();
         const lang = v.lang.toLowerCase();
-        return (lang.includes("gb") || lang.includes("uk")) && (name.includes("natural") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("male"));
+        const isMale = name.includes("male") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("david") || name.includes("ryan") || name.includes("guy") || name.includes("james") || name.includes("aaron") || name.includes("mark");
+        return lang.startsWith("en") && isMale;
+      }) || voices.find(v => {
+        const name = v.name.toLowerCase();
+        return name.includes("male") || name.includes("daniel") || name.includes("george") || name.includes("david") || name.includes("ryan");
       }) || voices.find(v => v.lang.startsWith("en")) || null;
     } else {
       englishVoice = voices.find(v => {
         const name = v.name.toLowerCase();
         const lang = v.lang.toLowerCase();
-        return lang.includes("us") && (name.includes("natural") || name.includes("alex") || name.includes("fred") || name.includes("guy"));
+        const isMale = name.includes("male") || name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("aaron") || name.includes("ryan") || name.includes("tom") || name.includes("dave");
+        return lang.startsWith("en") && isMale;
+      }) || voices.find(v => {
+        const name = v.name.toLowerCase();
+        return name.includes("male") || name.includes("alex") || name.includes("fred") || name.includes("guy");
       }) || voices.find(v => v.lang.startsWith("en")) || null;
     }
 
@@ -1722,14 +1747,15 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }
     } catch (err: any) {
       console.warn("[AI Voice Chat] Fetch failed, using client offline tutor fallback:", err);
-      const spokenText = payload.text || accumulatedTranscriptRef.current.trim() || "Hello! I am practicing speaking with you.";
+      const recognized = payload.text || accumulatedTranscriptRef.current.trim();
+      const spokenText = recognized || "Привет! Практикуем устную речь.";
       const offlineReply = getOfflineChatTutorReply(spokenText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
 
       if (payload.audio && !payload.text) {
         setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
           if (copy[copy.length - 1] && copy[copy.length - 1].text.includes("🎙️")) {
-            copy[copy.length - 1] = { role: "user", text: spokenText, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
+            copy[copy.length - 1] = { role: "user", text: recognized ? recognized : "🎙️ [Голосовое сообщение]", timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
           }
           return copy;
         });

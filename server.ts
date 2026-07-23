@@ -123,10 +123,9 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   const sanitizeModelName = (m?: string) => {
     if (!m) return "gemini-3.6-flash";
     if (m === "gemini-3.1-flash-tts-preview") return "gemini-3.1-flash-tts-preview";
-    if (m.includes("gemini-2.5") || m.includes("gemini-3.5") || m === "gemini-flash-latest") {
-      return "gemini-3.6-flash";
-    }
-    return m;
+    if (m === "gemini-3.1-flash-live-preview") return "gemini-3.1-flash-live-preview";
+    if (m === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite";
+    return "gemini-3.6-flash";
   };
 
   let currentModel = sanitizeModelName(params.model);
@@ -1670,8 +1669,8 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
     try {
       const voiceNames: { [key: string]: string } = {
         sophia: "Kore",
-        oliver: "Fenrir", // Imposing deep male voice
-        alex: "Puck" // Energetic, upbeat, positive male voice
+        oliver: "Charon", // Deep, clear male voice
+        alex: "Puck" // Energetic, upbeat male voice
       };
       const selectedVoice = voiceNames[role] || "Kore";
       let cleanTextForTts = replyText
@@ -1685,10 +1684,10 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         .trim();
 
       const ttsPromptPrefix = role === "alex" 
-        ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
+        ? "Say in an upbeat, energetic, friendly male voice:" 
         : role === "oliver" 
-        ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
-        : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
+        ? "Say in a deep, clear, authoritative male voice:" 
+        : "Say in a warm, gentle, friendly female voice:";
 
       const speechPromise = ai.models.generateContent({
         model: "gemini-3.1-flash-tts-preview",
@@ -1901,7 +1900,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transResponse = await generateContentWithRetry({
-          model: "gemini-3.5-flash",
+          model: "gemini-3.6-flash",
           contents: [
             {
               inlineData: {
@@ -1911,7 +1910,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
             },
             "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
           ]
-        }, { fallbackModel: "gemini-2.5-flash" });
+        }, { fallbackModel: "gemini-3.6-flash" });
         userText = (transResponse.text || "").trim();
         console.log("[Voice Chat] User transcript from audio:", userText);
       } catch (transcribeErr) {
@@ -2088,14 +2087,14 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
 
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents,
       config: {
         systemInstruction: baseInstruction,
         responseMimeType: "application/json",
         responseSchema
       }
-    }, { fallbackModel: "gemini-2.5-flash" });
+    }, { fallbackModel: "gemini-3.6-flash" });
 
     let replyText = "";
     let evaluatedLevel = userLevel;
@@ -2117,7 +2116,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         console.log("[Voice Chat] Synthesizing speech audio...");
         const voiceNames: { [key: string]: string } = {
           sophia: "Kore", // Friendly female voice
-          oliver: "Fenrir", // Deep male voice
+          oliver: "Charon", // Deep clear male voice
           alex: "Puck" // Energetic, upbeat male voice
         };
         const selectedVoice = voiceNames[role] || "Kore";
@@ -2134,10 +2133,10 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .trim();
 
         const ttsPromptPrefix = role === "alex" 
-          ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
+          ? "Say in an upbeat, energetic, friendly male voice:" 
           : role === "oliver" 
-          ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
-          : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
+          ? "Say in a deep, clear, authoritative male voice:" 
+          : "Say in a warm, gentle, friendly female voice:";
 
         const speechResponse = await ai.models.generateContent({
           model: "gemini-3.1-flash-tts-preview",
