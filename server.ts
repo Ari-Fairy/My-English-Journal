@@ -1906,7 +1906,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transPromise = generateContentWithRetry({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.6-flash",
           contents: [
             {
               inlineData: {
@@ -1918,7 +1918,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
           ]
         }, { fallbackModel: "gemini-2.5-flash" });
 
-        const transResponse = await withTimeout(transPromise, 12000, null);
+        const transResponse = await withTimeout(transPromise, 25000, null);
         if (transResponse && transResponse.text) {
           userText = transResponse.text.trim();
         }
@@ -2097,7 +2097,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "—Å—
 
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents,
       config: {
         systemInstruction: baseInstruction,
@@ -2161,7 +2161,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "—Å—
           }
         });
 
-        const speechResponse = await withTimeout(speechPromise, 8000, null);
+        const speechResponse = await withTimeout(speechPromise, 25000, null);
 
         if (speechResponse) {
           const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";

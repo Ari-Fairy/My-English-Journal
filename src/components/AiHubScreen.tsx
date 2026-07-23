@@ -1681,10 +1681,15 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       if (data.userTranscription) {
         setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
-          const pendingIdx = copy.map(m => m.text).lastIndexOf("🎙️ [Голосовое сообщение]");
-          if (pendingIdx !== -1) {
-            copy[pendingIdx] = { role: "user", text: data.userTranscription, timestamp: copy[pendingIdx].timestamp || new Date().toISOString() };
-          } else if (copy.length > 0 && copy[copy.length - 1].role === "user" && copy[copy.length - 1].text.includes("🎙️")) {
+          let found = false;
+          for (let i = copy.length - 1; i >= 0; i--) {
+            if (copy[i].role === "user" && (copy[i].text.includes("🎙️") || copy[i].text.includes("Голосовое сообщение"))) {
+              copy[i] = { role: "user", text: data.userTranscription, timestamp: copy[i].timestamp || new Date().toISOString() };
+              found = true;
+              break;
+            }
+          }
+          if (!found && copy.length > 0 && copy[copy.length - 1].role === "user") {
             copy[copy.length - 1] = { role: "user", text: data.userTranscription, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
           }
           return copy;
