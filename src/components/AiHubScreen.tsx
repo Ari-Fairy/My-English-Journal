@@ -1184,11 +1184,13 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     if (typeof window !== "undefined" && window.speechSynthesis) {
       window.speechSynthesis.cancel();
       
-      const cleanText = text
+      let cleanText = text
         .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
         .replace(/\*\*([^*]+)\*\*/g, "$1")
         .replace(/`([^`]+)`/g, "$1")
-        .replace(/_([^_]+)_/g, "$1");
+        .replace(/_([^_]+)_/g, "$1")
+        .replace(/[*#]/g, "")
+        .trim();
       
       const utterance = new SpeechSynthesisUtterance(cleanText);
       utterance.lang = "en-US";
@@ -1200,14 +1202,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
           const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female"));
+          return isEn && (name.includes("natural") || name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female") || name.includes("victoria") || name.includes("karen"));
         });
       } else if (tutor === "oliver") {
         utterance.lang = "en-GB";
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
           const lang = v.lang.toLowerCase();
-          return (lang.includes("gb") || lang.includes("uk")) && (name.includes("male") || name.includes("daniel") || name.includes("george") || name.includes("oliver"));
+          return (lang.includes("gb") || lang.includes("uk")) && (name.includes("natural") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("male"));
         }) || voices.find(v => {
           const name = v.name.toLowerCase();
           return name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("uk english");
@@ -1217,7 +1219,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         voice = voices.find(v => {
           const name = v.name.toLowerCase();
           const lang = v.lang.toLowerCase();
-          return lang.includes("us") && (name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("us english male"));
+          return lang.includes("us") && (name.includes("natural") || name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("us english male"));
         }) || voices.find(v => {
           const name = v.name.toLowerCase();
           return name.includes("alex") || name.includes("fred") || name.includes("guy");
@@ -1230,14 +1232,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       if (voice) utterance.voice = voice;
       
       if (tutor === "alex") {
-        utterance.pitch = 1.25; // Upbeat, youthful tone
-        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.30 : 1.08;
+        utterance.pitch = 1.05; // Natural upbeat tone
+        utterance.rate = speechPace === "slow" ? 0.80 : speechPace === "fast" ? 1.20 : 1.00;
       } else if (tutor === "oliver") {
-        utterance.pitch = 0.60; // Deep stern, demanding tone
-        utterance.rate = speechPace === "slow" ? 0.65 : speechPace === "fast" ? 1.15 : 0.85;
+        utterance.pitch = 0.95; // Calm, dignified British pitch
+        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.15 : 0.90;
       } else {
-        utterance.pitch = 1.02;
-        utterance.rate = speechPace === "slow" ? 0.70 : speechPace === "fast" ? 1.25 : 0.95;
+        utterance.pitch = 1.05; // Warm, natural female pitch
+        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.20 : 0.95;
       }
 
       utterance.onstart = () => setIsSpeechPlaying(true);
