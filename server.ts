@@ -120,12 +120,16 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   let currentDelay = 500;
 
   // Try with the requested model (or default)
-  let requestedModel = params.model || "gemini-2.5-flash";
-  // Replace legacy or non-existent model aliases with valid Gemini models
-  if (requestedModel === "gemini-3.5-flash" || requestedModel === "gemini-3.1-flash-lite") {
-    requestedModel = "gemini-2.5-flash";
-  }
-  let currentModel = requestedModel;
+  const sanitizeModelName = (m?: string) => {
+    if (!m) return "gemini-2.5-flash";
+    if (m.includes("gemini-3") || m.includes("3.5-flash") || m.includes("3.1-flash")) {
+      return "gemini-2.5-flash";
+    }
+    return m;
+  };
+
+  let currentModel = sanitizeModelName(params.model);
+  const safeFallbackModel = sanitizeModelName(fallbackModel);
 
   for (let attempt = 1; attempt <= maxRetries; attempt++) {
     try {
@@ -1103,7 +1107,7 @@ Return ONLY a valid JSON object in this exact shape:
 Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [
         { text: systemInstruction },
         { text: `Generate a brand new, unique story for level ${level} on date ${date || "today"}. 

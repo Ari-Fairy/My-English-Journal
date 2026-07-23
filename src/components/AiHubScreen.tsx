@@ -604,12 +604,21 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const activeChatSession = chatSessions.find(s => s.id === activeChatSessionId) || chatSessions.find(s => s.tutor === tutor) || chatSessions[0];
   const activeVoiceSession = voiceSessions.find(s => s.id === activeVoiceSessionId) || voiceSessions.find(s => s.tutor === tutor) || voiceSessions[0];
 
-  // Sync mode state when activeChatSession changes
+  // Sync mode state and session IDs when activeChatSession / activeVoiceSession change
   useEffect(() => {
+    if (activeChatSession && activeChatSession.id !== activeChatSessionId) {
+      setActiveChatSessionId(activeChatSession.id);
+    }
     if (activeChatSession && activeChatSession.mode) {
       setChatMode(activeChatSession.mode);
     }
   }, [activeChatSessionId, activeChatSession]);
+
+  useEffect(() => {
+    if (activeVoiceSession && activeVoiceSession.id !== activeVoiceSessionId) {
+      setActiveVoiceSessionId(activeVoiceSession.id);
+    }
+  }, [activeVoiceSessionId, activeVoiceSession]);
 
   const handleChatModeChange = (mode: "general" | "thinking" | "low-latency" | "grounding") => {
     setChatMode(mode);
@@ -1225,7 +1234,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     const userMsgText = isStringOverride ? textOverride : chatInput;
     if (!userMsgText.trim() || chatLoading) return;
     
-    const targetSessionId = activeChatSessionId;
+    const targetSessionId = activeChatSession?.id || activeChatSessionId;
     const targetMessages = chatMessages;
     if (!targetSessionId) return;
 
@@ -1518,7 +1527,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   };
 
   const executeVoiceDialogueRequest = async (payload: { audio?: string; text?: string }) => {
-    const targetSessionId = activeVoiceSessionId;
+    const targetSessionId = activeVoiceSession?.id || activeVoiceSessionId;
     const targetVoiceMessages = voiceMessages;
     if (!targetSessionId) return;
 
