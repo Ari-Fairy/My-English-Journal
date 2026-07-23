@@ -267,16 +267,21 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
   const isAfternoon = hour >= 12 && hour < 17;
   const isEvening = hour >= 17 && hour < 23;
 
-  // Determine greeting prefix
+  // Check if message is explicitly a greeting
+  const isExplicitGreeting = /^(hello|hi|hey|good morning|good afternoon|good evening|привет|здравствуй|добрый день|доброе утро|добрый вечер)/i.test(msg);
+
+  // Determine greeting prefix ONLY if explicitly greeted
   let timeGreetingPrefix = "";
-  if (isMorning) {
-    timeGreetingPrefix = role === "sophia" ? "Good morning! ☀️ " : role === "oliver" ? "Good morning. " : "Morning! 🌅 ";
-  } else if (isAfternoon) {
-    timeGreetingPrefix = role === "sophia" ? "Good afternoon! 🌸 " : role === "oliver" ? "Good afternoon. " : "Hey, good afternoon! ☀️ ";
-  } else if (isEvening) {
-    timeGreetingPrefix = role === "sophia" ? "Good evening! 🌌 " : role === "oliver" ? "Good evening. " : "Good evening! 🌆 ";
-  } else if (isLateNight) {
-    timeGreetingPrefix = role === "sophia" ? "Good night! Or rather, late-night greetings! 🌙 " : role === "oliver" ? "Greetings. It is quite late. " : "Hey! Wow, late night chat! 🦉 ";
+  if (isExplicitGreeting) {
+    if (isMorning) {
+      timeGreetingPrefix = role === "sophia" ? "Good morning! ☀️ " : role === "oliver" ? "Good morning. " : "Morning! 🌅 ";
+    } else if (isAfternoon) {
+      timeGreetingPrefix = role === "sophia" ? "Good afternoon! 🌸 " : role === "oliver" ? "Good afternoon. " : "Hey, good afternoon! ☀️ ";
+    } else if (isEvening) {
+      timeGreetingPrefix = role === "sophia" ? "Good evening! 🌌 " : role === "oliver" ? "Good evening. " : "Good evening! 🌆 ";
+    } else if (isLateNight) {
+      timeGreetingPrefix = role === "sophia" ? "Good night! Or rather, late-night greetings! 🌙 " : role === "oliver" ? "Greetings. It is quite late. " : "Hey! Wow, late night chat! 🦉 ";
+    }
   }
 
   // Check for rudeness / profanity / bad words
@@ -1685,7 +1690,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
       const speechPromise = ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-2.5-flash",
         contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2134,7 +2139,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
         const speechResponse = await ai.models.generateContent({
-          model: "gemini-2.5-flash-preview-tts",
+          model: "gemini-2.5-flash",
           contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
           config: {
             responseModalities: [Modality.AUDIO],
@@ -2535,7 +2540,7 @@ Return strictly a JSON object containing:
         : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
 
       const speechPromise = ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
+        model: "gemini-2.5-flash",
         contents: [{ parts: [{ text: `${ttsPromptPrefix} ${result.topicText}` }] }],
         config: {
           responseModalities: [Modality.AUDIO],
@@ -2611,7 +2616,7 @@ app.post("/api/ai-tts", async (req, res) => {
       .trim();
 
     const speechPromise = ai.models.generateContent({
-      model: "gemini-2.5-flash-preview-tts",
+      model: "gemini-2.5-flash",
       contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
       config: {
         responseModalities: [Modality.AUDIO],

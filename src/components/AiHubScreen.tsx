@@ -1181,81 +1181,100 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   };
 
   const fallbackBrowserSpeak = (text: string, onEnd?: () => void) => {
-    if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
-      
-      let cleanText = text
-        .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/_([^_]+)_/g, "$1")
-        .replace(/[*#]/g, "")
-        .trim();
-      
-      const utterance = new SpeechSynthesisUtterance(cleanText);
-      utterance.lang = "en-US";
-      
-      const voices = browserVoices.length > 0 ? browserVoices : window.speechSynthesis.getVoices();
-      let voice = null;
-      
-      if (tutor === "sophia") {
-        voice = voices.find(v => {
-          const name = v.name.toLowerCase();
-          const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-          return isEn && (name.includes("natural") || name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female") || name.includes("victoria") || name.includes("karen"));
-        });
-      } else if (tutor === "oliver") {
-        utterance.lang = "en-GB";
-        voice = voices.find(v => {
-          const name = v.name.toLowerCase();
-          const lang = v.lang.toLowerCase();
-          return (lang.includes("gb") || lang.includes("uk")) && (name.includes("natural") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("male"));
-        }) || voices.find(v => {
-          const name = v.name.toLowerCase();
-          return name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("uk english");
-        });
+    if (typeof window === "undefined" || !window.speechSynthesis) {
+      setIsSpeechPlaying(false);
+      if (onEnd) onEnd();
+      return;
+    }
+
+    window.speechSynthesis.cancel();
+    
+    let cleanText = text
+      .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/_([^_]+)_/g, "$1")
+      .replace(/[*#]/g, "")
+      .trim();
+
+    if (!cleanText) {
+      setIsSpeechPlaying(false);
+      if (onEnd) onEnd();
+      return;
+    }
+
+    // Split text into line chunks so Russian explanations and English words are spoken by their matching natural voices
+    const rawChunks = cleanText.split(/(\n+)/).map(c => c.trim()).filter(Boolean);
+    const voices = browserVoices.length > 0 ? browserVoices : window.speechSynthesis.getVoices();
+
+    // English tutor voice
+    let englishVoice: SpeechSynthesisVoice | null = null;
+    if (tutor === "sophia") {
+      englishVoice = voices.find(v => {
+        const name = v.name.toLowerCase();
+        const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
+        return isEn && (name.includes("natural") || name.includes("google us english") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("female") || name.includes("victoria") || name.includes("karen"));
+      }) || voices.find(v => v.lang.startsWith("en")) || null;
+    } else if (tutor === "oliver") {
+      englishVoice = voices.find(v => {
+        const name = v.name.toLowerCase();
+        const lang = v.lang.toLowerCase();
+        return (lang.includes("gb") || lang.includes("uk")) && (name.includes("natural") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("male"));
+      }) || voices.find(v => v.lang.startsWith("en")) || null;
+    } else {
+      englishVoice = voices.find(v => {
+        const name = v.name.toLowerCase();
+        const lang = v.lang.toLowerCase();
+        return lang.includes("us") && (name.includes("natural") || name.includes("alex") || name.includes("fred") || name.includes("guy"));
+      }) || voices.find(v => v.lang.startsWith("en")) || null;
+    }
+
+    // Russian voice for Russian text parts
+    const russianVoice = voices.find(v => {
+      const lang = v.lang.toLowerCase();
+      return lang.startsWith("ru") || lang.includes("russian");
+    }) || null;
+
+    let chunkIdx = 0;
+
+    const speakNextChunk = () => {
+      if (chunkIdx >= rawChunks.length) {
+        setIsSpeechPlaying(false);
+        if (onEnd) onEnd();
+        return;
+      }
+
+      const chunk = rawChunks[chunkIdx];
+      chunkIdx++;
+
+      if (!chunk) {
+        speakNextChunk();
+        return;
+      }
+
+      const hasRussian = /[а-яА-ЯёЁ]/.test(chunk);
+      const utterance = new SpeechSynthesisUtterance(chunk);
+
+      if (hasRussian) {
+        utterance.lang = "ru-RU";
+        if (russianVoice) utterance.voice = russianVoice;
+        utterance.pitch = tutor === "sophia" ? 1.05 : tutor === "oliver" ? 0.95 : 1.05;
+        utterance.rate = speechPace === "slow" ? 0.80 : speechPace === "fast" ? 1.20 : 0.98;
       } else {
-        utterance.lang = "en-US";
-        voice = voices.find(v => {
-          const name = v.name.toLowerCase();
-          const lang = v.lang.toLowerCase();
-          return lang.includes("us") && (name.includes("natural") || name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("us english male"));
-        }) || voices.find(v => {
-          const name = v.name.toLowerCase();
-          return name.includes("alex") || name.includes("fred") || name.includes("guy");
-        });
-      }
-      
-      if (!voice) {
-        voice = voices.find(v => v.lang.startsWith("en"));
-      }
-      if (voice) utterance.voice = voice;
-      
-      if (tutor === "alex") {
-        utterance.pitch = 1.05; // Natural upbeat tone
+        utterance.lang = tutor === "oliver" ? "en-GB" : "en-US";
+        if (englishVoice) utterance.voice = englishVoice;
+        utterance.pitch = tutor === "sophia" ? 1.05 : tutor === "oliver" ? 0.95 : 1.05;
         utterance.rate = speechPace === "slow" ? 0.80 : speechPace === "fast" ? 1.20 : 1.00;
-      } else if (tutor === "oliver") {
-        utterance.pitch = 0.95; // Calm, dignified British pitch
-        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.15 : 0.90;
-      } else {
-        utterance.pitch = 1.05; // Warm, natural female pitch
-        utterance.rate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.20 : 0.95;
       }
 
       utterance.onstart = () => setIsSpeechPlaying(true);
-      utterance.onend = () => {
-        setIsSpeechPlaying(false);
-        if (onEnd) onEnd();
-      };
-      utterance.onerror = () => {
-        setIsSpeechPlaying(false);
-        if (onEnd) onEnd();
-      };
+      utterance.onend = () => speakNextChunk();
+      utterance.onerror = () => speakNextChunk();
+
       window.speechSynthesis.speak(utterance);
-    } else {
-      setIsSpeechPlaying(false);
-      if (onEnd) onEnd();
-    }
+    };
+
+    speakNextChunk();
   };
 
   // Adjust welcome message when tutor changes (preserved in histories)
