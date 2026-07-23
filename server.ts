@@ -121,11 +121,12 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
 
   // Try with the requested model (or default)
   const sanitizeModelName = (m?: string) => {
-    if (!m) return "gemini-3.6-flash";
+    if (!m) return "gemini-2.5-flash";
     if (m === "gemini-3.1-flash-tts-preview") return "gemini-3.1-flash-tts-preview";
     if (m === "gemini-3.1-flash-live-preview") return "gemini-3.1-flash-live-preview";
     if (m === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite";
-    return "gemini-3.6-flash";
+    if (m === "gemini-2.5-pro") return "gemini-2.5-pro";
+    return "gemini-2.5-flash";
   };
 
   let currentModel = sanitizeModelName(params.model);
@@ -1185,7 +1186,7 @@ The questions themselves should be in simple, level-appropriate English (appropr
 Provide a clear, brief explanation in Russian of why the correct answer is correct.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [
         { text: systemInstruction },
         { text: `Story Title: "${title}"\nStory Content:\n"${storyText}"` }
@@ -1756,7 +1757,7 @@ Return STRICTLY a JSON array of objects following this structure:
 
     const ai = getAIClient();
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -1818,7 +1819,7 @@ Return the result as a JSON object matching the requested schema.`;
 
     const ai = getAIClient();
     const response = await ai.models.generateContent({
-      model: "gemini-3.5-flash", // Use highly-available and free Flash model for image scanning!
+      model: "gemini-2.5-flash", // Use highly-available Flash model for image scanning!
       contents: [
         {
           inlineData: {
@@ -1900,7 +1901,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transResponse = await generateContentWithRetry({
-          model: "gemini-3.6-flash",
+          model: "gemini-2.5-flash",
           contents: [
             {
               inlineData: {
@@ -1910,7 +1911,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
             },
             "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
           ]
-        }, { fallbackModel: "gemini-3.6-flash" });
+        }, { fallbackModel: "gemini-2.5-flash" });
         userText = (transResponse.text || "").trim();
         console.log("[Voice Chat] User transcript from audio:", userText);
       } catch (transcribeErr) {
@@ -2087,14 +2088,14 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
 
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
       contents,
       config: {
         systemInstruction: baseInstruction,
         responseMimeType: "application/json",
         responseSchema
       }
-    }, { fallbackModel: "gemini-3.6-flash" });
+    }, { fallbackModel: "gemini-2.5-flash" });
 
     let replyText = "";
     let evaluatedLevel = userLevel;
@@ -2369,7 +2370,7 @@ Return strictly a JSON object matching the requested schema.`;
     }
 
     const response = await generateContentWithRetry({
-      model: "gemini-3.5-flash",
+      model: "gemini-2.5-flash",
       contents: [{ parts: [{ text: gradingPrompt }] }],
       config: {
         responseMimeType: "application/json",
