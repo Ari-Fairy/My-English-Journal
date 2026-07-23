@@ -1681,7 +1681,10 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       if (data.userTranscription) {
         setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
-          if (copy[copy.length - 1] && copy[copy.length - 1].text.includes("🎙️")) {
+          const pendingIdx = copy.map(m => m.text).lastIndexOf("🎙️ [Голосовое сообщение]");
+          if (pendingIdx !== -1) {
+            copy[pendingIdx] = { role: "user", text: data.userTranscription, timestamp: copy[pendingIdx].timestamp || new Date().toISOString() };
+          } else if (copy.length > 0 && copy[copy.length - 1].role === "user" && copy[copy.length - 1].text.includes("🎙️")) {
             copy[copy.length - 1] = { role: "user", text: data.userTranscription, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
           }
           return copy;
@@ -1709,29 +1712,32 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }
 
       if (voiceVoiceEnabledRef.current) {
-        if (!useNativeSpeechSynth && data.replyAudio) {
+        if (data.replyAudio) {
           setIsSpeechPlaying(true);
           const onPlaybackEnd = () => {
             setIsSpeechPlaying(false);
             setShowDictionaryButton(true);
           };
+
+          stopAllSpeech();
+
           if (audioPlayerRef.current) {
             audioPlayerRef.current.src = data.replyAudio;
-            audioPlayerRef.current.playbackRate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.25 : 1.0;
+            audioPlayerRef.current.playbackRate = speechPace === "slow" ? 0.8 : speechPace === "fast" ? 1.2 : 1.0;
             audioPlayerRef.current.onended = onPlaybackEnd;
             audioPlayerRef.current.onerror = onPlaybackEnd;
             audioPlayerRef.current.play().catch(e => {
-              console.warn("Auto-play blocked:", e);
+              console.warn("Auto-play blocked by browser:", e);
               onPlaybackEnd();
             });
           } else {
             const audio = new Audio(data.replyAudio);
             currentAudioRef.current = audio;
-            audio.playbackRate = speechPace === "slow" ? 0.75 : speechPace === "fast" ? 1.25 : 1.0;
+            audio.playbackRate = speechPace === "slow" ? 0.8 : speechPace === "fast" ? 1.2 : 1.0;
             audio.onended = onPlaybackEnd;
             audio.onerror = onPlaybackEnd;
             audio.play().catch(e => {
-              console.warn("Auto-play blocked:", e);
+              console.warn("Auto-play blocked by browser:", e);
               onPlaybackEnd();
             });
           }

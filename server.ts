@@ -1886,33 +1886,42 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     // Step A: If the user recorded audio, transcribe it first using Gemini's multimodal capabilities!
     if (audio) {
       console.log("[Voice Chat] Transcribing user audio...");
-      let mimeType = "audio/webm"; // default fallback
+      let rawMime = "audio/webm"; // default fallback
       let base64Audio = audio;
       if (audio.startsWith("data:")) {
         const match = audio.match(/^data:([^;]+);base64,/);
         if (match) {
-          mimeType = match[1].split(";")[0].trim();
+          rawMime = match[1].trim();
         }
         base64Audio = audio.split(",")[1] || audio;
       }
       
-      // Clean mimeType of extra codecs parameters for Gemini inlineData
-      mimeType = mimeType.split(";")[0].trim();
+      let normalizedMime = rawMime.toLowerCase();
+      if (normalizedMime.includes("webm")) normalizedMime = "audio/webm";
+      else if (normalizedMime.includes("mp4") || normalizedMime.includes("m4a") || normalizedMime.includes("aac")) normalizedMime = "audio/mp4";
+      else if (normalizedMime.includes("ogg")) normalizedMime = "audio/ogg";
+      else if (normalizedMime.includes("wav")) normalizedMime = "audio/wav";
+      else if (normalizedMime.includes("mp3") || normalizedMime.includes("mpeg")) normalizedMime = "audio/mp3";
+      else normalizedMime = "audio/webm";
       
       try {
-        const transResponse = await generateContentWithRetry({
+        const transPromise = generateContentWithRetry({
           model: "gemini-2.5-flash",
           contents: [
             {
               inlineData: {
-                mimeType: mimeType,
+                mimeType: normalizedMime,
                 data: base64Audio
               }
             },
             "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
           ]
         }, { fallbackModel: "gemini-2.5-flash" });
-        userText = (transResponse.text || "").trim();
+
+        const transResponse = await withTimeout(transPromise, 12000, null);
+        if (transResponse && transResponse.text) {
+          userText = transResponse.text.trim();
+        }
         console.log("[Voice Chat] User transcript from audio:", userText);
       } catch (transcribeErr) {
         console.warn("[Voice Chat] Audio transcription error, will check fallback text:", transcribeErr);
@@ -2139,7 +2148,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           ? "Say in a deep, clear, authoritative male voice:" 
           : "Say in a warm, gentle, friendly female voice:";
 
-        const speechResponse = await ai.models.generateContent({
+        const speechPromise = ai.models.generateContent({
           model: "gemini-3.1-flash-tts-preview",
           contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
           config: {
@@ -2152,9 +2161,13 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           }
         });
 
-        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-        if (rawData) {
-          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+        const speechResponse = await withTimeout(speechPromise, 8000, null);
+
+        if (speechResponse) {
+          const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+          if (rawData) {
+            replyAudioBase64 = convertPcmToWav(rawData, 24000);
+          }
         }
       } catch (ttsErr: any) {
         console.warn("[Voice Chat] Gemini TTS Model synthesis failed or unavailable.", ttsErr?.message || ttsErr);
