@@ -1716,8 +1716,17 @@ If the user's message contains offensive language, insults, swearing (e.g., "ÑÑ
       searchResults
     });
   } catch (error: any) {
-    console.error("AI Chat Practice Error:", error);
-    res.status(500).json({ error: error?.message || "Internal server error" });
+    console.warn(`[AI Chat Practice Error] Falling back to offline tutor reply. Error: ${error?.message || error}`);
+    const { role, userLevel, clientLocalTime, messages } = req.body || {};
+    const lastUserMsg = (Array.isArray(messages) && messages.length > 0) ? (messages[messages.length - 1]?.text || "Hello") : "Hello";
+    const offlineReply = getOfflineChatTutorReply(lastUserMsg, role || "sophia", userLevel || "A1", clientLocalTime);
+    res.json({
+      replyText: offlineReply.replyText,
+      evaluatedLevel: offlineReply.evaluatedLevel,
+      wordToAdd: offlineReply.wordToAdd,
+      replyAudio: null,
+      searchResults: []
+    });
   }
 });
 

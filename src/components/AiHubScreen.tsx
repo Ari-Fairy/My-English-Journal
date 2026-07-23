@@ -529,8 +529,26 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
             prevLocal.forEach(s => mergedMap.set(s.id, s));
             data.chatSessions.forEach((remoteSession: ChatSession) => {
               const local = mergedMap.get(remoteSession.id);
-              if (!local || (remoteSession.messages?.length || 0) >= (local.messages?.length || 0)) {
+              if (!local) {
                 mergedMap.set(remoteSession.id, remoteSession);
+              } else {
+                // Merge message lists to preserve both local and remote messages
+                const msgMap = new Map<string, any>();
+                (local.messages || []).forEach(m => {
+                  const key = `${m.role}:${m.text}`;
+                  msgMap.set(key, m);
+                });
+                (remoteSession.messages || []).forEach(m => {
+                  const key = `${m.role}:${m.text}`;
+                  if (!msgMap.has(key)) {
+                    msgMap.set(key, m);
+                  }
+                });
+                mergedMap.set(remoteSession.id, {
+                  ...remoteSession,
+                  ...local,
+                  messages: Array.from(msgMap.values())
+                });
               }
             });
             return Array.from(mergedMap.values());
@@ -542,8 +560,25 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
             prevLocal.forEach(s => mergedMap.set(s.id, s));
             data.voiceSessions.forEach((remoteSession: VoiceSession) => {
               const local = mergedMap.get(remoteSession.id);
-              if (!local || (remoteSession.voiceMessages?.length || 0) >= (local.voiceMessages?.length || 0)) {
+              if (!local) {
                 mergedMap.set(remoteSession.id, remoteSession);
+              } else {
+                const msgMap = new Map<string, any>();
+                (local.voiceMessages || []).forEach(m => {
+                  const key = `${m.role}:${m.text}`;
+                  msgMap.set(key, m);
+                });
+                (remoteSession.voiceMessages || []).forEach(m => {
+                  const key = `${m.role}:${m.text}`;
+                  if (!msgMap.has(key)) {
+                    msgMap.set(key, m);
+                  }
+                });
+                mergedMap.set(remoteSession.id, {
+                  ...remoteSession,
+                  ...local,
+                  voiceMessages: Array.from(msgMap.values())
+                });
               }
             });
             return Array.from(mergedMap.values());
@@ -3829,7 +3864,15 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     setToastMessage("Новая тема успешно найдена! 🌐");
                   } catch (e) {
                     console.error(e);
-                    setToastMessage("⚠️ Не удалось получить тему.");
+                    setVoiceTopic({
+                      title: "Daily Practice",
+                      text: "What was the most interesting or memorable part of your day today?",
+                      translation: "Что было самым интересным или запоминающимся событием вашего сегодняшнего дня?",
+                      sourceUrl: "",
+                      audio: null
+                    });
+                    setShowTopicTranslation(false);
+                    setToastMessage("Тема дня обновлена! 💬");
                   } finally {
                     setIsGeneratingTopic(false);
                   }

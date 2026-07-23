@@ -94,16 +94,29 @@ export function getCurrentWeekKey(): string {
 
 // Получение полного URL для API запросов при развертывании на любых платформах (Vercel, Cloud Run, local, etc.)
 export function getApiUrl(path: string): string {
-  // Если задан VITE_BACKEND_URL через переменные окружения, используем его
+  const cleanPath = path.startsWith("/") ? path : `/${path}`;
+
+  // 1. Если задан VITE_BACKEND_URL через переменные окружения, используем его
   const customBackend = import.meta.env.VITE_BACKEND_URL;
   if (customBackend && typeof customBackend === "string" && customBackend.trim().length > 0) {
     const baseUrl = customBackend.trim().replace(/\/+$/, "");
-    const cleanPath = path.startsWith("/") ? path : `/${path}`;
     return `${baseUrl}${cleanPath}`;
   }
   
-  // В остальных случаях используем относительный путь (относительно текущего хоста)
-  return path;
+  // 2. Если сайт открыт с внешнего хостинга (например, Vercel, Netlify, GitHub Pages, etc.),
+  // перенаправляем API-запросы на рабочий облачный бэкенд Cloud Run
+  if (typeof window !== "undefined" && window.location) {
+    const hostname = window.location.hostname;
+    const isLocalOrCloudRun = hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".run.app");
+    if (!isLocalOrCloudRun) {
+      // Иконка / статический адрес бэкенда с рабочим Express & Gemini API
+      const defaultBackendUrl = "https://ais-dev-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
+      return `${defaultBackendUrl}${cleanPath}`;
+    }
+  }
+
+  // 3. В остальных случаях (localhost, Cloud Run) используем относительный путь
+  return cleanPath;
 }
 
 // Получить статус кулдауна на повторение слов (минимальный интервал отдыха в 20 минут после сессии) - ОТКЛЮЧЕН
