@@ -27,6 +27,7 @@ import { Word, UserProgress } from "../types";
 import { getApiUrl } from "../utils";
 import { User } from "firebase/auth";
 import { fetchUserAiSessions, saveUserAiSessions } from "../firebaseSync";
+import { getOfflineChatTutorReply, getNextOfflineTopic } from "../data/offlineTutor";
 
 function formatMessageTimestamp(isoString?: string) {
   if (!isoString) return "";
@@ -1015,7 +1016,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
   const [useNativeSpeechRec, setUseNativeSpeechRec] = useState<boolean>(() => {
     const saved = localStorage.getItem("voice_use_native_rec_v2");
-    return saved !== null ? JSON.parse(saved) : false;
+    return saved !== null ? JSON.parse(saved) : true;
   });
   const [useNativeSpeechSynth, setUseNativeSpeechSynth] = useState<boolean>(() => {
     const saved = localStorage.getItem("voice_use_native_synth_v2");
@@ -1352,11 +1353,40 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(true);
       }
     } catch (err: any) {
+      console.warn("[AI Chat] Fetch failed, using client offline tutor fallback:", err);
+      const offlineReply = getOfflineChatTutorReply(userMsgText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
+      
       setChatMessagesForSession(targetSessionId, prev => [...prev, { 
         role: "model", 
-        text: `⚠️ Не удалось получить ответ: ${err.message || "Ошибка соединения."}`,
+        text: offlineReply.replyText,
         timestamp: new Date().toISOString()
       }]);
+
+      if (offlineReply.evaluatedLevel) {
+        handleUpdateTutorLevel(tutor, offlineReply.evaluatedLevel);
+      }
+
+      if (offlineReply.wordToAdd) {
+        setPendingWordToAdd({
+          en: offlineReply.wordToAdd.en,
+          ru: offlineReply.wordToAdd.ru,
+          pos: offlineReply.wordToAdd.pos || "noun",
+          topic: offlineReply.wordToAdd.topic || "general",
+          note: `Из диалога с ${tutor === "sophia" ? "Sophia" : tutor === "oliver" ? "Oliver" : "Alex"}`
+        });
+        setShowDictionaryButton(false);
+      } else {
+        setPendingWordToAdd(null);
+        setShowDictionaryButton(false);
+      }
+
+      if (chatVoiceEnabled) {
+        speakText(offlineReply.replyText, () => {
+          setShowDictionaryButton(true);
+        });
+      } else {
+        setShowDictionaryButton(true);
+      }
     } finally {
       setChatLoading(false);
       setLoadingSessionId(null);
@@ -1662,8 +1692,47 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(true);
       }
     } catch (err: any) {
-      console.error(err);
-      setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: "⚠️ Извините, не удалось разобрать звук." }]);
+      console.warn("[AI Voice Chat] Fetch failed, using client offline tutor fallback:", err);
+      const spokenText = payload.text || accumulatedTranscriptRef.current.trim() || "Hello! I am practicing speaking with you.";
+      const offlineReply = getOfflineChatTutorReply(spokenText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
+
+      if (payload.audio && !payload.text) {
+        setVoiceMessagesForSession(targetSessionId, prev => {
+          const copy = [...prev];
+          if (copy[copy.length - 1] && copy[copy.length - 1].text.includes("🎙️")) {
+            copy[copy.length - 1] = { role: "user", text: spokenText, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
+          }
+          return copy;
+        });
+      }
+
+      setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: offlineReply.replyText, timestamp: new Date().toISOString() }]);
+
+      if (offlineReply.evaluatedLevel) {
+        handleUpdateTutorLevel(tutor, offlineReply.evaluatedLevel);
+      }
+
+      if (offlineReply.wordToAdd) {
+        setPendingWordToAdd({
+          en: offlineReply.wordToAdd.en,
+          ru: offlineReply.wordToAdd.ru,
+          pos: offlineReply.wordToAdd.pos || "noun",
+          topic: offlineReply.wordToAdd.topic || "general",
+          note: `Из диалога с ${tutor === "sophia" ? "Sophia" : tutor === "oliver" ? "Oliver" : "Alex"}`
+        });
+        setShowDictionaryButton(false);
+      } else {
+        setPendingWordToAdd(null);
+        setShowDictionaryButton(false);
+      }
+
+      if (voiceVoiceEnabledRef.current) {
+        speakText(offlineReply.replyText, () => {
+          setShowDictionaryButton(true);
+        });
+      } else {
+        setShowDictionaryButton(true);
+      }
     } finally {
       setVoiceLoading(false);
       setLoadingVoiceSessionId(null);
@@ -3863,11 +3932,12 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     setShowTopicTranslation(false);
                     setToastMessage("Новая тема успешно найдена! 🌐");
                   } catch (e) {
-                    console.error(e);
+                    console.warn("API topic generation failed, rotating offline topic:", e);
+                    const nextTopic = getNextOfflineTopic(voiceTopic?.title);
                     setVoiceTopic({
-                      title: "Daily Practice",
-                      text: "What was the most interesting or memorable part of your day today?",
-                      translation: "Что было самым интересным или запоминающимся событием вашего сегодняшнего дня?",
+                      title: nextTopic.title,
+                      text: nextTopic.text,
+                      translation: nextTopic.translation,
                       sourceUrl: "",
                       audio: null
                     });
