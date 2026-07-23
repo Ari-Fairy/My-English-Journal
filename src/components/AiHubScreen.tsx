@@ -1015,22 +1015,22 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   }, []);
 
   const [useNativeSpeechRec, setUseNativeSpeechRec] = useState<boolean>(() => {
-    const saved = localStorage.getItem("voice_use_native_rec_v2");
-    return saved !== null ? JSON.parse(saved) : true;
+    const saved = localStorage.getItem("voice_use_native_rec_v4");
+    return saved !== null ? JSON.parse(saved) : false;
   });
   const [useNativeSpeechSynth, setUseNativeSpeechSynth] = useState<boolean>(() => {
-    const saved = localStorage.getItem("voice_use_native_synth_v2");
+    const saved = localStorage.getItem("voice_use_native_synth_v4");
     return saved !== null ? JSON.parse(saved) : false;
   });
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [speechRecLang, setSpeechRecLang] = useState<"en-US" | "ru-RU">("en-US");
 
   useEffect(() => {
-    localStorage.setItem("voice_use_native_rec_v2", JSON.stringify(useNativeSpeechRec));
+    localStorage.setItem("voice_use_native_rec_v4", JSON.stringify(useNativeSpeechRec));
   }, [useNativeSpeechRec]);
 
   useEffect(() => {
-    localStorage.setItem("voice_use_native_synth_v2", JSON.stringify(useNativeSpeechSynth));
+    localStorage.setItem("voice_use_native_synth_v4", JSON.stringify(useNativeSpeechSynth));
   }, [useNativeSpeechSynth]);
 
   useEffect(() => {

@@ -122,6 +122,7 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   // Try with the requested model (or default)
   const sanitizeModelName = (m?: string) => {
     if (!m) return "gemini-2.5-flash";
+    if (m === "gemini-3.6-flash") return "gemini-3.6-flash";
     if (m === "gemini-3.1-flash-tts-preview") return "gemini-3.1-flash-tts-preview";
     if (m === "gemini-3.1-flash-live-preview") return "gemini-3.1-flash-live-preview";
     if (m === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite";

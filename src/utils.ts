@@ -109,8 +109,8 @@ export function getApiUrl(path: string): string {
     const hostname = window.location.hostname;
     const isLocalOrCloudRun = hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".run.app");
     if (!isLocalOrCloudRun) {
-      // Иконка / статический адрес бэкенда с рабочим Express & Gemini API без редиректов dev-авторизации
-      const defaultBackendUrl = "https://ais-dev-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
+      // Публичный доступный адрес бэкенда (ais-pre) с рабочим Express & Gemini API
+      const defaultBackendUrl = "https://ais-pre-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
       return `${defaultBackendUrl}${cleanPath}`;
     }
   }
