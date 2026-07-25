@@ -10,8 +10,28 @@ dotenv.config();
 const PORT = 3000;
 export const app = express();
 
-// Custom CORS middleware to allow Vercel or local frontend to call this backend
+// Custom request path restoration and CORS middleware for Vercel / serverless deployments
 app.use((req, res, next) => {
+  // 1. Restore original request path on Vercel
+  const forwardedUri = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
+  if (forwardedUri && !forwardedUri.includes("index.ts") && !forwardedUri.includes("index.js")) {
+    req.url = forwardedUri;
+  } else if (req.url.includes("index.ts") || req.url.includes("index.js") || req.url === "/api" || req.url === "/api/") {
+    try {
+      const parsedUrl = new URL(req.url, "http://localhost");
+      const pathParam = parsedUrl.searchParams.get("path") || parsedUrl.searchParams.get("url");
+      if (pathParam) {
+        req.url = pathParam.startsWith("/") ? pathParam : "/" + pathParam;
+      }
+    } catch (e) {}
+  }
+
+  // 2. Normalize path to start with /api if it's missing the prefix
+  if (req.url.startsWith("/ai-") || req.url.startsWith("/translate") || req.url.startsWith("/ocr") || req.url.startsWith("/classify") || req.url.startsWith("/generate-") || req.url.startsWith("/send-") || req.url.startsWith("/grade-")) {
+    req.url = "/api" + (req.url.startsWith("/") ? req.url : "/" + req.url);
+  }
+
+  // 3. Set CORS headers
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -2749,6 +2769,29 @@ async function startServer() {
     }
   });
 }
+
+// Catch-all 404 handler for API routes to prevent unhandled fallthrough on Vercel
+app.use("/api/*", (req, res) => {
+  console.warn(`[API 404] Route not found: ${req.method} ${req.url}`);
+  res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
+});
+
+// Catch-all 404 handler for any unhandled non-static route
+app.use((req, res, next) => {
+  if (req.path.startsWith("/api")) {
+    res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
+  } else {
+    next();
+  }
+});
+
+// Global error handler to guarantee JSON error responses instead of Vercel HTML errors
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[Global Express Error]", err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: err?.message || "Internal server error" });
+  }
+});
 
 if (!process.env.VERCEL) {
   startServer().catch((err) => {
