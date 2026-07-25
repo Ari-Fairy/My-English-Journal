@@ -102,20 +102,8 @@ export function getApiUrl(path: string): string {
     const baseUrl = customBackend.trim().replace(/\/+$/, "");
     return `${baseUrl}${cleanPath}`;
   }
-  
-  // 2. Если сайт открыт с внешнего хостинга (например, Vercel, Netlify, GitHub Pages, etc.),
-  // перенаправляем API-запросы на публичный облачный бэкенд Cloud Run (ais-pre)
-  if (typeof window !== "undefined" && window.location) {
-    const hostname = window.location.hostname;
-    const isLocalOrCloudRun = hostname === "localhost" || hostname === "127.0.0.1" || hostname.endsWith(".run.app");
-    if (!isLocalOrCloudRun) {
-      // Публичный доступный адрес бэкенда (ais-pre) с рабочим Express & Gemini API
-      const defaultBackendUrl = "https://ais-pre-ublfoomiup7spn7ad7vnhk-540843270034.us-east1.run.app";
-      return `${defaultBackendUrl}${cleanPath}`;
-    }
-  }
 
-  // 3. В остальных случаях (localhost, Cloud Run) используем относительный путь
+  // 2. Относительный путь для вызова своего собственного сервера Express
   return cleanPath;
 }
 
