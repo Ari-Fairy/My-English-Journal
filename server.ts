@@ -122,7 +122,6 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   // Try with the requested model (or default)
   const sanitizeModelName = (m?: string) => {
     if (!m) return "gemini-2.5-flash";
-    if (m === "gemini-3.6-flash") return "gemini-3.6-flash";
     if (m === "gemini-3.1-flash-tts-preview") return "gemini-3.1-flash-tts-preview";
     if (m === "gemini-3.1-flash-live-preview") return "gemini-3.1-flash-live-preview";
     if (m === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite";
@@ -148,23 +147,15 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
     } catch (error: any) {
       lastError = error;
       const errMsg = error?.message || String(error);
-      const isTransient = errMsg.includes("503") || 
-                        errMsg.includes("UNAVAILABLE") || 
-                        errMsg.includes("demand") || 
-                        errMsg.includes("Resource exhausted") || 
-                        errMsg.includes("429");
 
-      console.warn(`[Gemini API Warning] Attempt ${attempt} failed with error: ${errMsg}`);
+      console.warn(`[Gemini API Warning] Attempt ${attempt} failed with error on ${currentModel}: ${errMsg}`);
 
-      if (!isTransient) {
-        break; // If not a transient error, don't wait/retry, fail immediately
-      }
-
-      // If the primary model failed due to high demand/rate limits, immediately switch to the fallback model
-      if (fallbackModel && currentModel !== fallbackModel) {
-        console.log(`[Gemini API] Primary model "${currentModel}" failed with a transient error. Seamlessly switching to highly-available fallback model "${fallbackModel}"...`);
-        currentModel = fallbackModel;
-        currentDelay = 200; // Fast retry with fallback model
+      // If the current model failed, immediately switch to fallback model if available
+      if (safeFallbackModel && currentModel !== safeFallbackModel) {
+        console.log(`[Gemini API] Primary model "${currentModel}" failed. Switching to fallback model "${safeFallbackModel}"...`);
+        currentModel = safeFallbackModel;
+        currentDelay = 200;
+        continue;
       }
 
       if (attempt === maxRetries) {
@@ -173,7 +164,7 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
 
       console.log(`[Gemini API] Retrying in ${currentDelay}ms...`);
       await delay(currentDelay);
-      currentDelay *= 1.5; // Exponential backoff
+      currentDelay *= 1.5;
     }
   }
 
@@ -1907,7 +1898,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transPromise = generateContentWithRetry({
-          model: "gemini-3.6-flash",
+          model: "gemini-2.5-flash",
           contents: [
             {
               inlineData: {
@@ -2098,7 +2089,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "—Å—
 
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
-      model: "gemini-3.6-flash",
+      model: "gemini-2.5-flash",
       contents,
       config: {
         systemInstruction: baseInstruction,

@@ -1014,23 +1014,45 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
   }, []);
 
+  useEffect(() => {
+    // Clear legacy voice settings from localStorage to ensure Gemini AI recording mode is active by default
+    try {
+      localStorage.removeItem("voice_use_native_rec_v1");
+      localStorage.removeItem("voice_use_native_rec_v2");
+      localStorage.removeItem("voice_use_native_rec_v3");
+      localStorage.removeItem("voice_use_native_rec_v4");
+      localStorage.removeItem("voice_use_native_synth_v1");
+      localStorage.removeItem("voice_use_native_synth_v2");
+      localStorage.removeItem("voice_use_native_synth_v3");
+      localStorage.removeItem("voice_use_native_synth_v4");
+    } catch (e) {}
+  }, []);
+
   const [useNativeSpeechRec, setUseNativeSpeechRec] = useState<boolean>(() => {
-    const saved = localStorage.getItem("voice_use_native_rec_v4");
-    return saved !== null ? JSON.parse(saved) : false;
+    try {
+      const saved = localStorage.getItem("voice_use_native_rec_v5");
+      return saved !== null ? JSON.parse(saved) : false;
+    } catch (e) {
+      return false;
+    }
   });
   const [useNativeSpeechSynth, setUseNativeSpeechSynth] = useState<boolean>(() => {
-    const saved = localStorage.getItem("voice_use_native_synth_v4");
-    return saved !== null ? JSON.parse(saved) : false;
+    try {
+      const saved = localStorage.getItem("voice_use_native_synth_v5");
+      return saved !== null ? JSON.parse(saved) : false;
+    } catch (e) {
+      return false;
+    }
   });
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
   const [speechRecLang, setSpeechRecLang] = useState<"en-US" | "ru-RU">("en-US");
 
   useEffect(() => {
-    localStorage.setItem("voice_use_native_rec_v4", JSON.stringify(useNativeSpeechRec));
+    localStorage.setItem("voice_use_native_rec_v5", JSON.stringify(useNativeSpeechRec));
   }, [useNativeSpeechRec]);
 
   useEffect(() => {
-    localStorage.setItem("voice_use_native_synth_v4", JSON.stringify(useNativeSpeechSynth));
+    localStorage.setItem("voice_use_native_synth_v5", JSON.stringify(useNativeSpeechSynth));
   }, [useNativeSpeechSynth]);
 
   useEffect(() => {
@@ -1622,7 +1644,12 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     accumulatedTranscriptRef.current = "";
     setVoiceInputText("");
 
-    if (blob.size < 100 && recognizedText) {
+    if (blob.size < 200 && !recognizedText) {
+      setVoiceLoading(false);
+      return;
+    }
+
+    if (blob.size < 200 && recognizedText) {
       await executeVoiceDialogueRequest({ text: recognizedText });
       return;
     }
