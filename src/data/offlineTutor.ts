@@ -269,17 +269,68 @@ Drop your translations below when ready! ⚡`;
       replyText = `${timeGreetingPrefix}That is so cool! 🎸 I love spending free time on fun activities too. How did you get into that? Tell me more!${correction}`;
     }
   } 
-  // 7. General conversational / Russian questions
+  // 7. Dynamic conversational / Russian questions handler
   else {
     wordToAdd = { en: "cozy", ru: "уютный", pos: "adjective", topic: "general" };
     const isRussian = /[а-яА-Я]/i.test(msg);
-    if (isRussian) {
+    const hasNameArina = msg.includes("арина") || msg.includes("arina") || msg.includes("меня зовут");
+    
+    if (hasNameArina) {
+      wordToAdd = { en: "delighted", ru: "очень рад(а)", pos: "adjective", topic: "general" };
       if (role === "sophia") {
-        replyText = `${timeGreetingPrefix}Понимаю тебя! I understand you well. Давай попробуем написать несколько фраз на английском? For example, tell me: how is your day going today? 😊`;
+        replyText = `${timeGreetingPrefix}Nice to meet you, Arina! 🌸 Рада знакомству! How are you feeling today, and what are you planning to do?`;
       } else if (role === "oliver") {
-        replyText = `${timeGreetingPrefix}I understand your query. Let's practice expressing this concept in English. Could you describe your current routine in a simple English sentence?`;
+        replyText = `${timeGreetingPrefix}Pleased to make your acquaintance, Arina. Good enunciation. Let's maintain this structured approach to our lessons.`;
       } else {
-        replyText = `${timeGreetingPrefix}Got it! ⚡ Let's practice some English together. Tell me in English: what are you up to right now?`;
+        replyText = `${timeGreetingPrefix}Hey Arina! ⚡ Super cool to meet you! How's your day going in your city?`;
+      }
+    } else if (isRussian) {
+      if (msg.includes("как дела") || msg.includes("как ты") || msg.includes("как жизнь")) {
+        if (role === "sophia") {
+          replyText = `${timeGreetingPrefix}У меня всё замечательно, спасибо! I'm doing great, thank you! How are you doing today? What's new with you? 😊`;
+        } else if (role === "oliver") {
+          replyText = `${timeGreetingPrefix}I am functioning efficiently, thank you. Let me ask you in English: how is your day progressing?`;
+        } else {
+          replyText = `${timeGreetingPrefix}I'm feeling awesome! 🚀 Thanks for asking, my friend! How about you? What are you up to today?`;
+        }
+      } else if (msg.includes("что делаешь") || msg.includes("чем занимаешься")) {
+        if (role === "sophia") {
+          replyText = `${timeGreetingPrefix}Я с радостью помогаю тебе учить английский! I'm here helping you practice English! What are you working on right now? 🌸`;
+        } else if (role === "oliver") {
+          replyText = `${timeGreetingPrefix}I am evaluating your speech and grammar patterns. Tell me in English: what is your primary task today?`;
+        } else {
+          replyText = `${timeGreetingPrefix}Just hanging out and chatting with you! 🎧 What fun things are you doing today?`;
+        }
+      } else if (msg.includes("почему") || msg.includes("зачем") || msg.includes("как сказать") || msg.includes("объясни") || msg.includes("правило")) {
+        if (role === "sophia") {
+          replyText = `${timeGreetingPrefix}Отличный вопрос! 💡 В английском языке это зависит от контекста. Например, когда мы говорим о действиях, происходящих прямо сейчас, мы используем Present Continuous (*I am speaking*), а для регулярных привычек — Present Simple (*I speak*). Попробуешь применить в предложении?`;
+        } else if (role === "oliver") {
+          replyText = `${timeGreetingPrefix}Let's analyze this grammatical concept strictly. In English, structure determines meaning. Please formulate your question using clear English terms.`;
+        } else {
+          replyText = `${timeGreetingPrefix}Great question! ⚡ Here's the deal: English likes simple rules. Keep subject + verb + object! Try writing a short example in English!`;
+        }
+      } else {
+        // Varied general Russian responses so it never repeats the exact same string
+        const sophiaVariants = [
+          `${timeGreetingPrefix}Понимаю тебя! I understand what you mean. 🌸 Tell me a little bit more about that in English! How do you feel about it?`,
+          `${timeGreetingPrefix}Замечательно! That is very interesting. 😊 How would you say that in simple English? Try one short sentence!`,
+          `${timeGreetingPrefix}Спасибо, что поделилась! I'm glad you mentioned it. 🌟 What else would you like to discuss today?`
+        ];
+        const oliverVariants = [
+          `${timeGreetingPrefix}I understand your point. Let's translate that concept into clear English. How would you structure this sentence?`,
+          `${timeGreetingPrefix}Noted. Let's refine your English phrasing. Try expressing this idea with correct grammar.`,
+          `${timeGreetingPrefix}Understood. Continuous practice improves precision. What specific aspect of English shall we focus on next?`
+        ];
+        const alexVariants = [
+          `${timeGreetingPrefix}Got it, my friend! ⚡ That's awesome. Tell me in English: what's the most exciting thing about that?`,
+          `${timeGreetingPrefix}Cool! I hear ya! 🎧 Let me ask you: how are you feeling about your English progress today?`,
+          `${timeGreetingPrefix}Nice! Let's keep the vibe going! 🔥 What's next on your mind today?`
+        ];
+
+        const salt = Math.abs(msg.length + (msg.charCodeAt(0) || 0)) % 3;
+        if (role === "sophia") replyText = sophiaVariants[salt];
+        else if (role === "oliver") replyText = oliverVariants[salt];
+        else replyText = alexVariants[salt];
       }
     } else {
       if (role === "sophia") {

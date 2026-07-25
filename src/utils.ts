@@ -96,6 +96,16 @@ export function getCurrentWeekKey(): string {
 export function getApiUrl(path: string): string {
   const cleanPath = path.startsWith("/") ? path : `/${path}`;
 
+  if (typeof window !== "undefined") {
+    const savedBackend = localStorage.getItem("custom_backend_url");
+    if (savedBackend && savedBackend.trim()) {
+      return `${savedBackend.trim().replace(/\/+$/, "")}${cleanPath}`;
+    }
+    if ((window as any).__CUSTOM_BACKEND_URL__) {
+      return `${String((window as any).__CUSTOM_BACKEND_URL__).trim().replace(/\/+$/, "")}${cleanPath}`;
+    }
+  }
+
   // 1. Если задан VITE_BACKEND_URL через переменные окружения, используем его
   const customBackend = import.meta.env.VITE_BACKEND_URL;
   if (customBackend && typeof customBackend === "string" && customBackend.trim().length > 0) {

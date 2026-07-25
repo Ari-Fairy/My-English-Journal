@@ -1,10 +1,8 @@
 import express from "express";
 import path from "path";
-import { createServer as createViteServer } from "vite";
 import { GoogleGenAI, Type, ThinkingLevel, Modality } from "@google/genai";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
-import { WebSocketServer } from "ws";
 import { staticQuestions, staticWritingPrompts, staticSpeakingPrompts } from "./src/data/levelTestDb";
 
 dotenv.config();
@@ -29,12 +27,13 @@ app.use(express.json({ limit: "10mb" }));
 
 // Lazy initializer for Google Gen AI client
 let aiClient: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI {
+function getAIClient(): GoogleGenAI | null {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    console.warn("[Gemini API] GEMINI_API_KEY environment variable is not defined server-side.");
+    return null;
+  }
   if (!aiClient) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY environment variable is required server-side.");
-    }
     aiClient = new GoogleGenAI({ apiKey });
   }
   return aiClient;
@@ -116,6 +115,9 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T)
 async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string } = {}): Promise<any> {
   const { maxRetries = 3, fallbackModel = "gemini-2.5-flash" } = options;
   const ai = getAIClient();
+  if (!ai) {
+    throw new Error("GEMINI_API_KEY environment variable is not configured server-side.");
+  }
   let lastError: any = null;
   let currentDelay = 500;
 
@@ -2594,11 +2596,16 @@ app.post("/api/ai-tts", async (req, res) => {
   try {
     const { text, role = "sophia" } = req.body || {};
     if (!text || typeof text !== "string" || !text.trim()) {
-      res.status(400).json({ error: "Missing text to synthesize" });
+      res.status(200).json({ audio: null, error: "Missing text to synthesize" });
       return;
     }
 
     const ai = getAIClient();
+    if (!ai) {
+      res.status(200).json({ audio: null, error: "GEMINI_API_KEY is not configured on server" });
+      return;
+    }
+
     const voiceNames: { [key: string]: string } = {
       sophia: "Kore",
       oliver: "Charon",
@@ -2636,13 +2643,13 @@ app.post("/api/ai-tts", async (req, res) => {
 
     const speechResponse = await withTimeout(speechPromise, 15000, null);
     if (!speechResponse) {
-      res.status(500).json({ error: "TTS timed out" });
+      res.status(200).json({ audio: null, error: "TTS timed out" });
       return;
     }
 
     const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
     if (!rawData) {
-      res.status(500).json({ error: "No audio generated" });
+      res.status(200).json({ audio: null, error: "No audio generated" });
       return;
     }
 
@@ -2650,7 +2657,7 @@ app.post("/api/ai-tts", async (req, res) => {
     res.json({ audio: wavBase64 });
   } catch (err: any) {
     console.error("[TTS Endpoint Error]", err);
-    res.status(500).json({ error: err?.message || "Failed to synthesize speech" });
+    res.status(200).json({ audio: null, error: err?.message || "Failed to synthesize speech" });
   }
 });
 
@@ -2660,6 +2667,7 @@ app.post("/api/ai-tts", async (req, res) => {
 async function startServer() {
   if (process.env.NODE_ENV !== "production") {
     // Development mode
+    const { createServer: createViteServer } = await import("vite");
     const vite = await createViteServer({
       server: { middlewareMode: true },
       appType: "spa",
@@ -2681,6 +2689,7 @@ async function startServer() {
   });
 
   // Setup WebSocket Server for Live API Voice Practice
+  const { WebSocketServer } = await import("ws");
   const wss = new WebSocketServer({ server });
   
   wss.on("connection", async (clientWs, req) => {
