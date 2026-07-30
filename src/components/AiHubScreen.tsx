@@ -685,10 +685,20 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         }
       }
       const res = await fetch(getApiUrl("/api/health"), { headers });
+      if (!res.ok) {
+        const errText = await res.text();
+        throw new Error(`Сервер ответил со статусом ${res.status}`);
+      }
       const data = await res.json();
       setServerHealthStatus(data);
     } catch (e: any) {
-      setServerHealthStatus({ status: "error", message: e?.message || "Failed to connect to server" });
+      console.warn("checkServerHealth failed:", e);
+      setServerHealthStatus({
+        status: "error",
+        hasGeminiKey: false,
+        source: "error",
+        message: e?.message || "Ошибка подключения к серверу"
+      });
     } finally {
       setCheckingHealth(false);
     }
@@ -4986,18 +4996,32 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               {checkingHealth ? (
                 <div style={{ fontSize: 13, color: "#8fa080", fontWeight: 600 }}>⏳ Проверка подключения...</div>
               ) : serverHealthStatus ? (
-                <div>
-                  <div style={{ fontSize: 13.5, fontWeight: 700, color: serverHealthStatus.hasGeminiKey ? "#2e7d32" : "#c62828" }}>
-                    {serverHealthStatus.source === "custom_header"
-                      ? "✅ Ваш персональный ключ Gemini API активен и передается!"
-                      : serverHealthStatus.hasGeminiKey
-                      ? "✅ Ключ Gemini API найден и активен на сервере"
-                      : "⚠️ Ключ Gemini API отсутствует"}
+                serverHealthStatus.status === "error" ? (
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: "#c62828" }}>
+                      ⚠️ Ошибка подключения: {serverHealthStatus.message || "Не удалось связаться с сервером"}
+                    </div>
+                    <button
+                      onClick={() => checkServerHealth()}
+                      style={{ marginTop: 8, background: "#8fa080", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                    >
+                      Повторить проверку
+                    </button>
                   </div>
-                  <div style={{ fontSize: 11.5, color: "#6b6861", marginTop: 4 }}>
-                    Источник: {serverHealthStatus.source === "custom_header" ? "Персональный ключ" : serverHealthStatus.source === "env_var" ? "Vercel / Сервер" : "Встроенный ключ"} | Длина: {serverHealthStatus.keyLength || 0} символов
+                ) : (
+                  <div>
+                    <div style={{ fontSize: 13.5, fontWeight: 700, color: serverHealthStatus.hasGeminiKey ? "#2e7d32" : "#c62828" }}>
+                      {serverHealthStatus.source === "custom_header"
+                        ? "✅ Ваш персональный ключ Gemini API активен!"
+                        : serverHealthStatus.hasGeminiKey
+                        ? "✅ Ключ Gemini API найден и активен!"
+                        : "⚠️ Ключ Gemini API отсутствует"}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: "#6b6861", marginTop: 4 }}>
+                      Источник: {serverHealthStatus.source === "custom_header" ? "Персональный ключ" : serverHealthStatus.source === "env_var" ? "Vercel / Сервер" : "Встроенный ключ"} | Длина: {serverHealthStatus.keyLength || 0} символов
+                    </div>
                   </div>
-                </div>
+                )
               ) : (
                 <button
                   onClick={() => checkServerHealth()}
@@ -5049,14 +5073,18 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               )}
               <button
                 onClick={() => {
-                  if (customKeyInput.trim()) {
-                    const cleanKey = customKeyInput.trim();
+                  const cleanKey = customKeyInput.trim();
+                  if (cleanKey) {
+                    if (cleanKey.length < 10) {
+                      setToastMessage("⚠️ Ключ слишком короткий! Проверьте формат");
+                      return;
+                    }
                     localStorage.setItem("user_gemini_api_key", cleanKey);
                     setToastMessage("Свой ключ Gemini успешно сохранен! 🎉");
                     checkServerHealth(cleanKey);
                   } else {
                     localStorage.removeItem("user_gemini_api_key");
-                    setToastMessage("Используется ключ с сервера");
+                    setToastMessage("Поле пустое. Используется ключ с сервера");
                     checkServerHealth("");
                   }
                 }}
