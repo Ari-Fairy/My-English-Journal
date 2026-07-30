@@ -3,7 +3,7 @@ import path from "path";
 import { GoogleGenAI, Type, ThinkingLevel, Modality } from "@google/genai";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
-import { staticQuestions, staticWritingPrompts, staticSpeakingPrompts } from "./src/data/levelTestDb";
+import { staticQuestions, staticWritingPrompts, staticSpeakingPrompts } from "./src/data/levelTestDb.js";
 
 dotenv.config();
 
@@ -15,79 +15,26 @@ app.use((req, res, next) => {
   try {
     let rawUrl = req.url || "/";
     const urlPath = rawUrl.split("?")[0];
-    let extractedPath = "";
+    const queryPart = rawUrl.includes("?") ? "?" + rawUrl.split("?").slice(1).join("?") : "";
 
-    // 1. Check req.query path/url
-    if (req.query && (req.query.path || req.query.url)) {
-      const q = req.query.path || req.query.url;
-      if (typeof q === "string" && q.trim().length > 0) {
-        extractedPath = q.trim();
-      } else if (Array.isArray(q) && q.length > 0) {
-        extractedPath = "/" + q.join("/");
-      }
-    }
+    let targetPath = urlPath;
 
-    // 2. Fallback: Parse query string manually if req.query was not populated yet
-    if (!extractedPath && rawUrl.includes("?")) {
-      try {
-        const queryPart = rawUrl.split("?").slice(1).join("?");
-        const searchParams = new URLSearchParams(queryPart);
-        const p = searchParams.get("path") || searchParams.get("url");
-        if (p) extractedPath = p;
-      } catch (e) {}
-    }
-
-    // 3. Fallback to headers
-    if (!extractedPath) {
+    // Check headers if targetPath is index
+    if (targetPath.includes("index.ts") || targetPath.includes("index.js") || targetPath === "/api" || targetPath === "/api/") {
       const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
-      if (fwd && fwd.startsWith("/api")) {
-        extractedPath = fwd.split("?")[0];
+      if (fwd && fwd.startsWith("/api") && !fwd.includes("index")) {
+        targetPath = fwd.split("?")[0];
+      } else {
+        targetPath = "/api/health";
       }
     }
 
-    // 4. Fallback to urlPath
-    if (!extractedPath) {
-      extractedPath = urlPath;
-    }
-
-    let targetPath = extractedPath;
     if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
+    if (!targetPath.startsWith("/api")) targetPath = "/api" + targetPath;
 
-    // Clean duplicate /api/api/ and /api/index
     targetPath = targetPath.replace(/^\/api\/api\//, "/api/");
-    targetPath = targetPath.replace(/^\/api\/index(\.ts|\.js)?/, "/api");
 
-    // Normalize path if missing /api prefix for known API routes
-    const apiRouteNames = [
-      "/health", "/ai-chat", "/ai-tts", "/ai-voice-chat", "/ai-extract-vocabulary", 
-      "/ai-analyze-image", "/generate-level-test", "/grade-level-test", "/ai-voice-topic",
-      "/translate", "/ocr", "/classify", "/generate-story", "/generate-quiz", "/send-test-email"
-    ];
-    for (const routeName of apiRouteNames) {
-      if (targetPath.startsWith(routeName)) {
-        targetPath = "/api" + targetPath;
-        break;
-      }
-    }
-
-    if (targetPath === "/api" || targetPath === "/api/") {
-      targetPath = "/api/health";
-    }
-
-    // Clean query parameters so path and url aren't repeated
-    let cleanQueryStr = "";
-    if (rawUrl.includes("?")) {
-      try {
-        const queryPart = rawUrl.split("?").slice(1).join("?");
-        const searchParams = new URLSearchParams(queryPart);
-        searchParams.delete("path");
-        searchParams.delete("url");
-        const s = searchParams.toString();
-        if (s) cleanQueryStr = "?" + s;
-      } catch (e) {}
-    }
-
-    const finalUrl = targetPath + cleanQueryStr;
+    const finalUrl = targetPath + queryPart;
     if (req.url !== finalUrl) {
       req.url = finalUrl;
     }

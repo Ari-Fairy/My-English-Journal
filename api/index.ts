@@ -1,23 +1,14 @@
-import app from "../server";
+import app from "../server.js";
 
 export default function handler(req: any, res: any) {
   try {
     let rawUrl = req.url || "/";
     let pathname = rawUrl.split("?")[0];
-    
-    // Extract query param path or url if passed by Vercel rewrite
-    let queryPath = "";
-    if (rawUrl.includes("?")) {
-      try {
-        const queryStr = rawUrl.split("?").slice(1).join("?");
-        const params = new URLSearchParams(queryStr);
-        queryPath = params.get("path") || params.get("url") || "";
-      } catch (e) {}
-    }
+    const queryStr = rawUrl.includes("?") ? "?" + rawUrl.split("?").slice(1).join("?") : "";
 
-    let targetPath = queryPath || pathname;
+    let targetPath = pathname;
 
-    // Check headers x-forwarded-uri or x-original-url if targetPath is generic /api/index.ts
+    // Fallback to headers if Vercel invoked /api/index directly
     if (targetPath.includes("index.ts") || targetPath.includes("index.js") || targetPath === "/api" || targetPath === "/api/") {
       const fwd = (req.headers?.["x-forwarded-uri"] || req.headers?.["x-original-url"] || req.headers?.["x-matched-path"]) as string;
       if (fwd && fwd.startsWith("/api") && !fwd.includes("index")) {
@@ -29,26 +20,10 @@ export default function handler(req: any, res: any) {
 
     if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
     if (!targetPath.startsWith("/api")) targetPath = "/api" + targetPath;
-
-    // Clean duplicate /api/api/
     targetPath = targetPath.replace(/^\/api\/api\//, "/api/");
 
-    // Clean path and url search params from query
-    let cleanQueryStr = "";
-    if (rawUrl.includes("?")) {
-      try {
-        const queryStr = rawUrl.split("?").slice(1).join("?");
-        const params = new URLSearchParams(queryStr);
-        params.delete("path");
-        params.delete("url");
-        const s = params.toString();
-        if (s) cleanQueryStr = "?" + s;
-      } catch (e) {}
-    }
+    const finalUrl = targetPath + queryStr;
 
-    const finalUrl = targetPath + cleanQueryStr;
-
-    // Set req.url and clear Express cached route properties
     req.url = finalUrl;
     req.originalUrl = finalUrl;
     delete (req as any)._parsedUrl;
@@ -77,5 +52,6 @@ export default function handler(req: any, res: any) {
     }
   }
 }
+
 
 
