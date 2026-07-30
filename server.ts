@@ -46,11 +46,21 @@ app.use((req, res, next) => {
 // Set up JSON body parser with increased limit to handle base64 images
 app.use(express.json({ limit: "10mb" }));
 
-// Flexible initializer for Google Gen AI client with fallback to request header/body or process.env
+// Embedded default Gemini API Key as server fallback if host environment variables are not loaded
+const EMBEDDED_GEMINI_KEY = "AIzaSyCA_svzuAGTWWRYctsp3Q-IlsDDtNY7naI";
+
+// Flexible initializer for Google Gen AI client with fallback to request header/body, process.env, or embedded key
 function getAIClient(req?: express.Request): GoogleGenAI | null {
-  const customHeader = (req?.headers?.["x-gemini-api-key"] as string) || "";
+  const customHeader = (req?.headers?.["x-gemini-api-key"] as string) || (req?.headers?.["X-Gemini-API-Key"] as string) || "";
   const customBody = (req?.body?.customApiKey as string) || "";
-  const apiKey = (customHeader || customBody || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
+  const apiKey = (
+    customHeader || 
+    customBody || 
+    process.env.GEMINI_API_KEY || 
+    process.env.VITE_GEMINI_API_KEY || 
+    EMBEDDED_GEMINI_KEY
+  ).trim();
+
   if (!apiKey) {
     console.warn("[Gemini API] GEMINI_API_KEY environment variable is not defined server-side.");
     return null;
@@ -103,11 +113,19 @@ function convertPcmToWav(base64Pcm: string, sampleRate: number = 24000): string 
 
 // API Routes
 app.get("/api/health", (req, res) => {
-  const apiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
+  const customHeader = (req.headers["x-gemini-api-key"] as string) || (req.headers["X-Gemini-API-Key"] as string) || "";
+  const apiKey = (
+    customHeader ||
+    process.env.GEMINI_API_KEY || 
+    process.env.VITE_GEMINI_API_KEY || 
+    EMBEDDED_GEMINI_KEY
+  ).trim();
+
   res.json({
     status: "ok",
     hasGeminiKey: !!apiKey,
     keyLength: apiKey.length,
+    source: customHeader ? "custom_header" : (process.env.GEMINI_API_KEY ? "env_var" : "embedded_code"),
     nodeEnv: process.env.NODE_ENV || "development"
   });
 });
@@ -1765,7 +1783,7 @@ Return STRICTLY a JSON array of objects following this structure:
   { "en": "accomplish", "ru": "выполнять, совершать", "pos": "verb", "topic": "work", "note": "To achieve or complete successfully." }
 ]`;
 
-    const ai = getAIClient();
+    const ai = getAIClient(req);
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash",
       contents: prompt,
@@ -1827,7 +1845,7 @@ app.post("/api/ai-analyze-image", async (req, res) => {
 
 Return the result as a JSON object matching the requested schema.`;
 
-    const ai = getAIClient();
+    const ai = getAIClient(req);
     const response = await ai.models.generateContent({
       model: "gemini-2.5-flash", // Use highly-available Flash model for image scanning!
       contents: [
@@ -2526,7 +2544,7 @@ Return strictly a JSON object containing:
 - 'topicTitle': a short 2-3 word title of the news/topic (in English).
 - 'sourceUrl': the URL from search grounding if found.`;
 
-    const ai = getAIClient();
+    const ai = getAIClient(req);
     let response;
     try {
       response = await generateContentWithRetry({
