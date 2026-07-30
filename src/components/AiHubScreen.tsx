@@ -1189,19 +1189,22 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ text, role: tutor })
       });
-      const data = await response.json();
-      if (data.audio) {
-        const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
-        currentAudioRef.current = audio;
-        audio.onended = () => {
-          setIsSpeechPlaying(false);
-          if (onEnd) onEnd();
-        };
-        audio.onerror = () => {
-          fallbackBrowserSpeak(text, onEnd);
-        };
-        await audio.play();
-        return;
+      if (response.ok) {
+        let data: any = null;
+        try { data = await response.json(); } catch (e) {}
+        if (data && data.audio) {
+          const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
+          currentAudioRef.current = audio;
+          audio.onended = () => {
+            setIsSpeechPlaying(false);
+            if (onEnd) onEnd();
+          };
+          audio.onerror = () => {
+            fallbackBrowserSpeak(text, onEnd);
+          };
+          await audio.play();
+          return;
+        }
       }
     } catch (e) {
       console.warn("[Studio TTS] API call failed, using fallback synthesizer:", e);

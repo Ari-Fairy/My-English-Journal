@@ -4,6 +4,7 @@ import { GoogleGenAI, Type, ThinkingLevel, Modality } from "@google/genai";
 import dotenv from "dotenv";
 import nodemailer from "nodemailer";
 import { staticQuestions, staticWritingPrompts, staticSpeakingPrompts } from "./src/data/levelTestDb";
+import { getOfflineChatTutorReply } from "./src/data/offlineTutor";
 
 dotenv.config();
 
