@@ -12,48 +12,38 @@ export const app = express();
 
 // Custom request path restoration and CORS middleware for Vercel / serverless deployments
 app.use((req, res, next) => {
-  // 1. Restore original request path on Vercel
   try {
-    const queryPath = (req.query?.path || req.query?.url) as string;
-    if (queryPath) {
-      req.url = queryPath.startsWith("/") ? queryPath : "/" + queryPath;
-    } else {
-      const forwardedUri = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
-      if (forwardedUri && !forwardedUri.includes("index.ts") && !forwardedUri.includes("index.js") && !forwardedUri.includes("[...path]")) {
-        req.url = forwardedUri;
-      } else if (req.url.includes("index.ts") || req.url.includes("index.js") || req.url.startsWith("/api/index")) {
-        const parsedUrl = new URL(req.url, "http://localhost");
-        const pathParam = parsedUrl.searchParams.get("path") || parsedUrl.searchParams.get("url");
-        if (pathParam) {
-          req.url = pathParam.startsWith("/") ? pathParam : "/" + pathParam;
-        }
+    const rawUrl = req.url || "/";
+    const parsedUrl = new URL(rawUrl, "http://localhost");
+    const pathParam = parsedUrl.searchParams.get("path") || parsedUrl.searchParams.get("url");
+
+    if (pathParam) {
+      req.url = pathParam.startsWith("/") ? pathParam : "/" + pathParam;
+    } else if (rawUrl.includes("index.ts") || rawUrl.includes("index.js") || rawUrl.startsWith("/api/index")) {
+      req.url = rawUrl.replace(/^\/api\/index(\.ts|\.js)?/, "/api") || "/";
+    }
+
+    if (req.url.startsWith("/api/api/")) {
+      req.url = req.url.replace(/^\/api\/api\//, "/api/");
+    }
+
+    // Normalize path if missing /api prefix for known API routes
+    const apiRouteNames = [
+      "/health", "/ai-chat", "/ai-tts", "/ai-voice-chat", "/ai-extract-vocabulary", 
+      "/ai-analyze-image", "/generate-level-test", "/grade-level-test", "/ai-voice-topic",
+      "/translate", "/ocr", "/classify", "/generate-story", "/generate-quiz", "/send-test-email"
+    ];
+    for (const routeName of apiRouteNames) {
+      if (req.url.startsWith(routeName)) {
+        req.url = "/api" + req.url;
+        break;
       }
     }
   } catch (e) {
     console.error("[Path Rewrite Error]", e);
   }
 
-  // 2. Clean up any duplicated /api/api or /api/index prefix
-  if (req.url.startsWith("/api/api/")) {
-    req.url = req.url.replace(/^\/api\/api\//, "/api/");
-  } else if (req.url.startsWith("/api/index.ts") || req.url.startsWith("/api/index.js")) {
-    req.url = req.url.replace(/^\/api\/index(\.ts|\.js)?/, "") || "/";
-  }
-
-  // Normalize path if missing /api prefix for known API routes
-  const apiRouteNames = [
-    "/health", "/ai-chat", "/ai-tts", "/ai-voice-chat", "/ai-extract-vocabulary", 
-    "/ai-analyze-image", "/generate-level-test", "/grade-level-test", "/ai-voice-topic",
-    "/translate", "/ocr", "/classify", "/generate-story", "/generate-quiz", "/send-test-email"
-  ];
-  for (const routeName of apiRouteNames) {
-    if (req.url.startsWith(routeName)) {
-      req.url = "/api" + req.url;
-      break;
-    }
-  }
-
-  // 3. Set CORS headers
+  // Set CORS headers
   res.header("Access-Control-Allow-Origin", "*");
   res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Gemini-API-Key, x-gemini-api-key");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
@@ -72,17 +62,24 @@ const EMBEDDED_GEMINI_KEY = "AIzaSyCA_svzuAGTWWRYctsp3Q-IlsDDtNY7naI";
 
 // Flexible initializer for Google Gen AI client with fallback to request header/body, process.env, or embedded key
 function getAIClient(req?: express.Request): GoogleGenAI | null {
-  const customHeader = (req?.headers?.["x-gemini-api-key"] as string) || (req?.headers?.["X-Gemini-API-Key"] as string) || "";
-  const customBody = (req?.body?.customApiKey as string) || "";
-  const customQuery = (req?.query?.customApiKey as string) || (req?.query?.apiKey as string) || "";
-  const apiKey = (
-    customHeader || 
-    customBody || 
-    customQuery ||
-    process.env.GEMINI_API_KEY || 
-    process.env.VITE_GEMINI_API_KEY || 
-    EMBEDDED_GEMINI_KEY
-  ).trim();
+  let customHeader = "";
+  if (req?.headers) {
+    const h = req.headers["x-gemini-api-key"] || req.headers["X-Gemini-API-Key"];
+    if (typeof h === "string") customHeader = h;
+    else if (Array.isArray(h) && h.length > 0) customHeader = String(h[0]);
+  }
+  let customBody = "";
+  if (req?.body?.customApiKey) {
+    customBody = String(req.body.customApiKey);
+  }
+  let customQuery = "";
+  if (req?.query) {
+    const q = req.query.customApiKey || req.query.apiKey;
+    if (q) customQuery = String(q);
+  }
+
+  const rawKey = customHeader || customBody || customQuery || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || EMBEDDED_GEMINI_KEY || "";
+  const apiKey = String(rawKey).trim();
 
   if (!apiKey) {
     console.warn("[Gemini API] GEMINI_API_KEY environment variable is not defined server-side.");
@@ -136,21 +133,39 @@ function convertPcmToWav(base64Pcm: string, sampleRate: number = 24000): string 
 
 // API Routes
 app.get(["/api/health", "/health"], (req, res) => {
-  const customHeader = (req.headers["x-gemini-api-key"] as string) || (req.headers["X-Gemini-API-Key"] as string) || (req.query?.customApiKey as string) || (req.query?.apiKey as string) || "";
-  const apiKey = (
-    customHeader ||
-    process.env.GEMINI_API_KEY || 
-    process.env.VITE_GEMINI_API_KEY || 
-    EMBEDDED_GEMINI_KEY
-  ).trim();
+  try {
+    let customHeader = "";
+    if (req?.headers) {
+      const h = req.headers["x-gemini-api-key"] || req.headers["X-Gemini-API-Key"];
+      if (typeof h === "string") customHeader = h;
+      else if (Array.isArray(h) && h.length > 0) customHeader = String(h[0]);
+    }
+    let customQuery = "";
+    if (req?.query) {
+      const q = req.query.customApiKey || req.query.apiKey;
+      if (q) customQuery = String(q);
+    }
 
-  res.json({
-    status: "ok",
-    hasGeminiKey: !!apiKey,
-    keyLength: apiKey.length,
-    source: customHeader ? "custom_header" : (process.env.GEMINI_API_KEY ? "env_var" : "embedded_code"),
-    nodeEnv: process.env.NODE_ENV || "development"
-  });
+    const rawKey = customHeader || customQuery || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || EMBEDDED_GEMINI_KEY || "";
+    const apiKey = String(rawKey).trim();
+
+    const source = customHeader
+      ? "custom_header"
+      : process.env.GEMINI_API_KEY
+      ? "env_var"
+      : "embedded_code";
+
+    res.json({
+      status: "ok",
+      hasGeminiKey: !!apiKey,
+      keyLength: apiKey.length,
+      source,
+      nodeEnv: process.env.NODE_ENV || "development"
+    });
+  } catch (err: any) {
+    console.error("[Health Check Error]", err);
+    res.status(500).json({ error: err?.message || "Health check failed" });
+  }
 });
 
 // Server-side translation memory cache
