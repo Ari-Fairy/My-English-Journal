@@ -1670,14 +1670,17 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       } catch (e) {}
     }
 
-    if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
-      try {
-        if (typeof mediaRecorderRef.current.requestData === "function") {
-          mediaRecorderRef.current.requestData();
-        }
-        mediaRecorderRef.current.stop();
-      } catch (e) {}
-    }
+    // Give SpeechRecognition a brief moment (300ms) to flush any final spoken words into accumulatedTranscriptRef
+    setTimeout(() => {
+      if (mediaRecorderRef.current && mediaRecorderRef.current.state !== "inactive") {
+        try {
+          if (typeof mediaRecorderRef.current.requestData === "function") {
+            mediaRecorderRef.current.requestData();
+          }
+          mediaRecorderRef.current.stop();
+        } catch (e) {}
+      }
+    }, 300);
   };
 
   const handleProcessSpokenAudio = async (blob: Blob) => {

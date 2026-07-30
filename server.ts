@@ -1540,6 +1540,12 @@ If the student asks how to say a word or phrase in English (e.g. "как буд�
 4. Ask a friendly, engaging follow-up question related to that word or topic.
 NEVER dodge or give generic off-topic filler when asked for a word translation!
 
+[VOCABULARY DICTATION & EXERCISE RULE - CRITICAL]:
+If the student asks for a vocabulary dictation, word check, or translation exercise (e.g. "проведем словарный диктант", "назови слова из словаря", "диктант слов", "проверь мои слова"):
+1. Accept eagerly! Call out that you're excited to practice.
+2. Give them the first 3-5 words in English (or Russian) immediately for them to translate in their next message.
+3. NEVER respond with generic questions about their day or off-topic conversational filler when asked for a dictation or exercise!
+
 [EXPLANATIONS & FORMATTING RULE - EXTREMELY CRITICAL]:
 If the student asks you to explain a grammar rule, a vocabulary word, a difference between words (such as "little" vs "a little", "few" vs "a few", prepositions, tenses, etc.), or asks a question about how English works:
 - You MUST provide the FULL, DETAILED, COMPLETE EXPLANATION directly and immediately in your response!
@@ -1876,10 +1882,10 @@ app.post("/api/ai-tts", async (req, res) => {
       }
     }
 
-    res.status(500).json({ error: "TTS audio generation failed" });
+    res.json({ audio: null, fallback: true });
   } catch (error: any) {
-    console.warn("[/api/ai-tts Error]:", error?.message || error);
-    res.status(500).json({ error: error?.message || "TTS synthesis failed" });
+    console.warn("[/api/ai-tts Warning]:", error?.message || error);
+    res.json({ audio: null, fallback: true });
   }
 });
 

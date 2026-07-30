@@ -127,6 +127,23 @@ export function getOfflineChatTutorReply(
     }
   }
 
+  // Dictation / Vocabulary check query detection (e.g. "словарный диктант", "проведи диктант")
+  if (msg.includes("диктант") || msg.includes("словарный") || msg.includes("диктант слов")) {
+    let replyText = "";
+    if (role === "sophia") {
+      replyText = `Отличная идея! С удовольствием проведу словарный диктант! 📚✨\n\nВот первые 5 слов для проверки, переведи их на английский:\n1. **Солнце**\n2. **Семья**\n3. **Время**\n4. **Мечта**\n5. **Быстро**\n\nНапиши переводы в ответ, а я с любовью проверю каждый! 🌸`;
+    } else if (role === "oliver") {
+      replyText = `Принято. Начинаем словарный диктант. Переведите следующие 5 слов на английский язык:\n1. **Солнце**\n2. **Семья**\n3. **Время**\n4. **Мечта**\n5. **Быстро**\n\nСоблюдайте точность написания и орфографию.`;
+    } else {
+      replyText = `Yo! Let me test your vocab! 🔥 Вот 5 слов для диктанта:\n1. **Солнце**\n2. **Семья**\n3. **Время**\n4. **Мечта**\n5. **Быстро**\n\nDrop your translations when you're ready! ⚡`;
+    }
+    return {
+      replyText,
+      evaluatedLevel: userLevel,
+      wordToAdd: { en: "dictation", ru: "диктант", pos: "noun", topic: "study" }
+    };
+  }
+
   // Basic grammar corrections
   let correction = "";
   if (msg.includes("i am agree") || msg.includes("i'm agree")) {
