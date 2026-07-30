@@ -673,10 +673,18 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const [serverHealthStatus, setServerHealthStatus] = useState<any>(null);
   const [checkingHealth, setCheckingHealth] = useState(false);
 
-  const checkServerHealth = async () => {
+  const checkServerHealth = async (overrideKey?: string) => {
     setCheckingHealth(true);
     try {
-      const res = await fetch(getApiUrl("/api/health"));
+      const headers = getApiHeaders();
+      if (typeof overrideKey === "string") {
+        if (overrideKey.trim()) {
+          headers["X-Gemini-API-Key"] = overrideKey.trim();
+        } else {
+          delete headers["X-Gemini-API-Key"];
+        }
+      }
+      const res = await fetch(getApiUrl("/api/health"), { headers });
       const data = await res.json();
       setServerHealthStatus(data);
     } catch (e: any) {
@@ -1206,7 +1214,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     try {
       const response = await fetch(getApiUrl("/api/ai-tts"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ text, role: tutor })
       });
       if (response.ok) {
@@ -4059,7 +4067,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                   try {
                     const response = await fetch(getApiUrl("/api/ai-voice-topic"), {
                       method: "POST",
-                      headers: { "Content-Type": "application/json" },
+                      headers: getApiHeaders(),
                       body: JSON.stringify({ role: tutor, userLevel: getCurrentTutorLevel(tutor) })
                     });
                     if (!response.ok) throw new Error("Failed to generate topic");
@@ -4980,15 +4988,19 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               ) : serverHealthStatus ? (
                 <div>
                   <div style={{ fontSize: 13.5, fontWeight: 700, color: serverHealthStatus.hasGeminiKey ? "#2e7d32" : "#c62828" }}>
-                    {serverHealthStatus.hasGeminiKey ? "✅ Ключ Gemini API найден и активен на сервере" : "⚠️ Ключ Gemini API отсутствует на сервере"}
+                    {serverHealthStatus.source === "custom_header"
+                      ? "✅ Ваш персональный ключ Gemini API активен и передается!"
+                      : serverHealthStatus.hasGeminiKey
+                      ? "✅ Ключ Gemini API найден и активен на сервере"
+                      : "⚠️ Ключ Gemini API отсутствует"}
                   </div>
                   <div style={{ fontSize: 11.5, color: "#6b6861", marginTop: 4 }}>
-                    Окружение: {serverHealthStatus.nodeEnv || "production"} | Длина ключа: {serverHealthStatus.keyLength || 0} символов
+                    Источник: {serverHealthStatus.source === "custom_header" ? "Персональный ключ" : serverHealthStatus.source === "env_var" ? "Vercel / Сервер" : "Встроенный ключ"} | Длина: {serverHealthStatus.keyLength || 0} символов
                   </div>
                 </div>
               ) : (
                 <button
-                  onClick={checkServerHealth}
+                  onClick={() => checkServerHealth()}
                   style={{ background: "#8fa080", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                 >
                   Проверить статус
@@ -5028,6 +5040,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                     localStorage.removeItem("user_gemini_api_key");
                     setCustomKeyInput("");
                     setToastMessage("Свой ключ удален");
+                    checkServerHealth("");
                   }}
                   style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #df6c6c", background: "#fff", color: "#df6c6c", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
                 >
@@ -5037,13 +5050,15 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
               <button
                 onClick={() => {
                   if (customKeyInput.trim()) {
-                    localStorage.setItem("user_gemini_api_key", customKeyInput.trim());
+                    const cleanKey = customKeyInput.trim();
+                    localStorage.setItem("user_gemini_api_key", cleanKey);
                     setToastMessage("Свой ключ Gemini успешно сохранен! 🎉");
+                    checkServerHealth(cleanKey);
                   } else {
                     localStorage.removeItem("user_gemini_api_key");
                     setToastMessage("Используется ключ с сервера");
+                    checkServerHealth("");
                   }
-                  setKeySettingsModalOpen(false);
                 }}
                 style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#8fa080", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
               >

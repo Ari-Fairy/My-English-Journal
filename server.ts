@@ -13,27 +13,49 @@ export const app = express();
 // Custom request path restoration and CORS middleware for Vercel / serverless deployments
 app.use((req, res, next) => {
   // 1. Restore original request path on Vercel
-  const forwardedUri = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
-  if (forwardedUri && !forwardedUri.includes("index.ts") && !forwardedUri.includes("index.js")) {
-    req.url = forwardedUri;
-  } else if (req.url.includes("index.ts") || req.url.includes("index.js") || req.url === "/api" || req.url === "/api/") {
-    try {
-      const parsedUrl = new URL(req.url, "http://localhost");
-      const pathParam = parsedUrl.searchParams.get("path") || parsedUrl.searchParams.get("url");
-      if (pathParam) {
-        req.url = pathParam.startsWith("/") ? pathParam : "/" + pathParam;
+  try {
+    const queryPath = (req.query?.path || req.query?.url) as string;
+    if (queryPath) {
+      req.url = queryPath.startsWith("/") ? queryPath : "/" + queryPath;
+    } else {
+      const forwardedUri = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
+      if (forwardedUri && !forwardedUri.includes("index.ts") && !forwardedUri.includes("index.js") && !forwardedUri.includes("[...path]")) {
+        req.url = forwardedUri;
+      } else if (req.url.includes("index.ts") || req.url.includes("index.js") || req.url.startsWith("/api/index")) {
+        const parsedUrl = new URL(req.url, "http://localhost");
+        const pathParam = parsedUrl.searchParams.get("path") || parsedUrl.searchParams.get("url");
+        if (pathParam) {
+          req.url = pathParam.startsWith("/") ? pathParam : "/" + pathParam;
+        }
       }
-    } catch (e) {}
+    }
+  } catch (e) {
+    console.error("[Path Rewrite Error]", e);
   }
 
-  // 2. Normalize path to start with /api if it's missing the prefix
-  if (req.url.startsWith("/ai-") || req.url.startsWith("/translate") || req.url.startsWith("/ocr") || req.url.startsWith("/classify") || req.url.startsWith("/generate-") || req.url.startsWith("/send-") || req.url.startsWith("/grade-")) {
-    req.url = "/api" + (req.url.startsWith("/") ? req.url : "/" + req.url);
+  // 2. Clean up any duplicated /api/api or /api/index prefix
+  if (req.url.startsWith("/api/api/")) {
+    req.url = req.url.replace(/^\/api\/api\//, "/api/");
+  } else if (req.url.startsWith("/api/index.ts") || req.url.startsWith("/api/index.js")) {
+    req.url = req.url.replace(/^\/api\/index(\.ts|\.js)?/, "") || "/";
+  }
+
+  // Normalize path if missing /api prefix for known API routes
+  const apiRouteNames = [
+    "/health", "/ai-chat", "/ai-tts", "/ai-voice-chat", "/ai-extract-vocabulary", 
+    "/ai-analyze-image", "/generate-level-test", "/grade-level-test", "/ai-voice-topic",
+    "/translate", "/ocr", "/classify", "/generate-story", "/generate-quiz", "/send-test-email"
+  ];
+  for (const routeName of apiRouteNames) {
+    if (req.url.startsWith(routeName)) {
+      req.url = "/api" + req.url;
+      break;
+    }
   }
 
   // 3. Set CORS headers
   res.header("Access-Control-Allow-Origin", "*");
-  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization");
+  res.header("Access-Control-Allow-Headers", "Origin, X-Requested-With, Content-Type, Accept, Authorization, X-Gemini-API-Key, x-gemini-api-key");
   res.header("Access-Control-Allow-Methods", "GET, POST, PUT, DELETE, OPTIONS");
   if (req.method === "OPTIONS") {
     res.sendStatus(200);
@@ -52,9 +74,11 @@ const EMBEDDED_GEMINI_KEY = "AIzaSyCA_svzuAGTWWRYctsp3Q-IlsDDtNY7naI";
 function getAIClient(req?: express.Request): GoogleGenAI | null {
   const customHeader = (req?.headers?.["x-gemini-api-key"] as string) || (req?.headers?.["X-Gemini-API-Key"] as string) || "";
   const customBody = (req?.body?.customApiKey as string) || "";
+  const customQuery = (req?.query?.customApiKey as string) || (req?.query?.apiKey as string) || "";
   const apiKey = (
     customHeader || 
     customBody || 
+    customQuery ||
     process.env.GEMINI_API_KEY || 
     process.env.VITE_GEMINI_API_KEY || 
     EMBEDDED_GEMINI_KEY
@@ -111,8 +135,8 @@ function convertPcmToWav(base64Pcm: string, sampleRate: number = 24000): string 
 }
 
 // API Routes
-app.get("/api/health", (req, res) => {
-  const customHeader = (req.headers["x-gemini-api-key"] as string) || (req.headers["X-Gemini-API-Key"] as string) || "";
+app.get(["/api/health", "/health"], (req, res) => {
+  const customHeader = (req.headers["x-gemini-api-key"] as string) || (req.headers["X-Gemini-API-Key"] as string) || (req.query?.customApiKey as string) || (req.query?.apiKey as string) || "";
   const apiKey = (
     customHeader ||
     process.env.GEMINI_API_KEY || 
@@ -488,7 +512,7 @@ app.post("/api/translate", async (req, res) => {
     const response = await generateContentWithRetry({
       model: "gemini-3.6-flash",
       contents: [prompt]
-    });
+    }, { req });
 
     const translation = (response.text || "").trim().replace(/^["']|["']$/g, "");
     if (translation) {
@@ -558,7 +582,7 @@ Return absolutely nothing else, no markdown wrapping, no explanation, just raw v
         },
         prompt,
       ],
-    });
+    }, { req });
 
     const text = response.text || "";
     // Clean potential markdown blocks
@@ -1031,7 +1055,7 @@ Always prioritize mapping to the custom keys in the provided list based on their
           required: ["pos", "topic"]
         }
       }
-    });
+    }, { req });
 
     const text = response.text || "";
     const cleanText = text.replace(/```json|```/g, "").trim();
@@ -1124,7 +1148,7 @@ Return absolutely nothing else, no markdown formatting, no comments, just raw JS
 Theme/vibe to center the story around: ${randomTheme}. 
 Make it highly cozy, inspiring, and different from any other story.` }
       ],
-    });
+    }, { req });
 
     const text = response.text || "";
     const cleanText = text.replace(/```json|```/g, "").trim();
@@ -1233,7 +1257,7 @@ Provide a clear, brief explanation in Russian of why the correct answer is corre
           required: ["questions"]
         }
       }
-    });
+    }, { req });
 
     const text = response.text || "";
 
@@ -2347,7 +2371,7 @@ app.post("/api/grade-level-test", async (req, res) => {
               },
               "Please transcribe this spoken English audio exactly as spoken. Return ONLY the clean transcript text, absolutely nothing else."
             ]
-          }, { fallbackModel: "gemini-3.1-flash-lite" });
+          }, { req, fallbackModel: "gemini-3.1-flash-lite" });
           transcribedSpeakingAnswers[i] = (transResponse.text || "").trim();
           console.log(`[Grading] Transcribed speaking ${i + 1}:`, transcribedSpeakingAnswers[i]);
         } catch (err) {
@@ -2498,7 +2522,7 @@ Return strictly a JSON object matching the requested schema.`;
           required: ["level", "strengths", "weaknesses", "detailedFeedback", "skillsBreakdown"]
         }
       }
-    }, { maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
+    }, { req, maxRetries: 2, fallbackModel: "gemini-3.1-flash-lite" });
 
     let cleanGradeText = (response.text || "").trim();
     if (cleanGradeText.startsWith("```")) {
@@ -2550,7 +2574,7 @@ Return strictly a JSON object containing:
         config: {
           tools: [{ googleSearch: {} }]
         }
-      }, { maxRetries: 2, fallbackModel: "gemini-3.6-flash" });
+      }, { req, maxRetries: 2, fallbackModel: "gemini-3.6-flash" });
     } catch (groundingErr: any) {
       console.warn("[Voice Topic] Search grounding failed, falling back to standard prompt...", groundingErr?.message || groundingErr);
       response = await generateContentWithRetry({
@@ -2559,7 +2583,7 @@ Return strictly a JSON object containing:
         config: {
           responseMimeType: "application/json"
         }
-      }, { maxRetries: 2, fallbackModel: "gemini-3.6-flash" });
+      }, { req, maxRetries: 2, fallbackModel: "gemini-3.6-flash" });
     }
 
     let cleanText = (response?.text || "").trim();
@@ -2804,17 +2828,19 @@ async function startServer() {
 }
 
 // Catch-all 404 handler for API routes to prevent unhandled fallthrough on Vercel
-app.use("/api/*", (req, res) => {
+app.use(["/api/*", "/api"], (req, res) => {
   console.warn(`[API 404] Route not found: ${req.method} ${req.url}`);
   res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
 });
 
-// Catch-all 404 handler for any unhandled non-static route
-app.use((req, res, next) => {
-  if (req.path.startsWith("/api")) {
-    res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
-  } else {
-    next();
+// Catch-all 404 handler for any unhandled route on serverless deployments
+app.use((req, res) => {
+  if (!res.headersSent) {
+    if (req.url.includes("api") || req.path.startsWith("/api")) {
+      res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
+    } else {
+      res.status(404).json({ error: `Route ${req.method} ${req.url} not found` });
+    }
   }
 });
 

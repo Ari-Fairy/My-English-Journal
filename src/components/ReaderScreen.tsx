@@ -1,7 +1,7 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Word, UserProgress } from "../types";
 import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR, STATIC_QUIZZES, POS_DEFAULT, TOPICS_DEFAULT } from "../data";
-import { speak, getLocalDateString, getApiUrl } from "../utils";
+import { speak, getLocalDateString, getApiUrl, getApiHeaders } from "../utils";
 
 interface ReaderScreenProps {
   words: Word[];
@@ -77,7 +77,7 @@ export default function ReaderScreen({
     try {
       const res = await fetch(getApiUrl("/api/generate-quiz"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ title, text, level })
       });
       if (res.ok) {
@@ -114,7 +114,7 @@ export default function ReaderScreen({
       const requestDate = forceNew ? `${date}_new_${Date.now()}` : date;
       const res = await fetch(getApiUrl("/api/generate-story"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ level, date: requestDate })
       });
       if (res.ok) {
@@ -218,7 +218,7 @@ export default function ReaderScreen({
     try {
       const res = await fetch(getApiUrl("/api/classify"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           en: word,
           ru: translation,

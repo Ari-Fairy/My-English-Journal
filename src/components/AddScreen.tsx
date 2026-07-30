@@ -1,7 +1,7 @@
 import React, { useState, useRef } from "react";
 import { Word, UserProgress } from "../types";
 import { POS_DEFAULT, TOPICS_DEFAULT } from "../data";
-import { getApiUrl } from "../utils";
+import { getApiUrl, getApiHeaders } from "../utils";
 
 interface AddScreenProps {
   words: Word[];
@@ -110,7 +110,7 @@ export default function AddScreen({
     try {
       const res = await fetch(getApiUrl("/api/ocr"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ image: img })
       });
       const resText = await res.text();
@@ -638,7 +638,7 @@ export default function AddScreen({
     try {
       const res = await fetch(getApiUrl("/api/classify"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           en: trimmedEn,
           ru: trimmedRu,
