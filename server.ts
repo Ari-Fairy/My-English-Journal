@@ -15,19 +15,42 @@ app.use((req, res, next) => {
   try {
     let rawUrl = req.url || "/";
     const urlPath = rawUrl.split("?")[0];
-    const queryStr = rawUrl.includes("?") ? "?" + rawUrl.split("?").slice(1).join("?") : "";
+    let extractedPath = "";
 
-    let targetPath = urlPath;
-
-    // Fallback to header x-forwarded-uri or x-original-url or x-matched-path if Vercel mapped to index
-    if (targetPath.includes("index.ts") || targetPath.includes("index.js") || targetPath === "/api" || targetPath === "/api/") {
-      const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
-      if (fwd && fwd.startsWith("/api")) {
-        targetPath = fwd.split("?")[0];
+    // 1. Check req.query path/url
+    if (req.query && (req.query.path || req.query.url)) {
+      const q = req.query.path || req.query.url;
+      if (typeof q === "string" && q.trim().length > 0) {
+        extractedPath = q.trim();
+      } else if (Array.isArray(q) && q.length > 0) {
+        extractedPath = "/" + q.join("/");
       }
     }
 
-    // Ensure leading slash
+    // 2. Fallback: Parse query string manually if req.query was not populated yet
+    if (!extractedPath && rawUrl.includes("?")) {
+      try {
+        const queryPart = rawUrl.split("?").slice(1).join("?");
+        const searchParams = new URLSearchParams(queryPart);
+        const p = searchParams.get("path") || searchParams.get("url");
+        if (p) extractedPath = p;
+      } catch (e) {}
+    }
+
+    // 3. Fallback to headers
+    if (!extractedPath) {
+      const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
+      if (fwd && fwd.startsWith("/api")) {
+        extractedPath = fwd.split("?")[0];
+      }
+    }
+
+    // 4. Fallback to urlPath
+    if (!extractedPath) {
+      extractedPath = urlPath;
+    }
+
+    let targetPath = extractedPath;
     if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
 
     // Clean duplicate /api/api/ and /api/index
@@ -51,7 +74,20 @@ app.use((req, res, next) => {
       targetPath = "/api/health";
     }
 
-    const finalUrl = targetPath + queryStr;
+    // Clean query parameters so path and url aren't repeated
+    let cleanQueryStr = "";
+    if (rawUrl.includes("?")) {
+      try {
+        const queryPart = rawUrl.split("?").slice(1).join("?");
+        const searchParams = new URLSearchParams(queryPart);
+        searchParams.delete("path");
+        searchParams.delete("url");
+        const s = searchParams.toString();
+        if (s) cleanQueryStr = "?" + s;
+      } catch (e) {}
+    }
+
+    const finalUrl = targetPath + cleanQueryStr;
     if (req.url !== finalUrl) {
       req.url = finalUrl;
     }

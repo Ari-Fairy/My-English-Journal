@@ -1,8 +1,8 @@
 {
   "version": 2,
   "rewrites": [
-    { "source": "/api/(.*)", "destination": "/api/index.ts" },
-    { "source": "/api", "destination": "/api/index.ts" },
+    { "source": "/api/(.*)", "destination": "/api/index.ts?path=/$1" },
+    { "source": "/api", "destination": "/api/index.ts?path=/health" },
     { "source": "/(.*)", "destination": "/index.html" }
   ]
 }
