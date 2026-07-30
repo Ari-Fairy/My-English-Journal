@@ -46,18 +46,16 @@ app.use((req, res, next) => {
 // Set up JSON body parser with increased limit to handle base64 images
 app.use(express.json({ limit: "10mb" }));
 
-// Lazy initializer for Google Gen AI client
-let aiClient: GoogleGenAI | null = null;
-function getAIClient(): GoogleGenAI | null {
-  const apiKey = process.env.GEMINI_API_KEY;
+// Flexible initializer for Google Gen AI client with fallback to request header/body or process.env
+function getAIClient(req?: express.Request): GoogleGenAI | null {
+  const customHeader = (req?.headers?.["x-gemini-api-key"] as string) || "";
+  const customBody = (req?.body?.customApiKey as string) || "";
+  const apiKey = (customHeader || customBody || process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
   if (!apiKey) {
     console.warn("[Gemini API] GEMINI_API_KEY environment variable is not defined server-side.");
     return null;
   }
-  if (!aiClient) {
-    aiClient = new GoogleGenAI({ apiKey });
-  }
-  return aiClient;
+  return new GoogleGenAI({ apiKey });
 }
 
 // Convert raw PCM audio data (base64) from Gemini TTS to WAV format
@@ -105,7 +103,13 @@ function convertPcmToWav(base64Pcm: string, sampleRate: number = 24000): string 
 
 // API Routes
 app.get("/api/health", (req, res) => {
-  res.json({ status: "ok" });
+  const apiKey = (process.env.GEMINI_API_KEY || process.env.VITE_GEMINI_API_KEY || "").trim();
+  res.json({
+    status: "ok",
+    hasGeminiKey: !!apiKey,
+    keyLength: apiKey.length,
+    nodeEnv: process.env.NODE_ENV || "development"
+  });
 });
 
 // Server-side translation memory cache
@@ -133,14 +137,13 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T)
 }
 
 // Helper for generating content with retry and fallback model
-async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string } = {}): Promise<any> {
-  const { maxRetries = 3, fallbackModel = "gemini-2.5-flash" } = options;
-  const ai = getAIClient();
+async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string; req?: express.Request; timeoutMs?: number } = {}): Promise<any> {
+  const { maxRetries = 2, fallbackModel = "gemini-2.5-flash", req, timeoutMs = 7500 } = options;
+  const ai = getAIClient(req);
   if (!ai) {
     throw new Error("GEMINI_API_KEY environment variable is not configured server-side.");
   }
   let lastError: any = null;
-  let currentDelay = 500;
 
   // Try with the requested model (or default)
   const sanitizeModelName = (m?: string) => {
@@ -162,9 +165,9 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
         ...params,
         model: currentModel
       });
-      const response = await withTimeout(responsePromise, 40000, null);
+      const response = await withTimeout(responsePromise, timeoutMs, null);
       if (!response) {
-        throw new Error("Gemini API call timed out after 40 seconds");
+        throw new Error(`Gemini API call timed out after ${timeoutMs}ms`);
       }
       return response;
     } catch (error: any) {
@@ -173,40 +176,11 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
 
       console.warn(`[Gemini API Warning] Attempt ${attempt} failed with error on ${currentModel}: ${errMsg}`);
 
-      // If the current model failed, immediately switch to fallback model if available
       if (safeFallbackModel && currentModel !== safeFallbackModel) {
         console.log(`[Gemini API] Primary model "${currentModel}" failed. Switching to fallback model "${safeFallbackModel}"...`);
         currentModel = safeFallbackModel;
-        currentDelay = 200;
         continue;
       }
-
-      if (attempt === maxRetries) {
-        break;
-      }
-
-      console.log(`[Gemini API] Retrying in ${currentDelay}ms...`);
-      await delay(currentDelay);
-      currentDelay *= 1.5;
-    }
-  }
-
-  // Desperation attempt if somehow everything else failed but we didn't try the fallback yet
-  if (fallbackModel && currentModel !== fallbackModel) {
-    console.log(`[Gemini API] Desperation fallback attempt using "${fallbackModel}"...`);
-    try {
-      const responsePromise = ai.models.generateContent({
-        ...params,
-        model: fallbackModel
-      });
-      const response = await withTimeout(responsePromise, 40000, null);
-      if (!response) {
-        throw new Error("Desperation fallback API call timed out after 40 seconds");
-      }
-      return response;
-    } catch (fallbackError: any) {
-      console.error(`[Gemini API Error] Desperation fallback model "${fallbackModel}" also failed:`, fallbackError);
-      lastError = fallbackError;
     }
   }
 
@@ -1611,14 +1585,29 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
     }
 
     console.log("[AI Chat] Generating reply using model:", modelName);
-    const ai = getAIClient();
+    const ai = getAIClient(req);
+    if (!ai) {
+      console.warn("[AI Chat] No Gemini API Key configured. Serving smart offline tutor reply.");
+      const lastUserMsg = (Array.isArray(messages) && messages.length > 0) ? (messages[messages.length - 1]?.text || "Hello") : "Hello";
+      const offlineReply = getOfflineChatTutorReply(lastUserMsg, role || "sophia", userLevel || "A1", clientLocalTime);
+      res.json({
+        replyText: offlineReply.replyText,
+        evaluatedLevel: offlineReply.evaluatedLevel,
+        wordToAdd: offlineReply.wordToAdd,
+        replyAudio: null,
+        searchResults: [],
+        isOfflineFallback: true
+      });
+      return;
+    }
+
     let response: any = null;
     try {
       response = await generateContentWithRetry({
         model: modelName,
         contents,
         config
-      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
+      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash", req, timeoutMs: 7500 });
     } catch (primaryErr) {
       console.warn("[AI Chat] Primary model call failed, falling back to gemini-2.5-flash standard JSON:", primaryErr);
       const fallbackConfig: any = {
@@ -1630,7 +1619,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         model: "gemini-2.5-flash",
         contents,
         config: fallbackConfig
-      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
+      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash", req, timeoutMs: 7500 });
     }
 
     let responseText = response.text || "";
@@ -1682,51 +1671,57 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
 
     // Server-side text to speech synthesis proxy
     let replyAudioBase64 = "";
-    try {
-      const voiceNames: { [key: string]: string } = {
-        sophia: "Kore",
-        oliver: "Charon", // Deep, clear male voice
-        alex: "Puck" // Energetic, upbeat male voice
-      };
-      const selectedVoice = voiceNames[role] || "Kore";
-      let cleanTextForTts = replyText
-        .replace(/\[\d+\]/g, "")
-        .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-        .replace(/\*\*([^*]+)\*\*/g, "$1")
-        .replace(/\*([^*]+)\*/g, "$1")
-        .replace(/_([^_]+)_/g, "$1")
-        .replace(/`([^`]+)`/g, "$1")
-        .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
-        .trim();
+    if (!skipServerTts && ai) {
+      try {
+        const voiceNames: { [key: string]: string } = {
+          sophia: "Kore",
+          oliver: "Charon", // Deep, clear male voice
+          alex: "Puck" // Energetic, upbeat male voice
+        };
+        const selectedVoice = voiceNames[role] || "Kore";
+        let cleanTextForTts = replyText
+          .replace(/\[\d+\]/g, "")
+          .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+          .replace(/\*\*([^*]+)\*\*/g, "$1")
+          .replace(/\*([^*]+)\*/g, "$1")
+          .replace(/_([^_]+)_/g, "$1")
+          .replace(/`([^`]+)`/g, "$1")
+          .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
+          .trim();
 
-      const ttsPromptPrefix = role === "alex" 
-        ? "Say in an upbeat, energetic, friendly male voice:" 
-        : role === "oliver" 
-        ? "Say in a deep, clear, authoritative male voice:" 
-        : "Say in a warm, gentle, friendly female voice:";
+        if (cleanTextForTts.length > 250) {
+          cleanTextForTts = cleanTextForTts.substring(0, 250);
+        }
 
-      const speechPromise = ai.models.generateContent({
-        model: "gemini-3.1-flash-tts-preview",
-        contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: selectedVoice }
+        const ttsPromptPrefix = role === "alex" 
+          ? "Say in an upbeat, energetic, friendly male voice:" 
+          : role === "oliver" 
+          ? "Say in a deep, clear, authoritative male voice:" 
+          : "Say in a warm, gentle, friendly female voice:";
+
+        const speechPromise = ai.models.generateContent({
+          model: "gemini-3.1-flash-tts-preview",
+          contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: selectedVoice }
+              }
             }
           }
-        }
-      });
+        });
 
-      const speechResponse = await withTimeout(speechPromise, 15000, null);
-      if (speechResponse) {
-        const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-        if (rawData) {
-          replyAudioBase64 = convertPcmToWav(rawData, 24000);
+        const speechResponse = await withTimeout(speechPromise, 6000, null);
+        if (speechResponse) {
+          const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+          if (rawData) {
+            replyAudioBase64 = convertPcmToWav(rawData, 24000);
+          }
         }
+      } catch (ttsErr) {
+        console.warn("[AI Chat TTS] Synthesis failed:", ttsErr);
       }
-    } catch (ttsErr) {
-      console.warn("[AI Chat TTS] Synthesis failed:", ttsErr);
     }
 
     res.json({
@@ -1896,7 +1891,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     const { audio, messages, role: reqRole = "sophia", userLevel: reqLevel = "A1", skipServerTts = false, speechPace = "normal", verbosity = "medium", clientLocalTime } = req.body || {};
     role = reqRole;
     userLevel = reqLevel;
-    const ai = getAIClient();
+    const ai = getAIClient(req);
 
     // Step A: If the user recorded audio, transcribe it first using Gemini's multimodal capabilities!
     if (audio) {
@@ -2110,6 +2105,20 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
       required: ["replyText", "evaluatedLevel"]
     };
 
+    if (!ai) {
+      console.warn("[Voice Chat] No Gemini API Key configured. Serving smart offline tutor voice reply.");
+      const offlineReply = getOfflineChatTutorReply(userText || "Hello", role || "sophia", userLevel || "A1", clientLocalTime);
+      res.json({
+        userTranscription: userText || "[Не удалось распознать]",
+        replyText: offlineReply.replyText,
+        evaluatedLevel: offlineReply.evaluatedLevel,
+        wordToAdd: offlineReply.wordToAdd,
+        replyAudio: null,
+        isOfflineFallback: true
+      });
+      return;
+    }
+
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
       model: "gemini-2.5-flash",
@@ -2119,7 +2128,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         responseMimeType: "application/json",
         responseSchema
       }
-    }, { fallbackModel: "gemini-2.5-flash" });
+    }, { fallbackModel: "gemini-2.5-flash", req, timeoutMs: 7500 });
 
     let replyText = "";
     let evaluatedLevel = userLevel;
@@ -2136,7 +2145,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
 
     // Step C: Synthesize text response to audio using gemini-3.1-flash-tts-preview if not skipped
     let replyAudioBase64 = "";
-    if (!skipServerTts) {
+    if (!skipServerTts && ai) {
       try {
         console.log("[Voice Chat] Synthesizing speech audio...");
         const voiceNames: { [key: string]: string } = {
@@ -2157,6 +2166,10 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "") // strip emojis
           .trim();
 
+        if (cleanTextForTts.length > 250) {
+          cleanTextForTts = cleanTextForTts.substring(0, 250);
+        }
+
         const ttsPromptPrefix = role === "alex" 
           ? "Say in an upbeat, energetic, friendly male voice:" 
           : role === "oliver" 
@@ -2176,7 +2189,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           }
         });
 
-        const speechResponse = await withTimeout(speechPromise, 25000, null);
+        const speechResponse = await withTimeout(speechPromise, 6000, null);
 
         if (speechResponse) {
           const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
@@ -2621,7 +2634,7 @@ app.post("/api/ai-tts", async (req, res) => {
       return;
     }
 
-    const ai = getAIClient();
+    const ai = getAIClient(req);
     if (!ai) {
       res.status(200).json({ audio: null, error: "GEMINI_API_KEY is not configured on server" });
       return;
@@ -2649,6 +2662,10 @@ app.post("/api/ai-tts", async (req, res) => {
       .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
       .trim();
 
+    if (cleanTextForTts.length > 250) {
+      cleanTextForTts = cleanTextForTts.substring(0, 250);
+    }
+
     const speechPromise = ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
       contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
@@ -2662,7 +2679,7 @@ app.post("/api/ai-tts", async (req, res) => {
       }
     });
 
-    const speechResponse = await withTimeout(speechPromise, 15000, null);
+    const speechResponse = await withTimeout(speechPromise, 6500, null);
     if (!speechResponse) {
       res.status(200).json({ audio: null, error: "TTS timed out" });
       return;

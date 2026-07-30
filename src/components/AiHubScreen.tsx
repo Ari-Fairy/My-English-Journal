@@ -24,7 +24,7 @@ import {
   Globe
 } from "lucide-react";
 import { Word, UserProgress } from "../types";
-import { getApiUrl } from "../utils";
+import { getApiUrl, getApiHeaders } from "../utils";
 import { User } from "firebase/auth";
 import { fetchUserAiSessions, saveUserAiSessions } from "../firebaseSync";
 import { getOfflineChatTutorReply, getNextOfflineTopic } from "../data/offlineTutor";
@@ -664,6 +664,26 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }
       return s;
     }));
+  };
+
+  const [keySettingsModalOpen, setKeySettingsModalOpen] = useState(false);
+  const [customKeyInput, setCustomKeyInput] = useState(() => {
+    return localStorage.getItem("user_gemini_api_key") || "";
+  });
+  const [serverHealthStatus, setServerHealthStatus] = useState<any>(null);
+  const [checkingHealth, setCheckingHealth] = useState(false);
+
+  const checkServerHealth = async () => {
+    setCheckingHealth(true);
+    try {
+      const res = await fetch(getApiUrl("/api/health"));
+      const data = await res.json();
+      setServerHealthStatus(data);
+    } catch (e: any) {
+      setServerHealthStatus({ status: "error", message: e?.message || "Failed to connect to server" });
+    } finally {
+      setCheckingHealth(false);
+    }
   };
 
   // Align active sessions with tutor when tutor changes
@@ -1365,7 +1385,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       
       const response = await fetch(getApiUrl("/api/ai-chat"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           messages: history.map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp || new Date().toISOString() })),
           role: tutor,
@@ -1482,7 +1502,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     try {
       const response = await fetch(getApiUrl("/api/ai-extract-vocabulary"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ messages: chatMessages })
       });
 
@@ -1691,7 +1711,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
       const response = await fetch(getApiUrl("/api/ai-voice-chat"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           audio: payload.audio,
           text: payload.text,
@@ -1907,7 +1927,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     try {
       const response = await fetch(getApiUrl("/api/ai-analyze-image"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ image: selectedImage })
       });
 
@@ -1928,7 +1948,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     try {
       const response = await fetch(getApiUrl("/api/generate-level-test"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({ type, currentLevel: stats.level || "A1" })
       });
       if (!response.ok) throw new Error("Failed to generate test");
@@ -1985,7 +2005,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     try {
       const response = await fetch(getApiUrl("/api/grade-level-test"), {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: getApiHeaders(),
         body: JSON.stringify({
           type: currentTest.type,
           questions: currentTest.questions,
@@ -2919,11 +2939,36 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         >
           ← Назад
         </button>
-        <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
-          <Sparkles size={16} className="text-sage" style={{ color: "var(--sage)" }} />
-          <span style={{ fontFamily: "Lora, serif", fontWeight: 600, fontStyle: "italic", fontSize: 16, color: "var(--warm)" }}>
-            Gemini AI Hub
-          </span>
+        <div style={{ display: "flex", alignItems: "center", gap: 10 }}>
+          <button
+            style={{
+              display: "flex",
+              alignItems: "center",
+              gap: 5,
+              fontSize: 12,
+              padding: "5px 12px",
+              borderRadius: "99px",
+              background: "rgba(143,160,128,0.15)",
+              border: "1px solid rgba(143,160,128,0.3)",
+              color: "var(--sage)",
+              cursor: "pointer",
+              fontWeight: 600
+            }}
+            onClick={() => {
+              setKeySettingsModalOpen(true);
+              checkServerHealth();
+            }}
+            title="Проверить статус ИИ-ключа или ввести свой"
+          >
+            <Zap size={13} />
+            <span>Ключ ИИ / Диагностика</span>
+          </button>
+          <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+            <Sparkles size={16} className="text-sage" style={{ color: "var(--sage)" }} />
+            <span style={{ fontFamily: "Lora, serif", fontWeight: 600, fontStyle: "italic", fontSize: 16, color: "var(--warm)" }}>
+              Gemini AI Hub
+            </span>
+          </div>
         </div>
       </div>
 
@@ -4881,6 +4926,128 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
                 }}
               >
                 {customConfirm.cancelText || "Отмена"}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* 🔑 API KEY DIAGNOSTICS & CUSTOM KEY MODAL */}
+      {keySettingsModalOpen && (
+        <div style={{
+          position: "fixed",
+          top: 0,
+          left: 0,
+          right: 0,
+          bottom: 0,
+          background: "rgba(0,0,0,0.65)",
+          zIndex: 9999,
+          display: "flex",
+          alignItems: "center",
+          justifyContent: "center",
+          padding: 16
+        }} className="fade-in">
+          <div style={{
+            width: "100%",
+            maxWidth: 480,
+            background: "#fbfaf7",
+            borderRadius: 20,
+            padding: 24,
+            color: "#1f1e1a",
+            boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
+            border: "1.5px solid #e5dfd3"
+          }}>
+            <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
+              <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
+                <Zap size={20} color="#8fa080" />
+                <h3 style={{ margin: 0, fontSize: 18, fontWeight: 700, fontFamily: "Lora, serif" }}>Диагностика ИИ-ключа</h3>
+              </div>
+              <button
+                onClick={() => setKeySettingsModalOpen(false)}
+                style={{ background: "none", border: "none", cursor: "pointer", color: "#6b6861" }}
+              >
+                <X size={20} />
+              </button>
+            </div>
+
+            {/* Health status section */}
+            <div style={{ background: "#f4f0e6", padding: 14, borderRadius: 12, marginBottom: 18, border: "1px solid #e5dfd3" }}>
+              <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#6b6861", marginBottom: 6 }}>
+                Статус сервера и ключа GEMINI_API_KEY:
+              </div>
+              {checkingHealth ? (
+                <div style={{ fontSize: 13, color: "#8fa080", fontWeight: 600 }}>⏳ Проверка подключения...</div>
+              ) : serverHealthStatus ? (
+                <div>
+                  <div style={{ fontSize: 13.5, fontWeight: 700, color: serverHealthStatus.hasGeminiKey ? "#2e7d32" : "#c62828" }}>
+                    {serverHealthStatus.hasGeminiKey ? "✅ Ключ Gemini API найден и активен на сервере" : "⚠️ Ключ Gemini API отсутствует на сервере"}
+                  </div>
+                  <div style={{ fontSize: 11.5, color: "#6b6861", marginTop: 4 }}>
+                    Окружение: {serverHealthStatus.nodeEnv || "production"} | Длина ключа: {serverHealthStatus.keyLength || 0} символов
+                  </div>
+                </div>
+              ) : (
+                <button
+                  onClick={checkServerHealth}
+                  style={{ background: "#8fa080", color: "#fff", border: "none", padding: "6px 12px", borderRadius: 8, fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Проверить статус
+                </button>
+              )}
+            </div>
+
+            <div style={{ fontSize: 13, color: "#4a4843", lineHeight: 1.5, marginBottom: 16 }}>
+              Если ваш сервер Vercel не имеет доступного ключа <code style={{ background: "#ede7da", padding: "2px 6px", borderRadius: 4 }}>GEMINI_API_KEY</code> в настройках хостинга, вы можете ввести свой свой персональный ключ Gemini API ниже. Он сохранится в вашем браузере и будет передаваться в запросах.
+            </div>
+
+            <div style={{ marginBottom: 18 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#1f1e1a", marginBottom: 6 }}>
+                Ваш персональный Gemini API Key (если не задан на Vercel):
+              </label>
+              <input
+                type="password"
+                value={customKeyInput}
+                onChange={e => setCustomKeyInput(e.target.value)}
+                placeholder="AIzaSy..."
+                style={{
+                  width: "100%",
+                  padding: "10px 14px",
+                  borderRadius: 10,
+                  border: "1.5px solid #dcd5c7",
+                  fontSize: 13,
+                  outline: "none",
+                  background: "#ffffff"
+                }}
+              />
+            </div>
+
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              {customKeyInput && (
+                <button
+                  onClick={() => {
+                    localStorage.removeItem("user_gemini_api_key");
+                    setCustomKeyInput("");
+                    setToastMessage("Свой ключ удален");
+                  }}
+                  style={{ padding: "8px 14px", borderRadius: 10, border: "1px solid #df6c6c", background: "#fff", color: "#df6c6c", fontSize: 12, fontWeight: 600, cursor: "pointer" }}
+                >
+                  Сбросить
+                </button>
+              )}
+              <button
+                onClick={() => {
+                  if (customKeyInput.trim()) {
+                    localStorage.setItem("user_gemini_api_key", customKeyInput.trim());
+                    setToastMessage("Свой ключ Gemini успешно сохранен! 🎉");
+                  } else {
+                    localStorage.removeItem("user_gemini_api_key");
+                    setToastMessage("Используется ключ с сервера");
+                  }
+                  setKeySettingsModalOpen(false);
+                }}
+                style={{ padding: "10px 18px", borderRadius: 10, border: "none", background: "#8fa080", color: "#fff", fontSize: 13, fontWeight: 700, cursor: "pointer" }}
+              >
+                Сохранить
               </button>
             </div>
           </div>

@@ -117,6 +117,21 @@ export function getApiUrl(path: string): string {
   return cleanPath;
 }
 
+// Получение заголовков для API запросов с поддержкой кастомного ключа Gemini
+export function getApiHeaders(extraHeaders: Record<string, string> = {}): Record<string, string> {
+  const headers: Record<string, string> = {
+    "Content-Type": "application/json",
+    ...extraHeaders
+  };
+  if (typeof window !== "undefined") {
+    const customKey = localStorage.getItem("user_gemini_api_key");
+    if (customKey && customKey.trim()) {
+      headers["X-Gemini-API-Key"] = customKey.trim();
+    }
+  }
+  return headers;
+}
+
 // Получить статус кулдауна на повторение слов (минимальный интервал отдыха в 20 минут после сессии) - ОТКЛЮЧЕН
 export function getReviewCooldownStatus(stats: UserProgress) {
   return { active: false, timeLeftMs: 0 };
