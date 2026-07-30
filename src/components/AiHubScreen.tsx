@@ -2974,7 +2974,9 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
             }}
             onClick={() => {
               setKeySettingsModalOpen(true);
-              checkServerHealth();
+              const saved = localStorage.getItem("user_gemini_api_key") || "";
+              setCustomKeyInput(saved);
+              checkServerHealth(saved);
             }}
             title="Проверить статус ИИ-ключа или ввести свой"
           >

@@ -14,23 +14,16 @@ export const app = express();
 app.use((req, res, next) => {
   try {
     let rawUrl = req.url || "/";
-    let targetPath = rawUrl;
+    const urlPath = rawUrl.split("?")[0];
+    const queryStr = rawUrl.includes("?") ? "?" + rawUrl.split("?").slice(1).join("?") : "";
 
-    // 1. Extract path parameter if provided by Vercel rewrite or query param
-    if (req.query) {
-      const q = req.query.path || req.query.url;
-      if (typeof q === "string" && q.trim().length > 0) {
-        targetPath = q.trim();
-      } else if (Array.isArray(q) && q.length > 0) {
-        targetPath = "/" + q.join("/");
-      }
-    }
+    let targetPath = urlPath;
 
-    // 2. Fallback to header x-forwarded-uri or x-original-url or x-matched-path
+    // Fallback to header x-forwarded-uri or x-original-url or x-matched-path if Vercel mapped to index
     if (targetPath.includes("index.ts") || targetPath.includes("index.js") || targetPath === "/api" || targetPath === "/api/") {
       const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
       if (fwd && fwd.startsWith("/api")) {
-        targetPath = fwd;
+        targetPath = fwd.split("?")[0];
       }
     }
 
@@ -58,11 +51,9 @@ app.use((req, res, next) => {
       targetPath = "/api/health";
     }
 
-    // Mutate req.url AND reset Express cached URL properties so router re-evaluates the path!
-    if (req.url !== targetPath) {
-      req.url = targetPath;
-      delete (req as any)._parsedUrl;
-      delete (req as any)._parsedUrlUrl;
+    const finalUrl = targetPath + queryStr;
+    if (req.url !== finalUrl) {
+      req.url = finalUrl;
     }
   } catch (e) {
     console.error("[Path Normalization Error]", e);
