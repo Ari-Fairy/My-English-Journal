@@ -2828,20 +2828,6 @@ async function startServer() {
     console.log("Serving built static files in production mode.");
   }
 
-  // Catch-all 404 handler for API routes
-  app.use(["/api/*", "/api"], (req, res) => {
-    console.warn(`[API 404] Route not found: ${req.method} ${req.url}`);
-    res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
-  });
-
-  // Global error handler
-  app.use((err: any, req: any, res: any, next: any) => {
-    console.error("[Global Express Error]", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || "Internal server error" });
-    }
-  });
-
   const server = app.listen(PORT, "0.0.0.0", () => {
     console.log(`Server listening on port ${PORT}`);
   });
@@ -2908,22 +2894,25 @@ async function startServer() {
   });
 }
 
-if (!process.env.VERCEL) {
+const isVercel = !!(process.env.VERCEL || process.env.NOW_REGION || process.env.VERCEL_ENV || process.env.VERCEL_REGION);
+
+// Global catch-all 404 handler for API routes
+app.use(["/api/*", "/api"], (req, res) => {
+  console.warn(`[API 404] Route not found: ${req.method} ${req.url}`);
+  res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
+});
+
+// Global error handling middleware
+app.use((err: any, req: any, res: any, next: any) => {
+  console.error("[Global Express Error]", err);
+  if (!res.headersSent) {
+    res.status(500).json({ error: err?.message || "Internal server error" });
+  }
+});
+
+if (!isVercel) {
   startServer().catch((err) => {
     console.error("Failed to start full-stack server:", err);
-  });
-} else {
-  // For Vercel serverless functions: handle unhandled API requests
-  app.use(["/api/*", "/api"], (req, res) => {
-    console.warn(`[API 404] Route not found on Vercel: ${req.method} ${req.url}`);
-    res.status(404).json({ error: `API route ${req.method} ${req.url} not found` });
-  });
-
-  app.use((err: any, req: any, res: any, next: any) => {
-    console.error("[Global Express Error Vercel]", err);
-    if (!res.headersSent) {
-      res.status(500).json({ error: err?.message || "Internal server error" });
-    }
   });
 }
 
