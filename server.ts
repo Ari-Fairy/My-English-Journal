@@ -13,23 +13,41 @@ export const app = express();
 // Custom request path restoration and CORS middleware for Vercel / serverless deployments
 app.use((req, res, next) => {
   try {
-    let targetUrl = req.url || "/";
+    let targetPath = "";
 
-    // Restore path if Vercel routed to /api/index.ts or /api/index
-    if (targetUrl.startsWith("/api/index") || targetUrl.startsWith("/api/index.ts") || targetUrl === "/api" || targetUrl === "/api/") {
-      const forwarded = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"]) as string;
-      const queryPath = (req.query?.path || req.query?.url) as string;
-
-      if (forwarded && forwarded.startsWith("/api/")) {
-        targetUrl = forwarded;
-      } else if (queryPath && queryPath.startsWith("/")) {
-        targetUrl = queryPath.startsWith("/api") ? queryPath : "/api" + queryPath;
+    // 1. Extract path parameter if provided by Vercel rewrite or query param
+    if (req.query) {
+      const q = req.query.path || req.query.url;
+      if (Array.isArray(q)) {
+        targetPath = "/" + q.join("/");
+      } else if (typeof q === "string" && q.trim().length > 0) {
+        targetPath = q.trim();
       }
     }
 
-    // Clean up duplicated /api/api/
-    if (targetUrl.startsWith("/api/api/")) {
-      targetUrl = targetUrl.replace(/^\/api\/api\//, "/api/");
+    // 2. Fallback to header x-forwarded-uri or x-original-url
+    if (!targetPath) {
+      const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"]) as string;
+      if (fwd && fwd.startsWith("/api")) {
+        targetPath = fwd;
+      }
+    }
+
+    // 3. Normalize req.url
+    if (targetPath) {
+      if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
+      if (!targetPath.startsWith("/api")) targetPath = "/api" + targetPath;
+      req.url = targetPath;
+    } else {
+      let rawUrl = req.url || "/";
+      if (rawUrl.startsWith("/api/index") || rawUrl === "/api" || rawUrl === "/api/") {
+        req.url = rawUrl.replace(/^\/api\/index(\.ts|\.js)?/, "/api") || "/api/health";
+      }
+    }
+
+    // Clean duplicate /api/api/
+    if (req.url.startsWith("/api/api/")) {
+      req.url = req.url.replace(/^\/api\/api\//, "/api/");
     }
 
     // Normalize path if missing /api prefix for known API routes
@@ -39,13 +57,15 @@ app.use((req, res, next) => {
       "/translate", "/ocr", "/classify", "/generate-story", "/generate-quiz", "/send-test-email"
     ];
     for (const routeName of apiRouteNames) {
-      if (targetUrl.startsWith(routeName)) {
-        targetUrl = "/api" + targetUrl;
+      if (req.url.startsWith(routeName)) {
+        req.url = "/api" + req.url;
         break;
       }
     }
 
-    req.url = targetUrl;
+    if (req.url === "/api" || req.url === "/api/") {
+      req.url = "/api/health";
+    }
   } catch (e) {
     console.error("[Path Normalization Error]", e);
   }
