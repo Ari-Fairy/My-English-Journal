@@ -17,26 +17,30 @@ app.use((req, res, next) => {
     const urlPath = rawUrl.split("?")[0];
     const queryPart = rawUrl.includes("?") ? "?" + rawUrl.split("?").slice(1).join("?") : "";
 
-    let targetPath = urlPath;
+    // ONLY normalize API endpoints or serverless entrypoints
+    const isApiRequest = urlPath.startsWith("/api") || urlPath.includes("index.ts") || urlPath.includes("index.js") || urlPath === "/api";
 
-    // Check headers if targetPath is index
-    if (targetPath.includes("index.ts") || targetPath.includes("index.js") || targetPath === "/api" || targetPath === "/api/") {
-      const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
-      if (fwd && fwd.startsWith("/api") && !fwd.includes("index")) {
-        targetPath = fwd.split("?")[0];
-      } else {
-        targetPath = "/api/health";
+    if (isApiRequest) {
+      let targetPath = urlPath;
+
+      if (targetPath.includes("index.ts") || targetPath.includes("index.js") || targetPath === "/api" || targetPath === "/api/") {
+        const fwd = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"] || req.headers["x-matched-path"]) as string;
+        if (fwd && fwd.startsWith("/api") && !fwd.includes("index")) {
+          targetPath = fwd.split("?")[0];
+        } else {
+          targetPath = "/api/health";
+        }
       }
-    }
 
-    if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
-    if (!targetPath.startsWith("/api")) targetPath = "/api" + targetPath;
+      if (!targetPath.startsWith("/")) targetPath = "/" + targetPath;
+      if (!targetPath.startsWith("/api")) targetPath = "/api" + targetPath;
 
-    targetPath = targetPath.replace(/^\/api\/api\//, "/api/");
+      targetPath = targetPath.replace(/^\/api\/api\//, "/api/");
 
-    const finalUrl = targetPath + queryPart;
-    if (req.url !== finalUrl) {
-      req.url = finalUrl;
+      const finalUrl = targetPath + queryPart;
+      if (req.url !== finalUrl) {
+        req.url = finalUrl;
+      }
     }
   } catch (e) {
     console.error("[Path Normalization Error]", e);
@@ -1528,6 +1532,14 @@ If the student asks a question (such as explaining a rule, a difference between 
 If the student discusses or references a story, book, text, or topic, you MUST explicitly state your opinion or thoughts on that story/topic to show that you are an active listener and peer/teacher.
 You MUST also always ask a friendly leading, follow-up question (наводящий вопрос) at the end of your response to keep the conversation flowing naturally.
 
+[WORD TRANSLATION & DICTIONARY QUERY RULE - CRITICAL]:
+If the student asks how to say a word or phrase in English (e.g. "как будет арбуз по-английски", "как переводится X", "how to say Y in English"), you MUST:
+1. Directly state the English translation in the very first sentence (e.g. "Арбуз по-английски будет **watermelon**! 🍉").
+2. Provide a clear example sentence in English with Russian translation in parentheses.
+3. Include the 'wordToAdd' object in your JSON response so the user can save it to their dictionary.
+4. Ask a friendly, engaging follow-up question related to that word or topic.
+NEVER dodge or give generic off-topic filler when asked for a word translation!
+
 [EXPLANATIONS & FORMATTING RULE - EXTREMELY CRITICAL]:
 If the student asks you to explain a grammar rule, a vocabulary word, a difference between words (such as "little" vs "a little", "few" vs "a few", prepositions, tenses, etc.), or asks a question about how English works:
 - You MUST provide the FULL, DETAILED, COMPLETE EXPLANATION directly and immediately in your response!
@@ -1799,6 +1811,78 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
   }
 });
 
+// Standalone AI Text-to-Speech endpoint using Gemini AI
+app.post("/api/ai-tts", async (req, res) => {
+  try {
+    const { text, role = "sophia" } = req.body || {};
+    if (!text || !text.trim()) {
+      res.status(400).json({ error: "Missing text parameter" });
+      return;
+    }
+
+    const ai = getAIClient(req);
+    if (!ai) {
+      res.status(400).json({ error: "Gemini API key is missing" });
+      return;
+    }
+
+    const voiceNames: { [key: string]: string } = {
+      sophia: "Kore",  // Warm, gentle female voice
+      oliver: "Charon", // Deep, clear male voice
+      alex: "Puck"     // Energetic, upbeat male voice
+    };
+    const selectedVoice = voiceNames[role] || "Kore";
+
+    let cleanTextForTts = text
+      .replace(/\[\d+\]/g, "")
+      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
+      .replace(/\*\*([^*]+)\*\*/g, "$1")
+      .replace(/\*([^*]+)\*/g, "$1")
+      .replace(/_([^_]+)_/g, "$1")
+      .replace(/`([^`]+)`/g, "$1")
+      .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
+      .trim();
+
+    if (cleanTextForTts.length > 350) {
+      cleanTextForTts = cleanTextForTts.substring(0, 350);
+    }
+
+    const ttsPromptPrefix = role === "alex" 
+      ? "Say in an upbeat, energetic, friendly male voice:" 
+      : role === "oliver" 
+      ? "Say in a deep, clear, authoritative male voice:" 
+      : "Say in a warm, gentle, friendly female voice:";
+
+    const speechPromise = ai.models.generateContent({
+      model: "gemini-3.1-flash-tts-preview",
+      contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
+      config: {
+        responseModalities: [Modality.AUDIO],
+        speechConfig: {
+          voiceConfig: {
+            prebuiltVoiceConfig: { voiceName: selectedVoice }
+          }
+        }
+      }
+    });
+
+    const speechResponse = await withTimeout(speechPromise, 8000, null);
+    if (speechResponse) {
+      const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+      if (rawData) {
+        const audioWavBase64 = convertPcmToWav(rawData, 24000);
+        res.json({ audio: audioWavBase64 });
+        return;
+      }
+    }
+
+    res.status(500).json({ error: "TTS audio generation failed" });
+  } catch (error: any) {
+    console.warn("[/api/ai-tts Error]:", error?.message || error);
+    res.status(500).json({ error: error?.message || "TTS synthesis failed" });
+  }
+});
+
 // 2. Extract Vocabulary list from chat message history
 app.post("/api/ai-extract-vocabulary", async (req, res) => {
   try {
@@ -1972,12 +2056,18 @@ app.post("/api/ai-voice-chat", async (req, res) => {
           model: "gemini-3.6-flash",
           contents: [
             {
-              inlineData: {
-                mimeType: normalizedMime,
-                data: base64Audio
-              }
-            },
-            "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
+              parts: [
+                {
+                  inlineData: {
+                    mimeType: normalizedMime,
+                    data: base64Audio
+                  }
+                },
+                {
+                  text: "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
+                }
+              ]
+            }
           ]
         }, { fallbackModel: "gemini-3.6-flash" });
 

@@ -89,6 +89,44 @@ export function getOfflineChatTutorReply(
 ): { replyText: string; evaluatedLevel: string; wordToAdd: any } {
   const msg = (userMessage || "").trim().toLowerCase();
 
+  // Word translation query detection (e.g. "как будет арбуз", "как по-английски арбуз")
+  const dictWords: { [key: string]: { en: string; emoji: string; pos: string; topic: string } } = {
+    "арбуз": { en: "watermelon", emoji: "🍉", pos: "noun", topic: "food" },
+    "яблоко": { en: "apple", emoji: "🍎", pos: "noun", topic: "food" },
+    "банан": { en: "banana", emoji: "🍌", pos: "noun", topic: "food" },
+    "дыня": { en: "melon", emoji: "🍈", pos: "noun", topic: "food" },
+    "клубника": { en: "strawberry", emoji: "🍓", pos: "noun", topic: "food" },
+    "апельсин": { en: "orange", emoji: "🍊", pos: "noun", topic: "food" },
+    "персик": { en: "peach", emoji: "🍑", pos: "noun", topic: "food" },
+    "кошка": { en: "cat", emoji: "🐱", pos: "noun", topic: "home" },
+    "кот": { en: "cat", emoji: "🐱", pos: "noun", topic: "home" },
+    "собака": { en: "dog", emoji: "🐶", pos: "noun", topic: "home" },
+    "хлеб": { en: "bread", emoji: "🍞", pos: "noun", topic: "food" },
+    "вода": { en: "water", emoji: "💧", pos: "noun", topic: "food" },
+    "дом": { en: "house", emoji: "🏠", pos: "noun", topic: "home" },
+    "книга": { en: "book", emoji: "📚", pos: "noun", topic: "study" },
+    "машина": { en: "car", emoji: "🚗", pos: "noun", topic: "travel" },
+    "солнце": { en: "sun", emoji: "☀️", pos: "noun", topic: "weather" }
+  };
+
+  for (const [ruKey, info] of Object.entries(dictWords)) {
+    if (msg.includes(ruKey)) {
+      let replyText = "";
+      if (role === "sophia") {
+        replyText = `Слово "${ruKey}" по-английски будет **${info.en}** ${info.emoji}!\n\nПример употребления: "I really love eating sweet ${info.en} in summer!" (Я очень люблю есть сладкий ${ruKey} летом).\n\nХотите сохранить это слово в свой словарь? И о каких ещё фруктах или словах вам хотелось бы узнать?`;
+      } else if (role === "oliver") {
+        replyText = `По-английски "${ruKey}" переводится как **${info.en}** ${info.emoji}.\n\nОбратите внимание на правильное произношение и ударение. Попробуйте составить полное предложение с этим словом!`;
+      } else {
+        replyText = `Yo! "${ruKey}" по-английски — это **${info.en}** ${info.emoji}!\n\nSuper easy! What other words do you wanna learn today?`;
+      }
+      return {
+        replyText,
+        evaluatedLevel: userLevel,
+        wordToAdd: { en: info.en, ru: ruKey, pos: info.pos, topic: info.topic }
+      };
+    }
+  }
+
   // Basic grammar corrections
   let correction = "";
   if (msg.includes("i am agree") || msg.includes("i'm agree")) {

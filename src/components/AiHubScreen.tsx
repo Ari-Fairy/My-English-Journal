@@ -1233,6 +1233,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         if (data && data.audio) {
           const audio = new Audio(`data:audio/wav;base64,${data.audio}`);
           currentAudioRef.current = audio;
+          audio.playbackRate = speechPace === "slow" ? 0.8 : speechPace === "fast" ? 1.2 : 1.0;
           audio.onended = () => {
             setIsSpeechPlaying(false);
             if (onEnd) onEnd();
@@ -1562,8 +1563,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     // Always start MediaRecorder for reliable audio capture across mobile and desktop
     await startFallbackMediaRecorder();
 
-    // Optionally start native SpeechRecognition in parallel if enabled for instant UI feedback
-    if (useNativeSpeechRec && SpeechRecognition) {
+    // Start native SpeechRecognition in parallel if available for instant live UI feedback and transcript backup
+    if (SpeechRecognition) {
       try {
         if (recognitionRef.current) {
           try { recognitionRef.current.abort(); } catch (e) {}
