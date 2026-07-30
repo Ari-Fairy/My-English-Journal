@@ -13,18 +13,23 @@ export const app = express();
 // Custom request path restoration and CORS middleware for Vercel / serverless deployments
 app.use((req, res, next) => {
   try {
-    const rawUrl = req.url || "/";
-    const parsedUrl = new URL(rawUrl, "http://localhost");
-    const pathParam = parsedUrl.searchParams.get("path") || parsedUrl.searchParams.get("url");
+    let targetUrl = req.url || "/";
 
-    if (pathParam) {
-      req.url = pathParam.startsWith("/") ? pathParam : "/" + pathParam;
-    } else if (rawUrl.includes("index.ts") || rawUrl.includes("index.js") || rawUrl.startsWith("/api/index")) {
-      req.url = rawUrl.replace(/^\/api\/index(\.ts|\.js)?/, "/api") || "/";
+    // Restore path if Vercel routed to /api/index.ts or /api/index
+    if (targetUrl.startsWith("/api/index") || targetUrl.startsWith("/api/index.ts") || targetUrl === "/api" || targetUrl === "/api/") {
+      const forwarded = (req.headers["x-forwarded-uri"] || req.headers["x-original-url"]) as string;
+      const queryPath = (req.query?.path || req.query?.url) as string;
+
+      if (forwarded && forwarded.startsWith("/api/")) {
+        targetUrl = forwarded;
+      } else if (queryPath && queryPath.startsWith("/")) {
+        targetUrl = queryPath.startsWith("/api") ? queryPath : "/api" + queryPath;
+      }
     }
 
-    if (req.url.startsWith("/api/api/")) {
-      req.url = req.url.replace(/^\/api\/api\//, "/api/");
+    // Clean up duplicated /api/api/
+    if (targetUrl.startsWith("/api/api/")) {
+      targetUrl = targetUrl.replace(/^\/api\/api\//, "/api/");
     }
 
     // Normalize path if missing /api prefix for known API routes
@@ -34,13 +39,15 @@ app.use((req, res, next) => {
       "/translate", "/ocr", "/classify", "/generate-story", "/generate-quiz", "/send-test-email"
     ];
     for (const routeName of apiRouteNames) {
-      if (req.url.startsWith(routeName)) {
-        req.url = "/api" + req.url;
+      if (targetUrl.startsWith(routeName)) {
+        targetUrl = "/api" + targetUrl;
         break;
       }
     }
+
+    req.url = targetUrl;
   } catch (e) {
-    console.error("[Path Rewrite Error]", e);
+    console.error("[Path Normalization Error]", e);
   }
 
   // Set CORS headers
