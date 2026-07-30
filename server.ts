@@ -155,7 +155,7 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T)
 
 // Helper for generating content with retry and fallback model
 async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string; req?: express.Request; timeoutMs?: number } = {}): Promise<any> {
-  const { maxRetries = 2, fallbackModel = "gemini-2.5-flash", req, timeoutMs = 7500 } = options;
+  const { maxRetries = 2, fallbackModel = "gemini-3.6-flash", req, timeoutMs = 12000 } = options;
   const ai = getAIClient(req);
   if (!ai) {
     throw new Error("GEMINI_API_KEY environment variable is not configured server-side.");
@@ -164,12 +164,10 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
 
   // Try with the requested model (or default)
   const sanitizeModelName = (m?: string) => {
-    if (!m) return "gemini-2.5-flash";
-    if (m === "gemini-3.1-flash-tts-preview") return "gemini-3.1-flash-tts-preview";
-    if (m === "gemini-3.1-flash-live-preview") return "gemini-3.1-flash-live-preview";
-    if (m === "gemini-3.1-flash-lite") return "gemini-3.1-flash-lite";
-    if (m === "gemini-2.5-pro") return "gemini-2.5-pro";
-    return "gemini-2.5-flash";
+    if (!m) return "gemini-3.6-flash";
+    if (m === "gemini-3.6-flash" || m === "gemini-3.1-pro-preview" || m === "gemini-3.1-flash-lite" || m === "gemini-3.1-flash-tts-preview" || m === "gemini-3.1-flash-live-preview") return m;
+    if (m === "gemini-2.5-pro") return "gemini-3.1-pro-preview";
+    return "gemini-3.6-flash";
   };
 
   let currentModel = sanitizeModelName(params.model);
@@ -488,7 +486,7 @@ app.post("/api/translate", async (req, res) => {
     prompt += ` Return ONLY the direct translation, single word or short list of synonym translations (like "пыль, вытирать пыль"), with no extra words, explanations, quotation marks, or markdown formatting. Just the clean Russian translation string.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [prompt]
     });
 
@@ -550,7 +548,7 @@ For example: [{"en": "genius", "ru": "гений"}, {"en": "such", "ru": "так
 Return absolutely nothing else, no markdown wrapping, no explanation, just raw valid JSON.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [
         {
           inlineData: {
@@ -1005,7 +1003,7 @@ For example:
 Always prioritize mapping to the custom keys in the provided list based on their labels. Only if a word absolutely does not fit any of the provided keys or custom labels, you can invent a new lowercase key for POS or Topic. If you invent a new Topic, provide an appropriate emoji and a Russian label (e.g., "🌳 Природа").`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: `Word: "${en}" -> Translation: "${ru}"`,
       config: {
         systemInstruction: systemInstruction,
@@ -1119,7 +1117,7 @@ Return ONLY a valid JSON object in this exact shape:
 Return absolutely nothing else, no markdown formatting, no comments, just raw JSON.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [
         { text: systemInstruction },
         { text: `Generate a brand new, unique story for level ${level} on date ${date || "today"}. 
@@ -1192,7 +1190,7 @@ The questions themselves should be in simple, level-appropriate English (appropr
 Provide a clear, brief explanation in Russian of why the correct answer is correct.`;
 
     const response = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [
         { text: systemInstruction },
         { text: `Story Title: "${title}"\nStory Content:\n"${storyText}"` }
@@ -1554,7 +1552,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
     }));
 
     // Configure model and config parameters based on interactive mode chosen by user
-    let modelName = "gemini-2.5-flash"; // Default general model
+    let modelName = "gemini-3.6-flash"; // Default general model
     
     const responseSchema = {
       type: Type.OBJECT,
@@ -1592,11 +1590,11 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
     }
 
     if (mode === "low-latency") {
-      modelName = "gemini-2.5-flash"; // Fast, low latency replies
+      modelName = "gemini-3.6-flash"; // Fast, low latency replies
     } else if (mode === "thinking") {
-      modelName = "gemini-2.5-pro"; // Reliable high reasoning model
+      modelName = "gemini-3.1-pro-preview"; // Reliable high reasoning model
     } else if (mode === "grounding") {
-      modelName = "gemini-2.5-flash";
+      modelName = "gemini-3.6-flash";
       config.tools = [{ googleSearch: {} }]; // Google Search grounding
       config.systemInstruction = baseInstruction + "\n[CRITICAL]: Please return a valid JSON object wrapped in code block format: ```json { \"replyText\": \"...\", \"evaluatedLevel\": \"...\", \"wordToAdd\": null } ```.";
     }
@@ -1624,19 +1622,19 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
         model: modelName,
         contents,
         config
-      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash", req, timeoutMs: 7500 });
+      }, { maxRetries: 2, fallbackModel: "gemini-3.6-flash", req, timeoutMs: 12000 });
     } catch (primaryErr) {
-      console.warn("[AI Chat] Primary model call failed, falling back to gemini-2.5-flash standard JSON:", primaryErr);
+      console.warn("[AI Chat] Primary model call failed, falling back to gemini-3.6-flash standard JSON:", primaryErr);
       const fallbackConfig: any = {
         systemInstruction: baseInstruction,
         responseMimeType: "application/json",
         responseSchema: responseSchema
       };
       response = await generateContentWithRetry({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         contents,
         config: fallbackConfig
-      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash", req, timeoutMs: 7500 });
+      }, { maxRetries: 2, fallbackModel: "gemini-3.6-flash", req, timeoutMs: 12000 });
     }
 
     let responseText = response.text || "";
@@ -1784,7 +1782,7 @@ Return STRICTLY a JSON array of objects following this structure:
 
     const ai = getAIClient(req);
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: prompt,
       config: {
         responseMimeType: "application/json",
@@ -1846,7 +1844,7 @@ Return the result as a JSON object matching the requested schema.`;
 
     const ai = getAIClient(req);
     const response = await ai.models.generateContent({
-      model: "gemini-2.5-flash", // Use highly-available Flash model for image scanning!
+      model: "gemini-3.6-flash", // Use highly-available Flash model for image scanning!
       contents: [
         {
           inlineData: {
@@ -1933,7 +1931,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transPromise = generateContentWithRetry({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.6-flash",
           contents: [
             {
               inlineData: {
@@ -1943,7 +1941,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
             },
             "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
           ]
-        }, { fallbackModel: "gemini-2.5-flash" });
+        }, { fallbackModel: "gemini-3.6-flash" });
 
         const transResponse = await withTimeout(transPromise, 25000, null);
         if (transResponse && transResponse.text) {
@@ -2138,14 +2136,14 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
 
     console.log("[Voice Chat] Generating teacher text response...");
     const textResponse = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents,
       config: {
         systemInstruction: baseInstruction,
         responseMimeType: "application/json",
         responseSchema
       }
-    }, { fallbackModel: "gemini-2.5-flash", req, timeoutMs: 7500 });
+    }, { fallbackModel: "gemini-3.6-flash", req, timeoutMs: 12000 });
 
     let replyText = "";
     let evaluatedLevel = userLevel;
@@ -2428,7 +2426,7 @@ Return strictly a JSON object matching the requested schema.`;
     }
 
     const response = await generateContentWithRetry({
-      model: "gemini-2.5-flash",
+      model: "gemini-3.6-flash",
       contents: [{ parts: [{ text: gradingPrompt }] }],
       config: {
         responseMimeType: "application/json",
@@ -2547,21 +2545,21 @@ Return strictly a JSON object containing:
     let response;
     try {
       response = await generateContentWithRetry({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         contents: prompt,
         config: {
           tools: [{ googleSearch: {} }]
         }
-      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
+      }, { maxRetries: 2, fallbackModel: "gemini-3.6-flash" });
     } catch (groundingErr: any) {
       console.warn("[Voice Topic] Search grounding failed, falling back to standard prompt...", groundingErr?.message || groundingErr);
       response = await generateContentWithRetry({
-        model: "gemini-2.5-flash",
+        model: "gemini-3.6-flash",
         contents: prompt + "\nDo not use external tools. Generate a high-quality discussion topic directly as clean JSON.",
         config: {
           responseMimeType: "application/json"
         }
-      }, { maxRetries: 2, fallbackModel: "gemini-2.5-flash" });
+      }, { maxRetries: 2, fallbackModel: "gemini-3.6-flash" });
     }
 
     let cleanText = (response?.text || "").trim();
