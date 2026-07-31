@@ -169,15 +169,77 @@ export function getOfflineChatTutorReply(
     }
   }
 
-  // Dictation / Vocabulary check query detection (e.g. "словарный диктант", "проведи диктант")
-  if (msg.includes("диктант") || msg.includes("словарный") || msg.includes("диктант слов")) {
+  // Grammar Exercise Request Parser
+  if (msg.includes("упражнение на грамматику") || msg.includes("предложение с пропуском") || msg.includes("грамматик")) {
     let replyText = "";
     if (role === "sophia") {
-      replyText = `Отличная идея! С удовольствием проведу словарный диктант! 📚✨\n\nВот первые 5 слов для проверки, переведи их на английский:\n1. **Солнце**\n2. **Семья**\n3. **Время**\n4. **Мечта**\n5. **Быстро**\n\nНапиши переводы в ответ, а я с любовью проверю каждый! 🌸`;
+      replyText = `С удовольствием проведу упражнение на грамматику! 📝✨\n\nВот предложение с пропуском:\n**She ___ (to work) at a hospital every day.**\n\nВыберите правильную форму:\n**a) work**\n**b) works**\n**c) is working**\n\nНапишите букву ответа или слово, а я с любовью подробно объясню правило! 🌸`;
     } else if (role === "oliver") {
-      replyText = `Принято. Начинаем словарный диктант. Переведите следующие 5 слов на английский язык:\n1. **Солнце**\n2. **Семья**\n3. **Время**\n4. **Мечта**\n5. **Быстро**\n\nСоблюдайте точность написания и орфографию.`;
+      replyText = `Принято. Начинаем упражнение по грамматике.\n\nЗаполните пропуск в предложении:\n**She ___ (to work) at a hospital every day.**\n\nВарианты ответа:\n**a) work**\n**b) works**\n**c) is working**\n\nВ случае ошибки правило будет подробно разъяснено на русском.`;
     } else {
-      replyText = `Yo! Let me test your vocab! 🔥 Вот 5 слов для диктанта:\n1. **Солнце**\n2. **Семья**\n3. **Время**\n4. **Мечта**\n5. **Быстро**\n\nDrop your translations when you're ready! ⚡`;
+      replyText = `Grammar time! 🔥 Вот предложение с пропуском:\n**She ___ (to work) at a hospital every day.**\n\nВыбирай вариант:\n**a) work**\n**b) works**\n**c) is working**\n\nКакой вариант правильный? Напиши в ответ! ⚡`;
+    }
+    return {
+      replyText,
+      evaluatedLevel: userLevel,
+      wordToAdd: { en: "grammar", ru: "грамматика", pos: "noun", topic: "study" }
+    };
+  }
+
+  // Answer checking for Grammar Exercise ("a", "b", "c", "works")
+  if (msg === "a" || msg === "b" || msg === "c" || msg.includes("works") || msg.includes("is working") || msg === "b) works") {
+    const isCorrect = msg === "b" || msg.includes("works") || msg === "b) works";
+    let replyText = "";
+    if (isCorrect) {
+      if (role === "sophia") {
+        replyText = `Абсолютно верно! 🎉 Браво! Правильный ответ — **b) works**.\n\n**Правило:** Для подлежащего в 3-м лице единственного числа (*she, he, it*) в Present Simple к глаголу добавляется окончание **-s** или **-es** (*work ➔ works*), так как действие происходит регулярно (*every day*).\n\nСледующее задание:\n**They ___ (to play) football right now.**\n**a) play**\n**b) plays**\n**c) are playing**\n\nКакой вариант выберешь? 🌸`;
+      } else if (role === "oliver") {
+        replyText = `Совершенно верно. Правильный ответ: **b) works**.\n\n**Анализ правила:** В Present Simple с местоимениями 3-го лица единственного числа к основе глагола добавляется флексия **-s**. Маркер *every day* указывает на регулярность.\n\nСледующий вопрос:\n**They ___ (to play) football right now.**\n**a) play**\n**b) plays**\n**c) are playing**`;
+      } else {
+        replyText = `Spot on! ⚡ **b) works** is 100% correct!\n\nRule: Present Simple + third person singular (she/he/it) = add **-s**!\n\nNext question:\n**They ___ (to play) football right now.**\n**a) play**\n**b) plays**\n**c) are playing**\n\nDrop your answer! 🔥`;
+      }
+    } else {
+      if (role === "sophia") {
+        replyText = `Хорошая попытка! 😊 Но верный ответ — **b) works**.\n\n**Объяснение:** В предложении есть маркер *every day* (каждый день), поэтому нужен Present Simple. Так как подлежащее **She** (она), к глаголу добавляется **-s**: *she works*.\n\nДавай попробуем следующее закрепить:\n**He ___ (to speak) English very well.**\n**a) speak**\n**b) speaks**\n**c) is speaking**\n\nКакой вариант правильный? 🌸`;
+      } else if (role === "oliver") {
+        replyText = `Неверно. Правильный вариант: **b) works**.\n\n**Грамматический анализ:** Словосочетание *every day* обозначает повторяющееся действие, требуя Present Simple. С подлежащим 3-го лица единственного числа (*she*) обязателен суффикс **-s** (*works*).\n\nПовторное задание:\n**He ___ (to speak) English very well.**\n**a) speak**\n**b) speaks**\n**c) is speaking**`;
+      } else {
+        replyText = `Close, but not quite! 💡 The right option is **b) works**.\n\nWhy? Because *every day* means routine ➔ Present Simple! And for *she*, we add **-s**!\n\nTry this one:\n**He ___ (to speak) English very well.**\n**a) speak**\n**b) speaks**\n**c) is speaking**\n\nWhat's your pick? ⚡`;
+      }
+    }
+    return {
+      replyText,
+      evaluatedLevel: userLevel,
+      wordToAdd: { en: "exercise", ru: "упражнение", pos: "noun", topic: "study" }
+    };
+  }
+
+  // Topic Proposal Request Parser ("предложи мне интересную тему", "тему для обсуждения", "первый вопрос")
+  if (msg.includes("предложи") || msg.includes("интересную тему") || msg.includes("тему для обсуждения") || msg.includes("первый вопрос")) {
+    let replyText = "";
+    if (role === "sophia") {
+      replyText = `С удовольствием! 🗣️✨ Предлагаю обсудить отличную тему: **"Travel & Dream Vacation"** (Путешествия и отпуск мечты).\n\nМой первый вопрос к тебе:\n*If you could travel to any country in the world tomorrow for free, where would you go and why?*\n\nОтветь на английском (можно 1-2 простых предложения), а я с любовью помогу с языком! 🌸`;
+    } else if (role === "oliver") {
+      replyText = `Предлагаю тему для академического обсуждения: **"Modern Technology & Daily Habits"** (Технологии и ежедневные привычки).\n\nПервый вопрос для оценки логики и грамматики:\n*In your opinion, how has smart technology changed our daily work and study routines?*\n\nСформулируйте ваш ответ на английском языке.`;
+    } else {
+      replyText = `Yo! Let's talk about something fun! 🚀 Тема дня: **"Hobbies & Free Time"** (Хобби и свободное время).\n\nHere is my first question for you:\n*What is your favorite way to chill out on weekends when you have no work or study?*\n\nDrop your answer in English! Let's go! ⚡`;
+    }
+    return {
+      replyText,
+      evaluatedLevel: userLevel,
+      wordToAdd: { en: "discussion", ru: "обсуждение, дискуссия", pos: "noun", topic: "general" }
+    };
+  }
+
+  // Dictation / Vocabulary check query detection (e.g. "словарный диктант", "проведи диктант", "называй по одному слову")
+  if (msg.includes("диктант") || msg.includes("словарный") || msg.includes("называй по одному слову") || msg.includes("диктант слов")) {
+    let replyText = "";
+    if (role === "sophia") {
+      replyText = `Отличная идея! С удовольствием проведу словарный диктант! 🎙️📚\n\nДавай начнем с первого слова:\nКак переводится на русский слово **watermelon**? 🍉\n\nНапиши перевод в ответ, а затем я дам следующее слово! 🌸`;
+    } else if (role === "oliver") {
+      replyText = `Принято. Начинаем словарный диктант по одному слову.\n\nПервое слово:\n**watermelon** 🍉\n\nНапишите точный перевод этого слова на русский язык.`;
+    } else {
+      replyText = `Yo! Let's do a dictation! 🔥\n\nFirst word:\n**watermelon** 🍉\n\nWhat does it mean in Russian? Drop your answer! ⚡`;
     }
     return {
       replyText,

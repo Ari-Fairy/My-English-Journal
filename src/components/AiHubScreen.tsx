@@ -1306,23 +1306,23 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
     if (currentChunk) rawChunks.push(currentChunk);
 
-    const voices = browserVoices.length > 0 ? browserVoices : window.speechSynthesis.getVoices();
+    const voices = browserVoices.length > 0 ? browserVoices : (typeof window !== "undefined" && window.speechSynthesis ? window.speechSynthesis.getVoices() : []);
 
-    // English tutor voice
+    // High quality natural English voice
     let englishVoice: SpeechSynthesisVoice | null = null;
     if (tutor === "sophia") {
       englishVoice = voices.find(v => {
         const name = v.name.toLowerCase();
         const isEn = v.lang.startsWith("en") || v.lang.replace("_", "-").startsWith("en");
-        const isFemale = name.includes("female") || name.includes("samantha") || name.includes("zira") || name.includes("aria") || name.includes("victoria") || name.includes("karen") || name.includes("google us english") || name.includes("natural");
-        return isEn && isFemale;
-      }) || voices.find(v => v.lang.startsWith("en")) || null;
+        const isNatural = name.includes("google") || name.includes("natural") || name.includes("online") || name.includes("samantha") || name.includes("victoria") || name.includes("aria") || name.includes("karen") || name.includes("zira") || name.includes("female");
+        return isEn && isNatural;
+      }) || voices.find(v => v.lang.startsWith("en") && (v.name.toLowerCase().includes("female") || v.name.toLowerCase().includes("google") || v.name.toLowerCase().includes("samantha"))) || voices.find(v => v.lang.startsWith("en")) || null;
     } else if (tutor === "oliver") {
       englishVoice = voices.find(v => {
         const name = v.name.toLowerCase();
         const lang = v.lang.toLowerCase();
-        const isMale = name.includes("male") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("david") || name.includes("ryan") || name.includes("guy") || name.includes("james") || name.includes("aaron") || name.includes("mark");
-        return lang.startsWith("en") && isMale;
+        const isNaturalMale = (name.includes("google") || name.includes("natural") || name.includes("online") || name.includes("daniel") || name.includes("george") || name.includes("oliver") || name.includes("david") || name.includes("ryan") || name.includes("guy") || name.includes("james")) && !name.includes("female");
+        return lang.startsWith("en") && isNaturalMale;
       }) || voices.find(v => {
         const name = v.name.toLowerCase();
         return name.includes("male") || name.includes("daniel") || name.includes("george") || name.includes("david") || name.includes("ryan");
@@ -1331,16 +1331,22 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       englishVoice = voices.find(v => {
         const name = v.name.toLowerCase();
         const lang = v.lang.toLowerCase();
-        const isMale = name.includes("male") || name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("aaron") || name.includes("ryan") || name.includes("tom") || name.includes("dave");
-        return lang.startsWith("en") && isMale;
+        const isNaturalMale = (name.includes("google") || name.includes("natural") || name.includes("online") || name.includes("alex") || name.includes("fred") || name.includes("guy") || name.includes("aaron") || name.includes("ryan") || name.includes("tom")) && !name.includes("female");
+        return lang.startsWith("en") && isNaturalMale;
       }) || voices.find(v => {
         const name = v.name.toLowerCase();
         return name.includes("male") || name.includes("alex") || name.includes("fred") || name.includes("guy");
       }) || voices.find(v => v.lang.startsWith("en")) || null;
     }
 
-    // Russian voice for Russian text parts
+    // High quality natural Russian voice
     const russianVoice = voices.find(v => {
+      const name = v.name.toLowerCase();
+      const lang = v.lang.toLowerCase();
+      const isRu = lang.startsWith("ru") || lang.includes("russian");
+      const isNatural = name.includes("google") || name.includes("natural") || name.includes("online") || name.includes("yandex") || name.includes("tatyana") || name.includes("pavel") || name.includes("milena") || name.includes("premium");
+      return isRu && isNatural;
+    }) || voices.find(v => {
       const lang = v.lang.toLowerCase();
       return lang.startsWith("ru") || lang.includes("russian");
     }) || null;
