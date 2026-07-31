@@ -589,12 +589,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
 
     const unsubscribe = subscribeUserAiSessions(user.uid, (remoteData) => {
-      isCloudLoadedRef.current = true;
-      if (Array.isArray(remoteData.chatSessions) && remoteData.chatSessions.length > 0) {
-        setChatSessions(prev => mergeRemoteSessions(prev, remoteData.chatSessions));
-      }
-      if (Array.isArray(remoteData.voiceSessions) && remoteData.voiceSessions.length > 0) {
-        setVoiceSessions(prev => mergeRemoteSessions(prev, remoteData.voiceSessions));
+      if (!isCloudLoadedRef.current) {
+        isCloudLoadedRef.current = true;
+        if (Array.isArray(remoteData.chatSessions) && remoteData.chatSessions.length > 0) {
+          setChatSessions(prev => mergeRemoteSessions(prev, remoteData.chatSessions));
+        }
+        if (Array.isArray(remoteData.voiceSessions) && remoteData.voiceSessions.length > 0) {
+          setVoiceSessions(prev => mergeRemoteSessions(prev, remoteData.voiceSessions));
+        }
       }
     });
 
@@ -1201,34 +1203,49 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
   // Helper to scroll container ONLY (never whole window) to bottom
   const scrollToBottomContainer = (containerId: string) => {
-    const doScroll = () => {
+    requestAnimationFrame(() => {
       const el = document.getElementById(containerId);
       if (el) {
         el.scrollTop = el.scrollHeight;
       }
-    };
-    doScroll();
-    requestAnimationFrame(() => {
-      doScroll();
-      setTimeout(doScroll, 50);
-      setTimeout(doScroll, 150);
-      setTimeout(doScroll, 300);
     });
   };
 
-  // Auto-scroll chat container when messages update (sent/received), loading state changes, or session switches
+  const prevChatCountRef = useRef(chatMessages.length);
+  const prevVoiceCountRef = useRef(voiceMessages.length);
+  const prevChatSessionRef = useRef(activeChatSessionId);
+  const prevVoiceSessionRef = useRef(activeVoiceSessionId);
+  const prevActiveTabRef = useRef(activeTab);
+
+  // Auto-scroll chat container ONLY when a new message is added, loading starts, or session/tab switches
   useEffect(() => {
     if (activeTab === "chat") {
-      scrollToBottomContainer("ai_chat_scroll_container");
+      const isNewMessage = chatMessages.length > prevChatCountRef.current;
+      const isSessionChanged = activeChatSessionId !== prevChatSessionRef.current;
+      const isTabChanged = activeTab !== prevActiveTabRef.current;
+      if (isNewMessage || isSessionChanged || isTabChanged || chatLoading) {
+        scrollToBottomContainer("ai_chat_scroll_container");
+      }
+      prevChatCountRef.current = chatMessages.length;
+      prevChatSessionRef.current = activeChatSessionId;
+      prevActiveTabRef.current = activeTab;
     }
-  }, [chatMessages, chatLoading, activeChatSessionId, activeTab]);
+  }, [chatMessages.length, chatLoading, activeChatSessionId, activeTab]);
 
-  // Auto-scroll voice container when messages update (sent/received), loading state changes, or session switches
+  // Auto-scroll voice container ONLY when a new message is added, loading starts, or session/tab switches
   useEffect(() => {
     if (activeTab === "voice") {
-      scrollToBottomContainer("ai_voice_scroll_container");
+      const isNewMessage = voiceMessages.length > prevVoiceCountRef.current;
+      const isSessionChanged = activeVoiceSessionId !== prevVoiceSessionRef.current;
+      const isTabChanged = activeTab !== prevActiveTabRef.current;
+      if (isNewMessage || isSessionChanged || isTabChanged || voiceLoading) {
+        scrollToBottomContainer("ai_voice_scroll_container");
+      }
+      prevVoiceCountRef.current = voiceMessages.length;
+      prevVoiceSessionRef.current = activeVoiceSessionId;
+      prevActiveTabRef.current = activeTab;
     }
-  }, [voiceMessages, voiceLoading, activeVoiceSessionId, activeTab]);
+  }, [voiceMessages.length, voiceLoading, activeVoiceSessionId, activeTab]);
 
   // Studio AI speech synthesis with browser fallback
   const speakText = async (text: string, onEnd?: () => void) => {
@@ -1698,12 +1715,25 @@ CRITICAL RULES:
   const accumulatedTranscriptRef = useRef<string>("");
 
   const startVoiceRecording = async () => {
+    // Stop any ongoing speech playback so microphone doesn't pick up speaker sound
+    stopAllSpeech();
+
     const SpeechRecognition = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
     
     isExplicitlyStoppedRef.current = false;
     accumulatedTranscriptRef.current = "";
     setIsRecording(true);
     setVoiceInputText("Слушаю вас...");
+
+    // Clean up previous MediaRecorder if existing
+    if (mediaRecorderRef.current) {
+      try {
+        mediaRecorderRef.current.onstop = null;
+        if (mediaRecorderRef.current.state !== "inactive") {
+          mediaRecorderRef.current.stop();
+        }
+      } catch (e) {}
+    }
 
     // Always start MediaRecorder for reliable audio capture across mobile and desktop
     await startFallbackMediaRecorder();
@@ -1712,13 +1742,17 @@ CRITICAL RULES:
     if (SpeechRecognition) {
       try {
         if (recognitionRef.current) {
-          try { recognitionRef.current.abort(); } catch (e) {}
+          try {
+            recognitionRef.current.onresult = null;
+            recognitionRef.current.onerror = null;
+            recognitionRef.current.abort();
+          } catch (e) {}
         }
         
         const rec = new SpeechRecognition();
         rec.continuous = true;
         rec.interimResults = true;
-        rec.lang = speechRecLang;
+        rec.lang = speechRecLang || "ru-RU";
         
         rec.onresult = (event: any) => {
           let interimTranscript = "";
@@ -1735,9 +1769,6 @@ CRITICAL RULES:
           }
           const fullText = (accumulatedTranscriptRef.current + interimTranscript).trim();
           setVoiceInputText(fullText || "Слушаю вас...");
-          if (activeTabRef.current === "chat" && fullText) {
-            setChatInput(fullText);
-          }
         };
         
         rec.onerror = (e: any) => {
@@ -1860,12 +1891,13 @@ CRITICAL RULES:
       return;
     }
 
-    if (blob.size < 200 && !recognizedText) {
+    if (blob.size < 500 && !recognizedText) {
+      setToastMessage("⚠️ Запись получилась слишком короткой. Зажмите кнопку и говорите фразу.");
       setVoiceLoading(false);
       return;
     }
 
-    if (blob.size < 200 && recognizedText) {
+    if (blob.size < 500 && recognizedText) {
       await executeVoiceDialogueRequest({ text: recognizedText });
       return;
     }
@@ -1908,7 +1940,11 @@ CRITICAL RULES:
         body: JSON.stringify({
           audio: payload.audio,
           text: payload.text,
-          messages: targetVoiceMessages.filter(m => !m.text.includes("🎙️")).map(m => ({ role: m.role, text: m.text, timestamp: m.timestamp || new Date().toISOString() })),
+          messages: targetVoiceMessages.map(m => ({ 
+            role: m.role, 
+            text: m.text.replace(/^🎙️\s*/, ""), 
+            timestamp: m.timestamp || new Date().toISOString() 
+          })),
           role: tutor,
           userLevel: getCurrentTutorLevel(tutor),
           speechPace,
@@ -1925,16 +1961,11 @@ CRITICAL RULES:
         const textToUse = data.userTranscription.startsWith("🎙️") ? data.userTranscription : `🎙️ ${data.userTranscription}`;
         setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
-          let found = false;
           for (let i = copy.length - 1; i >= 0; i--) {
-            if (copy[i].role === "user" && (copy[i].text.includes("🎙️") || copy[i].text.includes("Голосовое сообщение"))) {
-              copy[i] = { role: "user", text: textToUse, timestamp: copy[i].timestamp || new Date().toISOString() };
-              found = true;
+            if (copy[i].role === "user") {
+              copy[i] = { ...copy[i], text: textToUse };
               break;
             }
-          }
-          if (!found && copy.length > 0 && copy[copy.length - 1].role === "user") {
-            copy[copy.length - 1] = { role: "user", text: textToUse, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
           }
           return copy;
         });
@@ -3892,13 +3923,13 @@ CRITICAL RULES:
             <textarea
               ref={textareaRef}
               rows={2}
-              placeholder={isRecording ? "🎙️ Говорите... Речь распознаётся..." : "Введите сообщение в свободной форме..."}
+              placeholder="Введите сообщение в свободной форме..."
               style={{
                 flex: 1,
                 minWidth: 0,
                 borderRadius: "1rem",
-                border: isRecording ? "1.5px solid var(--rose)" : "1.5px solid var(--border)",
-                background: isRecording ? "rgba(214,128,96,0.06)" : "rgba(255,255,255,0.02)",
+                border: "1.5px solid var(--border)",
+                background: "rgba(255,255,255,0.02)",
                 padding: "12px 16px",
                 fontSize: 14,
                 color: "var(--warm)",
@@ -3920,30 +3951,6 @@ CRITICAL RULES:
               disabled={chatLoading}
             />
 
-            {/* Voice Dictation / Mic Button */}
-            <button
-              style={{
-                background: isRecording ? "var(--rose)" : "rgba(143,160,128,0.18)",
-                color: isRecording ? "#ffffff" : "var(--sage)",
-                border: isRecording ? "none" : "1.5px solid var(--sage)",
-                borderRadius: "50%",
-                width: 56,
-                height: 56,
-                display: "flex",
-                alignItems: "center",
-                justifyContent: "center",
-                cursor: "pointer",
-                boxShadow: isRecording ? "0 0 12px rgba(214,128,96,0.5)" : "0 2px 8px rgba(143,160,128,0.2)",
-                flexShrink: 0,
-                transition: "all 0.2s ease"
-              }}
-              onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
-              disabled={chatLoading}
-              title={isRecording ? "Остановить запись" : "Голосовой ввод сообщений"}
-            >
-              {isRecording ? <MicOff size={20} className="animate-pulse" /> : <Mic size={20} />}
-            </button>
-
             {/* Send Button */}
             <button
               style={{
@@ -3951,14 +3958,15 @@ CRITICAL RULES:
                 color: "#fff",
                 border: "none",
                 borderRadius: "50%",
-                width: 56,
-                height: 56,
+                width: 52,
+                height: 52,
                 display: "flex",
                 alignItems: "center",
                 justifyContent: "center",
                 cursor: "pointer",
                 boxShadow: "0 2px 8px rgba(143,160,128,0.3)",
-                flexShrink: 0
+                flexShrink: 0,
+                transition: "all 0.2s ease"
               }}
               onClick={handleSendChatMessage}
               disabled={chatLoading || !chatInput.trim()}
