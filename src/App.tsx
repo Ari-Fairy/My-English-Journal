@@ -917,6 +917,8 @@ export default function App() {
         <HomePage 
           words={words} 
           stats={progress} 
+          theme={theme}
+          onToggleTheme={() => setTheme(t => t === "light" ? "dark" : "light")}
           onNavigate={setView} 
           onStartStudy={(type) => {
             setSessionType(type);

@@ -264,6 +264,9 @@ export function getOfflineChatTutorReply(
     correction = "\n\n💡 **Подсказка:** Для возраста используют глагол *to be*: **'I am 20 years old'**.";
   }
 
+  const isNumberedAnswers = /1[\s\.\)].*2[\s\.\)]/i.test(msg) || (msg.includes("friend") && msg.includes("read"));
+  const isAskingIfCorrect = msg.includes("правильно") || msg.includes("верно") || msg.includes("так") || msg.includes("correct") || msg.includes("right");
+
   // Check if message is strictly a standalone short greeting without additional clauses
   const isExplicitGreeting = msg.length < 25 && /^(hello|hi|hey|good morning|good afternoon|good evening|привет|здравствуй|добрый день|доброе утро|добрый вечер)[\!\?\.\s]*$/i.test(msg);
 
@@ -373,7 +376,23 @@ High five! ✋ What's next on your learning list today?`;
       replyText = `${timeGreetingPrefix}Yes! You got them 100% right! 🔥 You're doing amazing! Ready for 5 more words, or want to chat about something else?`;
     }
   }
-  // 3. User asking for a new task/exercise or words to translate ("дай задание", "дай еще слов", "перевод", "дай пять слов")
+  // 3. User asking to generate a text / story / essay on a topic
+  else if (msg.includes("напиши") || msg.includes("составь") || msg.includes("придумай") || msg.includes("write") || msg.includes("generate") || msg.includes("create") || (msg.includes("текст") && (msg.includes("тему") || msg.includes("уровн") || msg.includes("про")))) {
+    if (msg.includes("гендер") || msg.includes("стереотип") || msg.includes("мужчин") || msg.includes("женщин") || msg.includes("gender")) {
+      wordToAdd = { en: "stereotype", ru: "стереотип", pos: "noun", topic: "general" };
+      if (role === "sophia") {
+        replyText = `С удовольствием подготовила для тебя текст уровня A2 на тему гендерных стереотипов! 🌸\n\n### 📖 Gender Stereotypes in Modern Society\n\nIn many societies, people have traditional ideas about men and women. For a long time, people believed that men should be the main workers and earn money, while women should stay at home, cook meals, and take care of children.\n\nHowever, the world is changing quickly today. Women can become scientists, pilots, CEOs, and politicians, while men can also take care of children and work at home. Equality means that every person can choose their own path without fear of judgment.\n\nToday, young people believe that kindness, hard work, and intelligence are important for everyone, regardless of gender.\n\n---\n💡 **Полезный словарь:**\n- **Stereotype** (*стереотип*) — a fixed idea about a group of people.\n- **Equality** (*равенство*) — having the same rights and opportunities.\n- **Judgment** (*осуждение, мнение*) — making opinions about someone.\n\n**Мой вопрос к тебе:** *What do you think about gender stereotypes in your city or country? Do you think they are disappearing?* (Ответь в 1-2 простых предложениях на английском!)`;
+      } else if (role === "oliver") {
+        replyText = `Текст уровня A2 на тему гендерных стереотипов составлен согласно академическим стандартам:\n\n### 📝 Gender Stereotypes and Social Expectations\n\nGender stereotypes are traditional social beliefs about how men and women should behave. Historically, men were expected to focus on career and leadership, whereas women were expected to manage household duties.\n\nIn contemporary society, these traditional boundaries are fading. Both men and women now share professional responsibilities and domestic tasks equally. Gender equality allows individuals to pursue personal goals based on talent rather than gender stereotypes.\n\n---\n📚 **Академическая лексика:**\n- **Contemporary** (*современный*)\n- **Responsibilities** (*обязанности*)\n- **Boundaries** (*границы*)\n\n**Задание:** Сформулируйте ваш ответ на английском: *Do you agree that modern society promotes equal opportunities for everyone?*`;
+      } else {
+        replyText = `Yo! Here is a super cool A2 text about gender stereotypes! 🔥\n\n### ⚡ Gender Stereotypes: Old Ideas vs Modern Life\n\nGender stereotypes are old rules about what men and women "should" do. In the past, people thought guys had to be tough and work all day, while girls had to stay home and do chores.\n\nThat is so outdated! Today, anyone can do anything! Girls can play sports or lead tech companies, and guys can cook or express their emotions freely. It is all about freedom and respect!\n\n---\n🚀 **Cool Words:**\n- **Outdated** (*устаревший*)\n- **Freedom** (*свобода*)\n- **Respect** (*уважение*)\n\n**Your turn:** *What is one stereotype you think is silly? Drop your answer in English!*`;
+      }
+    } else {
+      wordToAdd = { en: "creative", ru: "творческий", pos: "adjective", topic: "study" };
+      replyText = `С удовольствием подготовила для тебя этот текст на английском языке (уровень A2)! 📝✨\n\n### 🌟 Learning and Growing Every Day\n\nLearning a new language opens up incredible opportunities in life. When we practice reading, speaking, and listening regularly, our mind grows stronger and more adaptable.\n\nEvery small step counts. Even practicing for ten minutes a day helps you become fluent and confident over time!\n\n---\n💡 **Полезные слова:**\n- **Opportunity** (*возможность*)\n- **Adaptable** (*гибкий*)\n- **Confident** (*уверенный в себе*)\n\nWhat are your thoughts on this topic? Tell me in English! 🌸`;
+    }
+  }
+  // 4. User asking for a new task/exercise or words to translate ("дай задание", "дай еще слов", "перевод", "дай пять слов")
   else if (msg.includes("задание") || msg.includes("слов") || msg.includes("упражнение") || msg.includes("give me words") || msg.includes("task") || msg.includes("exercise")) {
     wordToAdd = { en: "challenge", ru: "сложное задание, вызов", pos: "noun", topic: "study" };
     if (role === "sophia") {

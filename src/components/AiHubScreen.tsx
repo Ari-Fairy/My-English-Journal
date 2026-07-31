@@ -1408,8 +1408,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   ): Promise<{ replyText: string; evaluatedLevel?: string; wordToAdd?: any } | null> => {
     try {
       const customKey = typeof window !== "undefined" ? (localStorage.getItem("user_gemini_api_key") || "").trim() : "";
-      const apiKey = customKey || "AIzaSyCA_svzuAGTWWRYctsp3Q-IlsDDtNY7naI";
-      if (!apiKey) return null;
+      if (!customKey) return null;
+      const apiKey = customKey;
 
       const instructionsMap: Record<string, string> = {
         sophia: "You are Sophia, a warm, cozy, highly empathetic, and encouraging English teacher for Russian students. Always answer translation questions directly (e.g. 'Как будет арбуз по-английски' -> 'Арбуз по-английски будет **watermelon**! 🍉').",

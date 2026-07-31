@@ -5,35 +5,35 @@ import { getLocalDateString, getReviewCooldownStatus, getEffectiveDueWords, getW
 const getWeeklyPreset = (index: number) => {
   const presets = [
     {
-      title: "📚 Интенсивное накопление",
+      title: "🌱 Лёгкий старт",
       goals: [
-        { id: "words", text: "📚 Выучить 100 слов за неделю", target: 100, type: "words" },
-        { id: "books", text: "📖 Прочитать 10 глав или книг за неделю", target: 10, type: "books" },
+        { id: "words", text: "📚 Выучить 15 слов за неделю", target: 15, type: "words" },
+        { id: "books", text: "📖 Прочитать 1 главу за неделю", target: 1, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 2 дня подряд", target: 2, type: "streak" }
+      ]
+    },
+    {
+      title: "📖 Комфортный темп",
+      goals: [
+        { id: "words", text: "📚 Выучить 25 слов за неделю", target: 25, type: "words" },
+        { id: "books", text: "📖 Прочитать 2 главы за неделю", target: 2, type: "books" },
         { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
       ]
     },
     {
-      title: "📖 Читательский вызов",
+      title: "📚 Спокойный баланс",
       goals: [
-        { id: "words", text: "📚 Выучить 150 слов за неделю", target: 150, type: "words" },
-        { id: "books", text: "📖 Прочитать 15 глав или книг за неделю", target: 15, type: "books" },
-        { id: "streak", text: "🔥 Заниматься 5 дней подряд", target: 5, type: "streak" }
-      ]
-    },
-    {
-      title: "🚀 Лингвистический спринт",
-      goals: [
-        { id: "words", text: "📚 Выучить 200 слов за неделю", target: 200, type: "words" },
-        { id: "books", text: "📖 Прочитать 12 глав или книг за неделю", target: 12, type: "books" },
-        { id: "streak", text: "🔥 Заниматься 7 дней подряд", target: 7, type: "streak" }
-      ]
-    },
-    {
-      title: "🧘🏽 Стабильный темп",
-      goals: [
-        { id: "words", text: "📚 Выучить 120 слов за неделю", target: 120, type: "words" },
-        { id: "books", text: "📖 Прочитать 5 глав или книг за неделю", target: 5, type: "books" },
+        { id: "words", text: "📚 Выучить 35 слов за неделю", target: 35, type: "words" },
+        { id: "books", text: "📖 Прочитать 3 главы за неделю", target: 3, type: "books" },
         { id: "streak", text: "🔥 Заниматься 4 дня подряд", target: 4, type: "streak" }
+      ]
+    },
+    {
+      title: "🧘🏽 Регулярная привычка",
+      goals: [
+        { id: "words", text: "📚 Выучить 20 слов за неделю", target: 20, type: "words" },
+        { id: "books", text: "📖 Прочитать 2 главы за неделю", target: 2, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
       ]
     }
   ];
@@ -44,6 +44,8 @@ const getWeeklyPreset = (index: number) => {
 interface HomePageProps {
   words: Word[];
   stats: UserProgress;
+  theme?: "light" | "dark";
+  onToggleTheme?: () => void;
   onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai") => void;
   onStartStudy: (sessionType: "learn" | "review" | "mandatory") => void;
   onSaveWord: (word: Word) => void;
@@ -51,7 +53,7 @@ interface HomePageProps {
   onSaveProgress: (stats: UserProgress) => void;
 }
 
-export default function HomePage({ words, stats, onNavigate, onStartStudy, onSaveWord, onSaveWords, onSaveProgress }: HomePageProps) {
+export default function HomePage({ words, stats, theme = "light", onToggleTheme, onNavigate, onStartStudy, onSaveWord, onSaveWords, onSaveProgress }: HomePageProps) {
   const [recallInfo, setRecallInfo] = useState(false);
   const [isSpreading, setIsSpreading] = useState(false);
   const [showSpreadConfirm, setShowSpreadConfirm] = useState(false);
@@ -237,13 +239,60 @@ export default function HomePage({ words, stats, onNavigate, onStartStudy, onSav
 
   return (
     <div className="fade-in">
-      <div style={{ textAlign: "center", paddingTop: 12, paddingBottom: 20 }}>
-        <h1 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 30, color: "var(--warm)" }}>
-          My English Journal
-        </h1>
-        <p className="sub-text" style={{ color: "var(--sage)", marginTop: 5 }}>
-          {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
-        </p>
+      <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, paddingBottom: 16 }}>
+        <div>
+          <h1 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 26, color: "var(--warm)", margin: 0, lineHeight: 1.2 }}>
+            My English Journal
+          </h1>
+          <p className="sub-text" style={{ color: "var(--sage)", marginTop: 3, marginBottom: 0, fontSize: 13 }}>
+            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+          </p>
+        </div>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          {onToggleTheme && (
+            <button
+              onClick={onToggleTheme}
+              style={{
+                background: "var(--card)",
+                border: "1.5px solid var(--border)",
+                borderRadius: "50%",
+                width: 40,
+                height: 40,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                fontSize: 18,
+                boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+                color: "var(--warm)",
+                transition: "transform 0.2s ease"
+              }}
+              title={theme === "dark" ? "Переключить на светлую тему" : "Переключить на тёмную тему"}
+            >
+              {theme === "dark" ? "☀️" : "🌙"}
+            </button>
+          )}
+          <button
+            onClick={() => onNavigate("settings")}
+            style={{
+              background: "var(--card)",
+              border: "1.5px solid var(--border)",
+              borderRadius: "50%",
+              width: 40,
+              height: 40,
+              display: "flex",
+              alignItems: "center",
+              justifyContent: "center",
+              cursor: "pointer",
+              fontSize: 18,
+              boxShadow: "0 2px 8px rgba(0,0,0,0.05)",
+              color: "var(--warm)"
+            }}
+            title="Настройки"
+          >
+            ⚙️
+          </button>
+        </div>
       </div>
 
       <div style={{ display: "flex", justifyContent: "space-around", padding: "14px 0", marginBottom: 16 }}>

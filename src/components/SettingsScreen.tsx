@@ -343,7 +343,33 @@ export default function SettingsScreen({
         )}
       </div>
 
-      {/* Daily word limit Settings */}
+      {/* Theme Switcher Setting */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+          {theme === "dark" ? "🌙 Тёмная тема" : "☀️ Светлая тема"}
+        </h3>
+        <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 12 }}>
+          Выберите предпочтительное визуальное оформление приложения (светлое или тёмное).
+        </p>
+        <button
+          className="btn btn-outline"
+          style={{ 
+            width: "100%", 
+            padding: "11px", 
+            fontSize: 13, 
+            fontWeight: 600, 
+            display: "flex", 
+            alignItems: "center", 
+            justifyContent: "center", 
+            gap: 8,
+            borderColor: "var(--sage)",
+            color: "var(--warm)"
+          }}
+          onClick={onToggleTheme}
+        >
+          {theme === "dark" ? "☀️ Переключить на светлую тему" : "🌙 Переключить на тёмную тему"}
+        </button>
+      </div>
       <div className="card" style={{ marginBottom: 12 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📖 Дневной лимит новых слов</h3>
         <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 12 }}>

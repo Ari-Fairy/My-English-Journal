@@ -197,16 +197,15 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T)
 
 // Helper for generating content with retry and fallback model
 async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string; req?: express.Request; timeoutMs?: number } = {}): Promise<any> {
-  const { maxRetries = 2, req, timeoutMs = 12000 } = options;
+  const { maxRetries = 2, req, timeoutMs = 15000 } = options;
   const ai = getAIClient(req);
   if (!ai) {
     throw new Error("GEMINI_API_KEY environment variable is not configured server-side.");
   }
 
   const requestedModel = params.model || "gemini-3.6-flash";
-  const modelQueue = [requestedModel];
-  if (!modelQueue.includes("gemini-2.5-flash")) modelQueue.push("gemini-2.5-flash");
-  if (!modelQueue.includes("gemini-3.1-flash-lite")) modelQueue.push("gemini-3.1-flash-lite");
+  const modelQueue = [requestedModel, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro"]
+    .filter((m, i, self) => self.indexOf(m) === i);
 
   let lastError: any = null;
 
@@ -228,7 +227,8 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
         const errMsg = error?.message || String(error);
         console.warn(`[Gemini API Warning] Attempt ${attempt} failed on ${currentModel}: ${errMsg}`);
         if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
-          console.warn(`[Gemini API Quota Exceeded] Quota hit on "${currentModel}". Trying next model in queue...`);
+          console.warn(`[Gemini API Quota Exceeded] Quota hit on "${currentModel}". Waiting brief delay before next model...`);
+          await delay(600);
           break;
         }
       }
@@ -613,14 +613,35 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
         replyText = `Oh, totally! 🇺🇸 Work culture in the US is absolutely wild. People are always on that daily grind, chasing the bag and working 24/7. It's super common to be a "workaholic" here. Honestly, I think it's a bit too much sometimes and people need to learn to chill and enjoy life. What about you? Are you on that non-stop grind or do you like to take it easy?`;
       }
     }
-  } else if (msg.includes("story") || msg.includes("text") || msg.includes("tale") || msg.includes("рассказ") || msg.includes("текст") || msg.includes("история") || msg.includes("книга")) {
-    // Discuss story, express opinion, ask leading question!
-    if (role === "sophia") {
-      replyText = `I think that story is absolutely beautiful! 😊 It has a wonderful theme and uses some very elegant vocabulary. Personally, I find such tales incredibly inspiring because they show how we can overcome challenges. What was your favorite part of the story? Do you think the characters made the right choices?`;
-    } else if (role === "oliver") {
-      replyText = `From a narrative and lexical perspective, that text demonstrates a cohesive structure with precise thematic development. Personally, I evaluate the narrative as highly effective for vocabulary acquisition. Which specific paragraph or word in the text did you find grammatically most intriguing?`;
+  } else if (msg.includes("напиши") || msg.includes("составь") || msg.includes("придумай") || msg.includes("write") || msg.includes("generate") || msg.includes("create") || (msg.includes("текст") && (msg.includes("тему") || msg.includes("уровн") || msg.includes("про")))) {
+    // User requested to generate a text / story on a specific topic!
+    if (msg.includes("гендер") || msg.includes("стереотип") || msg.includes("мужчин") || msg.includes("женщин") || msg.includes("gender")) {
+      wordToAdd = { en: "stereotype", ru: "стереотип", pos: "noun", topic: "general" };
+      if (role === "sophia") {
+        replyText = `С удовольствием подготовила для тебя текст уровня A2 на тему гендерных стереотипов! 🌸\n\n### 📖 Gender Stereotypes in Modern Society\n\nIn many societies, people have traditional ideas about men and women. For a long time, people believed that men should be the main workers and earn money, while women should stay at home, cook meals, and take care of children.\n\nHowever, the world is changing quickly today. Women can become scientists, pilots, CEOs, and politicians, while men can also take care of children and work at home. Equality means that every person can choose their own path without fear of judgment.\n\nToday, young people believe that kindness, hard work, and intelligence are important for everyone, regardless of gender.\n\n---\n💡 **Полезный словарь:**\n- **Stereotype** (*стереотип*) — a fixed idea about a group of people.\n- **Equality** (*равенство*) — having the same rights and opportunities.\n- **Judgment** (*осуждение, мнение*) — making opinions about someone.\n\n**Мой вопрос к тебе:** *What do you think about gender stereotypes in your city or country? Do you think they are disappearing?* (Ответь в 1-2 простых предложениях на английском!)`;
+      } else if (role === "oliver") {
+        replyText = `Текст уровня A2 на тему гендерных стереотипов составлен согласно академическим стандартам:\n\n### 📝 Gender Stereotypes and Social Expectations\n\nGender stereotypes are traditional social beliefs about how men and women should behave. Historically, men were expected to focus on career and leadership, whereas women were expected to manage household duties.\n\nIn contemporary society, these traditional boundaries are fading. Both men and women now share professional responsibilities and domestic tasks equally. Gender equality allows individuals to pursue personal goals based on talent rather than gender stereotypes.\n\n---\n📚 **Академическая лексика:**\n- **Contemporary** (*современный*)\n- **Responsibilities** (*обязанности*)\n- **Boundaries** (*границы*)\n\n**Задание:** Сформулируйте ваш ответ на английском: *Do you agree that modern society promotes equal opportunities for everyone?*`;
+      } else {
+        replyText = `Yo! Here is a super cool A2 text about gender stereotypes! 🔥\n\n### ⚡ Gender Stereotypes: Old Ideas vs Modern Life\n\nGender stereotypes are old rules about what men and women "should" do. In the past, people thought guys had to be tough and work all day, while girls had to stay home and do chores.\n\nThat is so outdated! Today, anyone can do anything! Girls can play sports or lead tech companies, and guys can cook or express their emotions freely. It is all about freedom and respect!\n\n---\n🚀 **Cool Words:**\n- **Outdated** (*устаревший*)\n- **Freedom** (*свобода*)\n- **Respect** (*уважение*)\n\n**Your turn:** *What is one stereotype you think is silly? Drop your answer in English!*`;
+      }
+    } else if (msg.includes("семь") || msg.includes("family")) {
+      wordToAdd = { en: "relatives", ru: "родственники", pos: "noun", topic: "family" };
+      replyText = `Вот прекрасный текст уровня A2 о семье! 🌸\n\n### 🏡 Family Traditions\n\nFamily plays an essential role in our lives. Some people have large families with many siblings, aunts, and uncles, while others have small families. Spending quality time together during weekends builds strong relationships.\n\n*What is your favorite memory with your family?*`;
+    } else if (msg.includes("путешеств") || msg.includes("travel") || msg.includes("отпуск")) {
+      wordToAdd = { en: "destination", ru: "место назначения", pos: "noun", topic: "travel" };
+      replyText = `Вот вдохновляющий текст уровня A2 о путешествиях! ✈️\n\n### 🌍 Exploring New Places\n\nTraveling expands our minds and helps us understand different cultures. When we travel to new countries, we try local food, meet friendly people, and practice foreign languages.\n\n*Where would you like to travel next?*`;
     } else {
-      replyText = `Dude, that story was totally awesome! 📖 I love how it builds up and keeps you interested. Honestly, my opinion is that stories like this are perfect for learning because they aren't boring. What did you think of the ending? Did it surprise you?`;
+      wordToAdd = { en: "creative", ru: "творческий", pos: "adjective", topic: "study" };
+      replyText = `С удовольствием подготовила для тебя этот текст на английском языке (уровень A2)! 📝✨\n\n### 🌟 Learning and Growing Every Day\n\nLearning a new language opens up incredible opportunities in life. When we practice reading, speaking, and listening regularly, our mind grows stronger and more adaptable.\n\nEvery small step counts. Even practicing for ten minutes a day helps you become fluent and confident over time!\n\n---\n💡 **Полезные слова:**\n- **Opportunity** (*возможность*)\n- **Adaptable** (*гибкий, способный адаптироваться*)\n- **Confident** (*уверенный в себе*)\n\nWhat are your thoughts on this topic? Tell me in English! 🌸`;
+    }
+  } else if (msg.includes("story") || msg.includes("text") || msg.includes("tale") || msg.includes("рассказ") || msg.includes("книга")) {
+    // Discuss story / text provided by user
+    if (role === "sophia") {
+      replyText = `I think that text is wonderful! 😊 It has an inspiring theme and great vocabulary. What was your favorite part of it?`;
+    } else if (role === "oliver") {
+      replyText = `From a narrative perspective, this text demonstrates clear structure. Which specific sentence did you find grammatically most intriguing?`;
+    } else {
+      replyText = `Dude, that story sounds awesome! 📖 What did you think of it? Let's talk about it!`;
     }
   } else if (msg.includes("what is") || msg.includes("how are") || msg.includes("why do") || msg.includes("правда ли") || msg.includes("почему") || msg.includes("зачем")) {
     // General question answering rule: answer, express opinion, ask leading question
