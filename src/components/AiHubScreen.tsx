@@ -533,6 +533,54 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     return result;
   }
 
+  function mergeRemoteSessions<T extends { id: string; messages?: any[]; voiceMessages?: any[] }>(
+    localSessions: T[],
+    remoteSessions: T[]
+  ): T[] {
+    if (!Array.isArray(remoteSessions) || remoteSessions.length === 0) return localSessions;
+    if (!Array.isArray(localSessions) || localSessions.length === 0) return deduplicateSessions(remoteSessions);
+
+    const map = new Map<string, T>();
+    for (const r of remoteSessions) {
+      if (r && r.id) map.set(r.id, r);
+    }
+
+    for (const l of localSessions) {
+      if (!l || !l.id) continue;
+      const remote = map.get(l.id);
+      if (!remote) {
+        map.set(l.id, l);
+      } else {
+        const localMsgs = l.messages || l.voiceMessages || [];
+        const remoteMsgs = remote.messages || remote.voiceMessages || [];
+
+        const msgMap = new Map<string, any>();
+        remoteMsgs.forEach(m => {
+          if (m && m.text) {
+            const key = `${m.role}:${m.text.trim()}`;
+            msgMap.set(key, m);
+          }
+        });
+        localMsgs.forEach(m => {
+          if (m && m.text) {
+            const key = `${m.role}:${m.text.trim()}`;
+            if (!msgMap.has(key)) {
+              msgMap.set(key, m);
+            }
+          }
+        });
+
+        const mergedMsgs = Array.from(msgMap.values());
+        if (l.messages) {
+          map.set(l.id, { ...remote, ...l, messages: mergedMsgs });
+        } else {
+          map.set(l.id, { ...remote, ...l, voiceMessages: mergedMsgs });
+        }
+      }
+    }
+    return Array.from(map.values());
+  }
+
   // Real-time Firestore session account synchronization across all browsers and devices
   useEffect(() => {
     if (!user || !user.uid) {
@@ -543,10 +591,10 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     const unsubscribe = subscribeUserAiSessions(user.uid, (remoteData) => {
       isCloudLoadedRef.current = true;
       if (Array.isArray(remoteData.chatSessions) && remoteData.chatSessions.length > 0) {
-        setChatSessions(deduplicateSessions(remoteData.chatSessions));
+        setChatSessions(prev => mergeRemoteSessions(prev, remoteData.chatSessions));
       }
       if (Array.isArray(remoteData.voiceSessions) && remoteData.voiceSessions.length > 0) {
-        setVoiceSessions(deduplicateSessions(remoteData.voiceSessions));
+        setVoiceSessions(prev => mergeRemoteSessions(prev, remoteData.voiceSessions));
       }
     });
 
@@ -1146,27 +1194,41 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
+  const activeTabRef = useRef(activeTab);
+  useEffect(() => {
+    activeTabRef.current = activeTab;
+  }, [activeTab]);
+
   // Helper to scroll container ONLY (never whole window) to bottom
   const scrollToBottomContainer = (containerId: string) => {
-    const el = document.getElementById(containerId);
-    if (el) {
-      el.scrollTop = el.scrollHeight;
-    }
+    const doScroll = () => {
+      const el = document.getElementById(containerId);
+      if (el) {
+        el.scrollTop = el.scrollHeight;
+      }
+    };
+    doScroll();
+    requestAnimationFrame(() => {
+      doScroll();
+      setTimeout(doScroll, 50);
+      setTimeout(doScroll, 150);
+      setTimeout(doScroll, 300);
+    });
   };
 
-  // Auto-scroll chat inside container on new messages, session switch, or tab switch
+  // Auto-scroll chat container when messages update (sent/received), loading state changes, or session switches
   useEffect(() => {
     if (activeTab === "chat") {
       scrollToBottomContainer("ai_chat_scroll_container");
     }
-  }, [chatMessages.length, chatLoading, activeChatSessionId, activeTab]);
+  }, [chatMessages, chatLoading, activeChatSessionId, activeTab]);
 
-  // Auto-scroll voice inside container on new messages, session switch, or tab switch
+  // Auto-scroll voice container when messages update (sent/received), loading state changes, or session switches
   useEffect(() => {
     if (activeTab === "voice") {
       scrollToBottomContainer("ai_voice_scroll_container");
     }
-  }, [voiceMessages.length, voiceLoading, activeVoiceSessionId, activeTab]);
+  }, [voiceMessages, voiceLoading, activeVoiceSessionId, activeTab]);
 
   // Studio AI speech synthesis with browser fallback
   const speakText = async (text: string, onEnd?: () => void) => {
@@ -1640,6 +1702,7 @@ CRITICAL RULES:
     
     isExplicitlyStoppedRef.current = false;
     accumulatedTranscriptRef.current = "";
+    setIsRecording(true);
     setVoiceInputText("Слушаю вас...");
 
     // Always start MediaRecorder for reliable audio capture across mobile and desktop
@@ -1670,11 +1733,19 @@ CRITICAL RULES:
           if (finalTranscriptTemp) {
             accumulatedTranscriptRef.current += finalTranscriptTemp;
           }
-          setVoiceInputText(accumulatedTranscriptRef.current + interimTranscript);
+          const fullText = (accumulatedTranscriptRef.current + interimTranscript).trim();
+          setVoiceInputText(fullText || "Слушаю вас...");
+          if (activeTabRef.current === "chat" && fullText) {
+            setChatInput(fullText);
+          }
         };
         
         rec.onerror = (e: any) => {
-          console.error("Speech recognition error:", e);
+          if (e?.error === 'no-speech' || e?.error === 'aborted') {
+            console.warn("Speech recognition notice:", e.error);
+          } else {
+            console.warn("Speech recognition info:", e?.error || e);
+          }
         };
         
         recognitionRef.current = rec;
@@ -1687,6 +1758,9 @@ CRITICAL RULES:
 
   const startFallbackMediaRecorder = async () => {
     try {
+      if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
+        throw new Error("getUserMedia is not supported on this browser/environment");
+      }
       const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
       audioChunksRef.current = [];
       
@@ -1735,7 +1809,9 @@ CRITICAL RULES:
         setRecordingTime(t => t + 1);
       }, 1000);
     } catch (err) {
-      alert("Не удалось активировать микрофон. Пожалуйста, разрешите доступ к микрофону!");
+      setIsRecording(false);
+      setToastMessage("⚠️ Не удалось включить микрофон. Проверьте разрешения браузера!");
+      console.warn("Microphone access error:", err);
     }
   };
 
@@ -1771,6 +1847,18 @@ CRITICAL RULES:
     const recognizedText = Array.from(new Set([accumulatedTranscriptRef.current.trim(), liveText])).filter(Boolean).join(" ").trim();
     accumulatedTranscriptRef.current = "";
     setVoiceInputText("");
+
+    // If recorded in text chat tab, fill the chat input area
+    if (activeTabRef.current === "chat") {
+      if (recognizedText) {
+        setChatInput(recognizedText);
+        setToastMessage("🎙️ Речь распознана! Нажмите «Отправить».");
+      } else {
+        setToastMessage("🎙️ Текст с микрофона перенесен в поле ввода.");
+      }
+      setVoiceLoading(false);
+      return;
+    }
 
     if (blob.size < 200 && !recognizedText) {
       setVoiceLoading(false);
@@ -1809,9 +1897,9 @@ CRITICAL RULES:
     setLoadingVoiceSessionId(targetSessionId);
     try {
       if (payload.audio) {
-        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text ? `🎙️ ${payload.text}` : "🎙️ [Расшифровка аудио...]", timestamp: new Date().toISOString() }]);
+        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text ? `🎙️ ${payload.text}` : "🎙️ Голосовое сообщение", timestamp: new Date().toISOString() }]);
       } else {
-        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text || "🎙️ [Голосовое сообщение]", timestamp: new Date().toISOString() }]);
+        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text || "🎙️ Голосовое сообщение", timestamp: new Date().toISOString() }]);
       }
 
       const response = await fetch(getApiUrl("/api/ai-voice-chat"), {
@@ -1834,18 +1922,19 @@ CRITICAL RULES:
       const data = await response.json();
 
       if (data.userTranscription) {
+        const textToUse = data.userTranscription.startsWith("🎙️") ? data.userTranscription : `🎙️ ${data.userTranscription}`;
         setVoiceMessagesForSession(targetSessionId, prev => {
           const copy = [...prev];
           let found = false;
           for (let i = copy.length - 1; i >= 0; i--) {
             if (copy[i].role === "user" && (copy[i].text.includes("🎙️") || copy[i].text.includes("Голосовое сообщение"))) {
-              copy[i] = { role: "user", text: data.userTranscription, timestamp: copy[i].timestamp || new Date().toISOString() };
+              copy[i] = { role: "user", text: textToUse, timestamp: copy[i].timestamp || new Date().toISOString() };
               found = true;
               break;
             }
           }
           if (!found && copy.length > 0 && copy[copy.length - 1].role === "user") {
-            copy[copy.length - 1] = { role: "user", text: data.userTranscription, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
+            copy[copy.length - 1] = { role: "user", text: textToUse, timestamp: copy[copy.length - 1].timestamp || new Date().toISOString() };
           }
           return copy;
         });
@@ -3803,13 +3892,13 @@ CRITICAL RULES:
             <textarea
               ref={textareaRef}
               rows={2}
-              placeholder="Введите сообщение в свободной форме..."
+              placeholder={isRecording ? "🎙️ Говорите... Речь распознаётся..." : "Введите сообщение в свободной форме..."}
               style={{
                 flex: 1,
                 minWidth: 0,
                 borderRadius: "1rem",
-                border: "1.5px solid var(--border)",
-                background: "rgba(255,255,255,0.02)",
+                border: isRecording ? "1.5px solid var(--rose)" : "1.5px solid var(--border)",
+                background: isRecording ? "rgba(214,128,96,0.06)" : "rgba(255,255,255,0.02)",
                 padding: "12px 16px",
                 fontSize: 14,
                 color: "var(--warm)",
@@ -3830,6 +3919,32 @@ CRITICAL RULES:
               }}
               disabled={chatLoading}
             />
+
+            {/* Voice Dictation / Mic Button */}
+            <button
+              style={{
+                background: isRecording ? "var(--rose)" : "rgba(143,160,128,0.18)",
+                color: isRecording ? "#ffffff" : "var(--sage)",
+                border: isRecording ? "none" : "1.5px solid var(--sage)",
+                borderRadius: "50%",
+                width: 56,
+                height: 56,
+                display: "flex",
+                alignItems: "center",
+                justifyContent: "center",
+                cursor: "pointer",
+                boxShadow: isRecording ? "0 0 12px rgba(214,128,96,0.5)" : "0 2px 8px rgba(143,160,128,0.2)",
+                flexShrink: 0,
+                transition: "all 0.2s ease"
+              }}
+              onClick={isRecording ? stopVoiceRecording : startVoiceRecording}
+              disabled={chatLoading}
+              title={isRecording ? "Остановить запись" : "Голосовой ввод сообщений"}
+            >
+              {isRecording ? <MicOff size={20} className="animate-pulse" /> : <Mic size={20} />}
+            </button>
+
+            {/* Send Button */}
             <button
               style={{
                 background: "var(--sage)",
@@ -3847,6 +3962,7 @@ CRITICAL RULES:
               }}
               onClick={handleSendChatMessage}
               disabled={chatLoading || !chatInput.trim()}
+              title="Отправить сообщение"
             >
               <Send size={18} />
             </button>
