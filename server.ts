@@ -2330,7 +2330,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transPromise = generateContentWithRetry({
-          model: "gemini-2.5-flash",
+          model: "gemini-3.6-flash",
           contents: [
             {
               parts: [
@@ -2341,14 +2341,14 @@ app.post("/api/ai-voice-chat", async (req, res) => {
                   }
                 },
                 {
-                  text: "You are an accurate speech recognition assistant. Listen to the spoken audio from an English learner and transcribe every word in English or Russian verbatim as spoken. Return ONLY the clean transcript string. CRITICAL: If speech is unclear, silent, or noisy, return an empty string. Do NOT output explanations, quotes, brackets, or words like 'unclear' or 'quiet'."
+                  text: "You are a professional speech-to-text assistant. Listen carefully to the spoken audio from an English learner. Transcribe every spoken word verbatim in English or Russian. Return ONLY the clean transcript text string. If spoken speech is present, transcribe it accurately. If the audio is completely silent or empty noise, return an empty string. Do NOT add commentary, explanations, quotes, or tags."
                 }
               ]
             }
           ]
-        }, { fallbackModel: "gemini-1.5-flash", req, timeoutMs: 15000 });
+        }, { fallbackModel: "gemini-3.6-flash", req, timeoutMs: 18000 });
 
-        const transResponse = await withTimeout(transPromise, 16000, null);
+        const transResponse = await withTimeout(transPromise, 19000, null);
         if (transResponse && transResponse.text) {
           userText = transResponse.text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
         }

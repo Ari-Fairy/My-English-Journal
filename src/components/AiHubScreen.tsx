@@ -510,7 +510,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     return savedId || "voice-default-sophia";
   });
 
-  const isCloudLoadedRef = useRef<boolean>(false);
+  const isChatCloudLoadedRef = useRef<boolean>(false);
+  const isVoiceCloudLoadedRef = useRef<boolean>(false);
 
   useEffect(() => {
     localStorage.setItem("ai_hub_chat_sessions_v2", JSON.stringify(chatSessions));
@@ -544,18 +545,27 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   // Real-time Firestore session account synchronization across all browsers and devices
   useEffect(() => {
     if (!user || !user.uid) {
-      isCloudLoadedRef.current = false;
+      isChatCloudLoadedRef.current = false;
+      isVoiceCloudLoadedRef.current = false;
       return;
     }
 
     const unsubscribe = subscribeUserAiSessions(user.uid, (remoteData) => {
-      if (!isCloudLoadedRef.current) {
-        isCloudLoadedRef.current = true;
-        if (Array.isArray(remoteData.chatSessions) && remoteData.chatSessions.length > 0) {
-          setChatSessions(prev => mergeRemoteSessions(prev, remoteData.chatSessions));
+      if (remoteData.chatLoaded) {
+        if (!isChatCloudLoadedRef.current) {
+          isChatCloudLoadedRef.current = true;
+          if (Array.isArray(remoteData.chatSessions) && remoteData.chatSessions.length > 0) {
+            setChatSessions(deduplicateSessions(remoteData.chatSessions));
+          }
         }
-        if (Array.isArray(remoteData.voiceSessions) && remoteData.voiceSessions.length > 0) {
-          setVoiceSessions(prev => mergeRemoteSessions(prev, remoteData.voiceSessions));
+      }
+
+      if (remoteData.voiceLoaded) {
+        if (!isVoiceCloudLoadedRef.current) {
+          isVoiceCloudLoadedRef.current = true;
+          if (Array.isArray(remoteData.voiceSessions) && remoteData.voiceSessions.length > 0) {
+            setVoiceSessions(deduplicateSessions(remoteData.voiceSessions));
+          }
         }
       }
     });
@@ -566,7 +576,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!user || !user.uid || !isCloudLoadedRef.current) return;
+    if (!user || !user.uid || (!isChatCloudLoadedRef.current && !isVoiceCloudLoadedRef.current)) return;
     const saveTimer = setTimeout(() => {
       const cleanChat = deduplicateSessions(chatSessions);
       const cleanVoice = deduplicateSessions(voiceSessions);
@@ -1752,7 +1762,13 @@ CRITICAL RULES:
       if (!navigator.mediaDevices || typeof navigator.mediaDevices.getUserMedia !== "function") {
         throw new Error("getUserMedia is not supported on this browser/environment");
       }
-      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({ 
+        audio: {
+          echoCancellation: true,
+          noiseSuppression: true,
+          autoGainControl: true
+        } 
+      });
       audioChunksRef.current = [];
       
       let mimeType = "audio/webm";

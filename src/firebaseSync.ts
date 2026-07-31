@@ -330,28 +330,32 @@ export async function fetchUserAiSessions(userId: string): Promise<{ chatSession
 // Subscribe to real-time user AI chat & voice sessions from Firestore
 export function subscribeUserAiSessions(
   userId: string,
-  onUpdate: (data: { chatSessions: any[]; voiceSessions: any[] }) => void
+  onUpdate: (data: { chatSessions: any[]; voiceSessions: any[]; chatLoaded: boolean; voiceLoaded: boolean }) => void
 ): () => void {
   const chatDocRef = doc(db, `users/${userId}/ai_sessions`, "chat_sessions");
   const voiceDocRef = doc(db, `users/${userId}/ai_sessions`, "voice_sessions");
 
   let currentChatSessions: any[] = [];
   let currentVoiceSessions: any[] = [];
+  let chatLoaded = false;
+  let voiceLoaded = false;
 
   const unsubChat = onSnapshot(chatDocRef, (snap) => {
+    chatLoaded = true;
     if (snap.exists() && Array.isArray(snap.data()?.sessions)) {
       currentChatSessions = snap.data().sessions;
     }
-    onUpdate({ chatSessions: currentChatSessions, voiceSessions: currentVoiceSessions });
+    onUpdate({ chatSessions: currentChatSessions, voiceSessions: currentVoiceSessions, chatLoaded, voiceLoaded });
   }, (err) => {
     console.warn("Error subscribing to chat_sessions:", err);
   });
 
   const unsubVoice = onSnapshot(voiceDocRef, (snap) => {
+    voiceLoaded = true;
     if (snap.exists() && Array.isArray(snap.data()?.sessions)) {
       currentVoiceSessions = snap.data().sessions;
     }
-    onUpdate({ chatSessions: currentChatSessions, voiceSessions: currentVoiceSessions });
+    onUpdate({ chatSessions: currentChatSessions, voiceSessions: currentVoiceSessions, chatLoaded, voiceLoaded });
   }, (err) => {
     console.warn("Error subscribing to voice_sessions:", err);
   });
