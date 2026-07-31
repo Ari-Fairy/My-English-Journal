@@ -338,15 +338,65 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
   let replyText = "";
   let wordToAdd = null;
 
+  // Celebration / Story Response Handling
+  const isWaterParkOrDetailedStory = 
+    msg.includes("water park") || msg.includes("waterpark") || msg.includes("аквапарк") ||
+    msg.includes("celebrated") || msg.includes("celebrating") || msg.includes("went to") ||
+    msg.includes("with my family") || msg.includes("with family") || msg.includes("could enjoyed") ||
+    msg.includes("incredibly") || (msg.includes("party") && (msg.includes("went") || msg.includes("enjoyed") || msg.includes("food") || msg.includes("cake") || msg.includes("people")));
+
+  const isStoryOrAnswer = isWaterParkOrDetailedStory || msg.includes("we went") || msg.includes("i went") || msg.includes("celebrated") || msg.includes("отметили") || msg.includes("были в");
+
+  if (isStoryOrAnswer) {
+    wordToAdd = { en: "water park", ru: "аквапарк", pos: "noun", topic: "travel" };
+
+    const hasTypoMBirthday = msg.includes("m birthday");
+    const hasVeryIncredibly = msg.includes("very incredibly") || msg.includes("was incredibly");
+    const hasCouldEnjoyed = msg.includes("could enjoyed");
+
+    let grammarAnalysisSophia = "";
+    let grammarAnalysisOliver = "";
+    let grammarAnalysisAlex = "";
+
+    if (hasTypoMBirthday || hasVeryIncredibly || hasCouldEnjoyed) {
+      grammarAnalysisSophia = `\n\n💡 **Давай разберём пару деталей в твоём тексте, чтобы сделать твой английский ещё красивее:**\n` +
+        (hasTypoMBirthday ? `1. **'m birthday'** ➔ **'my birthday'** *(небольшая опечатка: пропущена буква 'y')*.\n` : "") +
+        (hasVeryIncredibly ? `2. **'It was very incredibly!'** ➔ **'It was incredible!'** или **'It was very incredible!'** *(после глагола 'was' используется прилагательное 'incredible', а не наречие 'incredibly')*.\n` : "") +
+        (hasCouldEnjoyed ? `3. **'I could enjoyed'** ➔ **'I could enjoy'** *(после модального глагола 'could' глагол идет в начальной форме 'enjoy')* или **'I really enjoyed this time'** *(я действительно насладилась этим временем)*.\n` : "") +
+        `\n✨ **Как можно сказать ещё естественнее:**\n*"I celebrated my birthday party with my family. We went to a water park. It was incredible! There were a lot of people, but I really enjoyed my time."*`;
+
+      grammarAnalysisOliver = `\n\n🔍 **Grammatical Analysis & Corrections:**\n` +
+        (hasTypoMBirthday ? `1. **'m birthday'** ➔ **'my birthday'** (Possessive pronoun typographical error: missing letter 'y').\n` : "") +
+        (hasVeryIncredibly ? `2. **'It was very incredibly'** ➔ **'It was incredible'** (The linking verb 'was' requires a predicate adjective 'incredible', not the adverb 'incredibly').\n` : "") +
+        (hasCouldEnjoyed ? `3. **'I could enjoyed'** ➔ **'I could enjoy'** or **'I really enjoyed'** (The modal verb 'could' must be followed by the base form 'enjoy' without past tense '-ed').\n` : "") +
+        `\n📚 **Proper Academic Structure:**\n*"I celebrated my birthday party with my family. We went to a water park. It was incredible! Although it was crowded, I really enjoyed my time."*`;
+
+      grammarAnalysisAlex = `\n\n💡 **Quick tips on your English to sound super natural:**\n` +
+        (hasTypoMBirthday ? `1. **'m birthday'** ➔ **'my birthday'** *(tiny typo!)*\n` : "") +
+        (hasVeryIncredibly ? `2. **'It was very incredibly!'** ➔ **'It was incredible!'** *(use 'incredible' here!)*\n` : "") +
+        (hasCouldEnjoyed ? `3. **'I could enjoyed'** ➔ **'I could enjoy'** or **'I really enjoyed'** *(after 'could', use 'enjoy'!)*\n` : "") +
+        `\n🔥 **Native way to say it:**\n*"I celebrated my birthday with my family at a water park. It was incredible, and even though it was super crowded, I had an awesome time!"*`;
+    }
+
+    if (role === "sophia") {
+      replyText = `Wow, that sounds like such a wonderful and memorable birthday celebration! 🌊🎉 Going to a water park with your family is such a fun and refreshing way to celebrate! I love water parks too—splashing around on water slides with family is always so exciting.${grammarAnalysisSophia}\n\nWhat was your favorite water slide or attraction at the water park? Did you get to eat something delicious like birthday cake there too? 🌸`;
+    } else if (role === "oliver") {
+      replyText = `Celebrating a birthday at a water park with family is an excellent activity. 🏊‍♂️ It provides a good balance of leisure, physical activity, and family bonding.${grammarAnalysisOliver}\n\nWhich specific water slide or pool attraction did you find most enjoyable during your visit?`;
+    } else {
+      replyText = `Whoa, a water park for your birthday party?! That sounds absolute fire, dude! 🌊🥳 Riding water slides and hanging out with family is literally the ultimate way to celebrate! I'm a huge fan of water parks myself!${grammarAnalysisAlex}\n\nWhat was the highest or fastest slide you rode at the park? Tell me all about it! ⚡`;
+    }
+    return { replyText, evaluatedLevel: userLevel || "A1", wordToAdd };
+  }
+
   // Birthday / Party / Celebration topic check
   if (msg.includes("birthday") || msg.includes("party") || msg.includes("день рождения") || msg.includes("праздник") || msg.includes("отмечал") || msg.includes("отпраздновал") || msg.includes("отметил")) {
     wordToAdd = { en: "celebration", ru: "празднование, торжество", pos: "noun", topic: "general" };
     if (role === "sophia") {
-      replyText = `${timeGreetingPrefix}Happy Birthday! 🥳🎉 Поздравляю с днем рождения (или с прошедшим праздником)! Счастья, радости и море вдохновения! How was your birthday party? Did you get nice presents or have a delicious birthday cake with your friends? Tell me all about it! 🌸${correction}`;
+      replyText = `${timeGreetingPrefix}Happy Birthday! 🥳🎉 Поздравляю с днем рождения (или с прошедшим праздником)! Счастья, радости и море вдохновения! How are you planning to celebrate your special day? Tell me all about your plans! 🌸${correction}`;
     } else if (role === "oliver") {
-      replyText = `${timeGreetingPrefix}Happy Birthday. 🎉 Примите мои поздравления с днем рождения. Желаю успехов и академической точности в изучении английского языка. How did you celebrate your birthday party? Please describe the event in 2-3 structured English sentences.${correction}`;
+      replyText = `${timeGreetingPrefix}Happy Birthday. 🎉 Примите мои поздравления с днем рождения. Желаю успехов и академической точности в изучении английского языка. How do you plan to celebrate your birthday? Please describe your plans in 2-3 structured English sentences.${correction}`;
     } else {
-      replyText = `${timeGreetingPrefix}Yo, Happy Birthday! 🥳🎉 С днем рождения! Hope your birthday party was absolute fire! What was the coolest gift or best moment of your birthday? Spill the details! ⚡${correction}`;
+      replyText = `${timeGreetingPrefix}Yo, Happy Birthday! 🥳🎉 С днем рождения! Hope your day is absolute fire! What are your plans for celebrating? Spill the details! ⚡${correction}`;
     }
     return { replyText, evaluatedLevel: userLevel || "A1", wordToAdd };
   }
@@ -581,14 +631,14 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
     } else {
       replyText = `${timeGreetingPrefix}Dude, it is super late! 🦉 Are you a total night owl or just grinding crazy hard? I'm down to chat, but don't forget to get some shut-eye, alright? What's keeping you up?`;
     }
-  } else if (msg.includes("birthday") || msg.includes("party") || msg.includes("праздник") || msg.includes("день рождения") || msg.includes("celebrat") || msg.includes("родилась") || msg.includes("праздновать")) {
+  } else if ((msg.includes("birthday") || msg.includes("party") || msg.includes("праздник") || msg.includes("день рождения") || msg.includes("celebrat") || msg.includes("родилась") || msg.includes("праздновать")) && !isStoryOrAnswer) {
     wordToAdd = { en: "celebration", ru: "праздник, празднование", pos: "noun", topic: "general" };
     if (role === "sophia") {
-      replyText = `Happy Birthday! 🎉🎂 How exciting that you had a birthday party! I would love to hear all about it. What did you do at the party, did you get special gifts or eat a delicious cake?${correction}`;
+      replyText = `Happy Birthday! 🎉🎂 How exciting that you had or are having a birthday! How do you plan to celebrate? I would love to hear all about your plans!${correction}`;
     } else if (role === "oliver") {
-      replyText = `Accept my congratulations on your birthday party! 🎈 Tell me in 2-3 precise English sentences: how did you celebrate and who was invited?${correction}`;
+      replyText = `Accept my congratulations on your birthday! 🎈 Tell me in 2-3 precise English sentences: how do you plan to celebrate?${correction}`;
     } else {
-      replyText = `Yo, Happy Birthday! 🥳🎉 That's awesome that you had a party! Tell me all about it — what was the best moment or coolest gift you got?${correction}`;
+      replyText = `Yo, Happy Birthday! 🥳🎉 Hope your special day is awesome! What are your plans for celebrating? Spill the details!${correction}`;
     }
   } else if (
     msg.includes("американцы") || msg.includes("амереканцы") || msg.includes("америк") || msg.includes("americans") || msg.includes("american") ||
