@@ -537,48 +537,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     localSessions: T[],
     remoteSessions: T[]
   ): T[] {
-    if (!Array.isArray(remoteSessions) || remoteSessions.length === 0) return localSessions;
-    if (!Array.isArray(localSessions) || localSessions.length === 0) return deduplicateSessions(remoteSessions);
-
-    const map = new Map<string, T>();
-    for (const r of remoteSessions) {
-      if (r && r.id) map.set(r.id, r);
-    }
-
-    for (const l of localSessions) {
-      if (!l || !l.id) continue;
-      const remote = map.get(l.id);
-      if (!remote) {
-        map.set(l.id, l);
-      } else {
-        const localMsgs = l.messages || l.voiceMessages || [];
-        const remoteMsgs = remote.messages || remote.voiceMessages || [];
-
-        const msgMap = new Map<string, any>();
-        remoteMsgs.forEach(m => {
-          if (m && m.text) {
-            const key = `${m.role}:${m.text.trim()}`;
-            msgMap.set(key, m);
-          }
-        });
-        localMsgs.forEach(m => {
-          if (m && m.text) {
-            const key = `${m.role}:${m.text.trim()}`;
-            if (!msgMap.has(key)) {
-              msgMap.set(key, m);
-            }
-          }
-        });
-
-        const mergedMsgs = Array.from(msgMap.values());
-        if (l.messages) {
-          map.set(l.id, { ...remote, ...l, messages: mergedMsgs });
-        } else {
-          map.set(l.id, { ...remote, ...l, voiceMessages: mergedMsgs });
-        }
-      }
-    }
-    return Array.from(map.values());
+    if (!Array.isArray(remoteSessions) || remoteSessions.length === 0) return deduplicateSessions(localSessions);
+    return deduplicateSessions(remoteSessions);
   }
 
   // Real-time Firestore session account synchronization across all browsers and devices
@@ -3417,35 +3377,52 @@ CRITICAL RULES:
                         </span>
                       </span>
                     )}
-                    {arr.length > 1 && (
-                      <button 
-                        style={{ 
-                          background: "none", 
-                          border: "none", 
-                          color: "var(--muted)", 
-                          padding: "0 2px 0 6px", 
-                          cursor: "pointer",
-                          fontSize: 10,
-                          fontWeight: "bold"
-                        }}
-                        title="Удалить чат"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          stopAllSpeech();
-                          const remaining = chatSessions.filter(item => item.id !== s.id);
-                          setChatSessions(remaining);
-                          if (s.id === activeChatSessionId) {
-                            const nextActive = remaining.find(item => item.tutor === tutor);
-                            if (nextActive) {
-                              setActiveChatSessionId(nextActive.id);
-                            }
-                          }
-                          setToastMessage("Чат успешно удален");
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <button 
+                      style={{ 
+                        background: "none", 
+                        border: "none", 
+                        color: "var(--muted)", 
+                        padding: "0 2px 0 6px", 
+                        cursor: "pointer",
+                        fontSize: 10,
+                        fontWeight: "bold"
+                      }}
+                      title="Удалить чат"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        stopAllSpeech();
+                        let remaining = chatSessions.filter(item => item.id !== s.id);
+                        const matchingForTutor = remaining.filter(item => item.tutor === tutor);
+                        if (matchingForTutor.length === 0) {
+                          const defaultGreetings = {
+                            sophia: "Hello! I am Sophia, your warm and friendly AI English tutor. I'm here to help you practice conversational English, correct mistakes, and explain words. Feel free to chat in English or Russian! 😊",
+                            oliver: "Greetings. I am Oliver, your analytical grammar specialist. Let's begin: please write or speak an English sentence.",
+                            alex: "Yo! I'm Alex, a casual native speaker from NYC. What's up? 🚀"
+                          };
+                          const freshSession: ChatSession = {
+                            id: `session-${tutor}-${Date.now()}`,
+                            tutor,
+                            title: "Диалог 1",
+                            created: new Date().toISOString(),
+                            messages: [{ role: "model", text: defaultGreetings[tutor] }],
+                            mode: chatMode
+                          };
+                          remaining = [...remaining, freshSession];
+                          setActiveChatSessionId(freshSession.id);
+                        } else if (s.id === activeChatSessionId) {
+                          setActiveChatSessionId(matchingForTutor[0].id);
+                        }
+                        const cleanRemaining = deduplicateSessions(remaining);
+                        setChatSessions(cleanRemaining);
+                        localStorage.setItem("ai_hub_chat_sessions_v2", JSON.stringify(cleanRemaining));
+                        if (user && user.uid) {
+                          saveUserAiSessions(user.uid, cleanRemaining, deduplicateSessions(voiceSessions)).catch(err => console.warn("Delete save error:", err));
+                        }
+                        setToastMessage("Чат успешно удален");
+                      }}
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))
               }
@@ -4066,34 +4043,51 @@ CRITICAL RULES:
                         </span>
                       </span>
                     )}
-                    {arr.length > 1 && (
-                      <button 
-                        style={{ 
-                          background: "none", 
-                          border: "none", 
-                          color: "var(--muted)", 
-                          padding: "0 2px 0 6px", 
-                          cursor: "pointer",
-                          fontSize: 10,
-                          fontWeight: "bold"
-                        }}
-                        title="Удалить чат"
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          const remaining = voiceSessions.filter(item => item.id !== s.id);
-                          setVoiceSessions(remaining);
-                          if (s.id === activeVoiceSessionId) {
-                            const nextActive = remaining.find(item => item.tutor === tutor);
-                            if (nextActive) {
-                              setActiveVoiceSessionId(nextActive.id);
-                            }
-                          }
-                          setToastMessage("Чат успешно удален");
-                        }}
-                      >
-                        ✕
-                      </button>
-                    )}
+                    <button 
+                      style={{ 
+                        background: "none", 
+                        border: "none", 
+                        color: "var(--muted)", 
+                        padding: "0 2px 0 6px", 
+                        cursor: "pointer",
+                        fontSize: 10,
+                        fontWeight: "bold"
+                      }}
+                      title="Удалить диалог"
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        stopAllSpeech();
+                        let remaining = voiceSessions.filter(item => item.id !== s.id);
+                        const matchingForTutor = remaining.filter(item => item.tutor === tutor);
+                        if (matchingForTutor.length === 0) {
+                          const defaultVoiceGreetings = {
+                            sophia: "Welcome to the Voice Club! I'm ready to listen. Click the microphone button below to start recording your voice, practice speaking English naturally, and hear me reply!",
+                            oliver: "Welcome to the Voice Club. Speak clearly. I will highlight any grammatical mistakes you make in your speech.",
+                            alex: "Yo, welcome to the voice corner! Hit the mic, say whatever's on your mind, and let's roll."
+                          };
+                          const freshVoiceSession: VoiceSession = {
+                            id: `voice-session-${tutor}-${Date.now()}`,
+                            tutor,
+                            title: "Голосовой диалог 1",
+                            created: new Date().toISOString(),
+                            voiceMessages: [{ role: "model", text: defaultVoiceGreetings[tutor] }]
+                          };
+                          remaining = [...remaining, freshVoiceSession];
+                          setActiveVoiceSessionId(freshVoiceSession.id);
+                        } else if (s.id === activeVoiceSessionId) {
+                          setActiveVoiceSessionId(matchingForTutor[0].id);
+                        }
+                        const cleanRemaining = deduplicateSessions(remaining);
+                        setVoiceSessions(cleanRemaining);
+                        localStorage.setItem("ai_hub_voice_sessions_v3", JSON.stringify(cleanRemaining));
+                        if (user && user.uid) {
+                          saveUserAiSessions(user.uid, deduplicateSessions(chatSessions), cleanRemaining).catch(err => console.warn("Voice delete save error:", err));
+                        }
+                        setToastMessage("Голосовой диалог удален");
+                      }}
+                    >
+                      ✕
+                    </button>
                   </div>
                 ))
               }

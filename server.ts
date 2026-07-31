@@ -2307,7 +2307,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     userLevel = reqLevel;
     const ai = getAIClient(req);
 
-    // Step A: If the user recorded audio, transcribe it first using Gemini's multimodal capabilities!
+    // Step A: If the user recorded audio, transcribe it using Gemini multimodal capabilities
     if (audio) {
       console.log("[Voice Chat] Transcribing user audio...");
       let rawMime = "audio/webm"; // default fallback
@@ -2330,7 +2330,7 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       
       try {
         const transPromise = generateContentWithRetry({
-          model: "gemini-3.6-flash",
+          model: "gemini-2.5-flash",
           contents: [
             {
               parts: [
@@ -2341,58 +2341,53 @@ app.post("/api/ai-voice-chat", async (req, res) => {
                   }
                 },
                 {
-                  text: "Listen to this spoken audio recorded by the student and transcribe every spoken word in English, Russian, or mixed languages exactly as spoken. Return ONLY the clean verbatim transcript, absolutely nothing else. CRITICAL RULE: If her name is spoken, she is 'Arina' (Арина). Do NOT output markdown code blocks or quotes."
+                  text: "You are an accurate speech recognition assistant. Listen to the spoken audio from an English learner and transcribe every word in English or Russian verbatim as spoken. Return ONLY the clean transcript string. CRITICAL: If speech is unclear, silent, or noisy, return an empty string. Do NOT output explanations, quotes, brackets, or words like 'unclear' or 'quiet'."
                 }
               ]
             }
           ]
-        }, { fallbackModel: "gemini-3.6-flash", req, timeoutMs: 20000 });
+        }, { fallbackModel: "gemini-1.5-flash", req, timeoutMs: 15000 });
 
-        const transResponse = await withTimeout(transPromise, 22000, null);
+        const transResponse = await withTimeout(transPromise, 16000, null);
         if (transResponse && transResponse.text) {
           userText = transResponse.text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
         }
         console.log("[Voice Chat] User transcript from audio:", userText);
       } catch (transcribeErr) {
-        console.warn("[Voice Chat] Primary audio transcription error, checking fallback:", transcribeErr);
-      }
-
-      // Secondary transcription attempt if primary attempt was empty
-      if (!userText.trim()) {
-        try {
-          const transPromise2 = generateContentWithRetry({
-            model: "gemini-2.5-flash",
-            contents: [
-              {
-                parts: [
-                  {
-                    inlineData: {
-                      mimeType: normalizedMime,
-                      data: base64Audio
-                    }
-                  },
-                  {
-                    text: "Transcribe the spoken words in this audio (English or Russian). Return ONLY the transcript text."
-                  }
-                ]
-              }
-            ]
-          }, { fallbackModel: "gemini-3.1-flash-lite", req, timeoutMs: 15000 });
-          const transResp2 = await withTimeout(transPromise2, 16000, null);
-          if (transResp2 && transResp2.text) {
-            userText = transResp2.text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
-          }
-          console.log("[Voice Chat] Secondary audio transcript:", userText);
-        } catch (e2) {
-          console.warn("[Voice Chat] Secondary transcription attempt failed:", e2);
-        }
+        console.warn("[Voice Chat] Primary audio transcription error:", transcribeErr);
       }
     }
 
-    // Fallback: If audio transcription was empty or failed, use client-provided text if available
+    // Helper to check if transcript is invalid/unclear indicator
+    const isUnclearTranscript = (str: string) => {
+      if (!str) return true;
+      const s = str.toLowerCase().trim();
+      return (
+        !s ||
+        s === "unclear" ||
+        s.includes("unclear") ||
+        s.includes("inaudible") ||
+        s.includes("silence") ||
+        s.includes("quiet") ||
+        s.includes("no speech") ||
+        s.includes("no audio") ||
+        s.includes("тихий звук") ||
+        s.includes("не разборчив") ||
+        s.includes("неразборчиво") ||
+        s.includes("не удалось") ||
+        /^\[.*\]$/.test(s) ||
+        /^\(.*\)$/.test(s)
+      );
+    };
+
+    if (isUnclearTranscript(userText)) {
+      userText = "";
+    }
+
+    // Fallback: If audio transcription was empty or unclear, use client-provided text from browser STT if available
     if (!userText.trim() && req.body.text && typeof req.body.text === "string") {
       const candidate = req.body.text.replace("Слушаю вас...", "").replace(/^🎙️\s*/, "").trim();
-      if (candidate && candidate !== "[Расшифровка аудио...]" && candidate !== "[Голосовое сообщение]") {
+      if (candidate && !isUnclearTranscript(candidate) && candidate !== "[Расшифровка аудио...]" && candidate !== "[Голосовое сообщение]") {
         userText = candidate;
         console.log("[Voice Chat] Using client-provided fallback transcript:", userText);
       }
@@ -2401,15 +2396,15 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     if (!userText.trim()) {
       let friendlyFallback = "";
       if (role === "sophia") {
-        friendlyFallback = "Я получила твоё голосовое сообщение! 🎙️ Звук получился очень тихим. Попробуй говорить чуть громче и ближе к микрофону, и я с радостью отвечу тебе! 🌸";
+        friendlyFallback = "Я получила твоё голосовое сообщение! 🎙️ Звук получился тихим или не удалось разобрать слова. Попробуй говорить чуть громче и ближе к микрофону!";
       } else if (role === "oliver") {
-        friendlyFallback = "Голосовое сообщение получено. 🎙️ Сигнал слишком тихий или не разборчив. Пожалуйста, повторите фразу чётче перед микрофоном.";
+        friendlyFallback = "Голосовое сообщение получено. 🎙️ Сигнал не разборчив. Пожалуйста, повторите фразу чётче перед микрофоном.";
       } else {
-        friendlyFallback = "Йо, голосовое пришло, но звук слишком тихий! 🎙️⚡ Попробуй скажи ещё раз погромче, жду!";
+        friendlyFallback = "Йо, голосовое пришло, но звук не разборчив! 🎙️⚡ Попробуй скажи ещё раз погромче, жду!";
       }
       res.json({ 
         replyText: friendlyFallback, 
-        userTranscription: "🎙️ Голосовое сообщение (тихий звук)", 
+        userTranscription: "🎙️ Голосовое сообщение", 
         evaluatedLevel: userLevel 
       });
       return;
