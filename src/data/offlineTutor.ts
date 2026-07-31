@@ -98,6 +98,15 @@ export function getOfflineChatTutorReply(
     "клубника": { en: "strawberry", emoji: "🍓", pos: "noun", topic: "food" },
     "апельсин": { en: "orange", emoji: "🍊", pos: "noun", topic: "food" },
     "персик": { en: "peach", emoji: "🍑", pos: "noun", topic: "food" },
+    "груша": { en: "pear", emoji: "🍐", pos: "noun", topic: "food" },
+    "вишня": { en: "cherry", emoji: "🍒", pos: "noun", topic: "food" },
+    "виноград": { en: "grapes", emoji: "🍇", pos: "noun", topic: "food" },
+    "огурец": { en: "cucumber", emoji: "🥒", pos: "noun", topic: "food" },
+    "помидор": { en: "tomato", emoji: "🍅", pos: "noun", topic: "food" },
+    "картошка": { en: "potato", emoji: "🥔", pos: "noun", topic: "food" },
+    "морковь": { en: "carrot", emoji: "🥕", pos: "noun", topic: "food" },
+    "сыр": { en: "cheese", emoji: "🧀", pos: "noun", topic: "food" },
+    "молоко": { en: "milk", emoji: "🥛", pos: "noun", topic: "food" },
     "кошка": { en: "cat", emoji: "🐱", pos: "noun", topic: "home" },
     "кот": { en: "cat", emoji: "🐱", pos: "noun", topic: "home" },
     "собака": { en: "dog", emoji: "🐶", pos: "noun", topic: "home" },
@@ -106,23 +115,56 @@ export function getOfflineChatTutorReply(
     "дом": { en: "house", emoji: "🏠", pos: "noun", topic: "home" },
     "книга": { en: "book", emoji: "📚", pos: "noun", topic: "study" },
     "машина": { en: "car", emoji: "🚗", pos: "noun", topic: "travel" },
-    "солнце": { en: "sun", emoji: "☀️", pos: "noun", topic: "weather" }
+    "солнце": { en: "sun", emoji: "☀️", pos: "noun", topic: "weather" },
+    "время": { en: "time", emoji: "⏰", pos: "noun", topic: "time" },
+    "семья": { en: "family", emoji: "👨‍👩‍👧", pos: "noun", topic: "family" },
+    "мечта": { en: "dream", emoji: "✨", pos: "noun", topic: "general" },
+    "работа": { en: "work", emoji: "💼", pos: "noun", topic: "work" },
+    "погода": { en: "weather", emoji: "🌤️", pos: "noun", topic: "weather" }
   };
 
   for (const [ruKey, info] of Object.entries(dictWords)) {
     if (msg.includes(ruKey)) {
       let replyText = "";
       if (role === "sophia") {
-        replyText = `Слово "${ruKey}" по-английски будет **${info.en}** ${info.emoji}!\n\nПример употребления: "I really love eating sweet ${info.en} in summer!" (Я очень люблю есть сладкий ${ruKey} летом).\n\nХотите сохранить это слово в свой словарь? И о каких ещё фруктах или словах вам хотелось бы узнать?`;
+        replyText = `Слово "${ruKey}" по-английски будет **${info.en}** ${info.emoji}!\n\nПример употребления: "I really love ${info.en}!" (Я очень люблю ${ruKey}).\n\nХотите сохранить это слово в свой словарь? И о каких ещё словах вам хотелось бы узнать? 🌸`;
       } else if (role === "oliver") {
-        replyText = `По-английски "${ruKey}" переводится как **${info.en}** ${info.emoji}.\n\nОбратите внимание на правильное произношение и ударение. Попробуйте составить полное предложение с этим словом!`;
+        replyText = `По-английски "${ruKey}" переводится как **${info.en}** ${info.emoji}.\n\nОбратите внимание на правильное произношение и грамматику. Попробуйте составить предложение с этим словом!`;
       } else {
-        replyText = `Yo! "${ruKey}" по-английски — это **${info.en}** ${info.emoji}!\n\nSuper easy! What other words do you wanna learn today?`;
+        replyText = `Yo! "${ruKey}" по-английски — это **${info.en}** ${info.emoji}!\n\nSuper easy! What other words do you wanna learn today? ⚡`;
       }
       return {
         replyText,
         evaluatedLevel: userLevel,
         wordToAdd: { en: info.en, ru: ruKey, pos: info.pos, topic: info.topic }
+      };
+    }
+  }
+
+  // Generic Russian phrase translation request parser ("как будет...", "как переводится...", "как по-английски...")
+  if (msg.includes("как будет") || msg.includes("как переводится") || msg.includes("по-английски") || msg.includes("как сказать")) {
+    const extractedWord = msg
+      .replace(/как будет/gi, "")
+      .replace(/как переводится/gi, "")
+      .replace(/по-английски/gi, "")
+      .replace(/как сказать/gi, "")
+      .replace(/слово/gi, "")
+      .replace(/[?.,!]/g, "")
+      .trim();
+
+    if (extractedWord) {
+      let replyText = "";
+      if (role === "sophia") {
+        replyText = `Замечательный вопрос! 😊 Вы спросили про слово "**${extractedWord}**".\n\nВ английском языке его перевод зависит от контекста. Попробуйте отправить его в чат или воспользоваться помощью с переводом! Хотите разобрать ещё выражения? 🌸`;
+      } else if (role === "oliver") {
+        replyText = `Для точного перевода слова "**${extractedWord}**" требуется учитывать контекст предложения. Пожалуйста, сформулируйте предложение на английском с этим словом.`;
+      } else {
+        replyText = `Great word to ask about! 🚀 "**${extractedWord}**" is awesome to learn! What other phrases are on your mind? ⚡`;
+      }
+      return {
+        replyText,
+        evaluatedLevel: userLevel,
+        wordToAdd: { en: extractedWord, ru: extractedWord, pos: "noun", topic: "general" }
       };
     }
   }

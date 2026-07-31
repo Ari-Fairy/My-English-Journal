@@ -197,46 +197,40 @@ function withTimeout<T>(promise: Promise<T>, timeoutMs: number, defaultValue: T)
 
 // Helper for generating content with retry and fallback model
 async function generateContentWithRetry(params: any, options: { maxRetries?: number; fallbackModel?: string; req?: express.Request; timeoutMs?: number } = {}): Promise<any> {
-  const { maxRetries = 2, fallbackModel = "gemini-3.6-flash", req, timeoutMs = 12000 } = options;
+  const { maxRetries = 2, req, timeoutMs = 12000 } = options;
   const ai = getAIClient(req);
   if (!ai) {
     throw new Error("GEMINI_API_KEY environment variable is not configured server-side.");
   }
+
+  const requestedModel = params.model || "gemini-3.6-flash";
+  const modelQueue = [requestedModel];
+  if (!modelQueue.includes("gemini-2.5-flash")) modelQueue.push("gemini-2.5-flash");
+  if (!modelQueue.includes("gemini-3.1-flash-lite")) modelQueue.push("gemini-3.1-flash-lite");
+
   let lastError: any = null;
 
-  // Try with the requested model (or default)
-  const sanitizeModelName = (m?: string) => {
-    if (!m) return "gemini-3.6-flash";
-    if (m === "gemini-3.6-flash" || m === "gemini-3.1-pro-preview" || m === "gemini-3.1-flash-lite" || m === "gemini-3.1-flash-tts-preview" || m === "gemini-3.1-flash-live-preview") return m;
-    if (m === "gemini-2.5-pro") return "gemini-3.1-pro-preview";
-    return "gemini-3.6-flash";
-  };
-
-  let currentModel = sanitizeModelName(params.model);
-  const safeFallbackModel = sanitizeModelName(fallbackModel);
-
-  for (let attempt = 1; attempt <= maxRetries; attempt++) {
-    try {
-      console.log(`[Gemini API] Attempt ${attempt} using model "${currentModel}"`);
-      const responsePromise = ai.models.generateContent({
-        ...params,
-        model: currentModel
-      });
-      const response = await withTimeout(responsePromise, timeoutMs, null);
-      if (!response) {
-        throw new Error(`Gemini API call timed out after ${timeoutMs}ms`);
-      }
-      return response;
-    } catch (error: any) {
-      lastError = error;
-      const errMsg = error?.message || String(error);
-
-      console.warn(`[Gemini API Warning] Attempt ${attempt} failed with error on ${currentModel}: ${errMsg}`);
-
-      if (safeFallbackModel && currentModel !== safeFallbackModel) {
-        console.log(`[Gemini API] Primary model "${currentModel}" failed. Switching to fallback model "${safeFallbackModel}"...`);
-        currentModel = safeFallbackModel;
-        continue;
+  for (const currentModel of modelQueue) {
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        console.log(`[Gemini API] Attempt ${attempt} using model "${currentModel}"`);
+        const responsePromise = ai.models.generateContent({
+          ...params,
+          model: currentModel
+        });
+        const response = await withTimeout(responsePromise, timeoutMs, null);
+        if (!response) {
+          throw new Error(`Gemini API call timed out after ${timeoutMs}ms`);
+        }
+        return response;
+      } catch (error: any) {
+        lastError = error;
+        const errMsg = error?.message || String(error);
+        console.warn(`[Gemini API Warning] Attempt ${attempt} failed on ${currentModel}: ${errMsg}`);
+        if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
+          console.warn(`[Gemini API Quota Exceeded] Quota hit on "${currentModel}". Trying next model in queue...`);
+          break;
+        }
       }
     }
   }
@@ -398,6 +392,86 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
   // Greeting checks
   const isGreeting = msg.includes("hello") || msg.includes("hi ") || msg === "hi" || msg.includes("hey") || msg.includes("greetings") || msg.includes("how are you");
 
+  // Check for explicit word translation query (e.g. "арбуз", "как будет арбуз", "по-английски арбуз")
+  const dictWords: { [key: string]: { en: string; emoji: string; pos: string; topic: string } } = {
+    "арбуз": { en: "watermelon", emoji: "🍉", pos: "noun", topic: "food" },
+    "яблоко": { en: "apple", emoji: "🍎", pos: "noun", topic: "food" },
+    "банан": { en: "banana", emoji: "🍌", pos: "noun", topic: "food" },
+    "дыня": { en: "melon", emoji: "🍈", pos: "noun", topic: "food" },
+    "клубника": { en: "strawberry", emoji: "🍓", pos: "noun", topic: "food" },
+    "апельсин": { en: "orange", emoji: "🍊", pos: "noun", topic: "food" },
+    "персик": { en: "peach", emoji: "🍑", pos: "noun", topic: "food" },
+    "груша": { en: "pear", emoji: "🍐", pos: "noun", topic: "food" },
+    "вишня": { en: "cherry", emoji: "🍒", pos: "noun", topic: "food" },
+    "виноград": { en: "grapes", emoji: "🍇", pos: "noun", topic: "food" },
+    "огурец": { en: "cucumber", emoji: "🥒", pos: "noun", topic: "food" },
+    "помидор": { en: "tomato", emoji: "🍅", pos: "noun", topic: "food" },
+    "картошка": { en: "potato", emoji: "🥔", pos: "noun", topic: "food" },
+    "морковь": { en: "carrot", emoji: "🥕", pos: "noun", topic: "food" },
+    "сыр": { en: "cheese", emoji: "🧀", pos: "noun", topic: "food" },
+    "молоко": { en: "milk", emoji: "🥛", pos: "noun", topic: "food" },
+    "кошка": { en: "cat", emoji: "🐱", pos: "noun", topic: "home" },
+    "кот": { en: "cat", emoji: "🐱", pos: "noun", topic: "home" },
+    "собака": { en: "dog", emoji: "🐶", pos: "noun", topic: "home" },
+    "хлеб": { en: "bread", emoji: "🍞", pos: "noun", topic: "food" },
+    "вода": { en: "water", emoji: "💧", pos: "noun", topic: "food" },
+    "дом": { en: "house", emoji: "🏠", pos: "noun", topic: "home" },
+    "книга": { en: "book", emoji: "📚", pos: "noun", topic: "study" },
+    "машина": { en: "car", emoji: "🚗", pos: "noun", topic: "travel" },
+    "солнце": { en: "sun", emoji: "☀️", pos: "noun", topic: "weather" },
+    "время": { en: "time", emoji: "⏰", pos: "noun", topic: "time" },
+    "семья": { en: "family", emoji: "👨‍👩‍👧", pos: "noun", topic: "family" },
+    "мечта": { en: "dream", emoji: "✨", pos: "noun", topic: "general" },
+    "работа": { en: "work", emoji: "💼", pos: "noun", topic: "work" },
+    "погода": { en: "weather", emoji: "🌤️", pos: "noun", topic: "weather" }
+  };
+
+  for (const [ruKey, info] of Object.entries(dictWords)) {
+    if (msg.includes(ruKey)) {
+      let reply = "";
+      if (role === "sophia") {
+        reply = `Слово "${ruKey}" по-английски будет **${info.en}** ${info.emoji}!\n\nПример употребления: "I really love ${info.en}!" (Я очень люблю ${ruKey}).\n\nХотите сохранить это слово в ваш словарь? И о каких ещё словах вам хотелось бы узнать? 🌸`;
+      } else if (role === "oliver") {
+        reply = `По-английски "${ruKey}" переводится как **${info.en}** ${info.emoji}.\n\nОбратите внимание на правильное произношение и грамматику. Попробуйте составить предложение с этим словом!`;
+      } else {
+        reply = `Yo! "${ruKey}" по-английски — это **${info.en}** ${info.emoji}!\n\nSuper easy! What other words do you wanna learn today? ⚡`;
+      }
+      return {
+        replyText: reply,
+        evaluatedLevel: userLevel,
+        wordToAdd: { en: info.en, ru: ruKey, pos: info.pos, topic: info.topic }
+      };
+    }
+  }
+
+  // Phrase translation request parser ("как будет...", "как переводится...", "по-английски...", "как сказать...")
+  if (msg.includes("как будет") || msg.includes("как переводится") || msg.includes("по-английски") || msg.includes("как сказать")) {
+    const extractedWord = msg
+      .replace(/как будет/gi, "")
+      .replace(/как переводится/gi, "")
+      .replace(/по-английски/gi, "")
+      .replace(/как сказать/gi, "")
+      .replace(/слово/gi, "")
+      .replace(/[?.,!]/g, "")
+      .trim();
+
+    if (extractedWord) {
+      let reply = "";
+      if (role === "sophia") {
+        reply = `Замечательный вопрос! 😊 Вы спросили про слово "**${extractedWord}**".\n\nВ английском языке его перевод зависит от контекста. Попробуйте использовать его в предложении! Хотите добавить его в словарь? 🌸`;
+      } else if (role === "oliver") {
+        reply = `Для точного перевода выражения "**${extractedWord}**" требуется учитывать контекст предложения. Пожалуйста, сформулируйте предложение на английском с этим словом.`;
+      } else {
+        reply = `Great word to ask about! 🚀 "**${extractedWord}**" is awesome to learn! What other phrases are on your mind? ⚡`;
+      }
+      return {
+        replyText: reply,
+        evaluatedLevel: userLevel,
+        wordToAdd: { en: extractedWord, ru: extractedWord, pos: "noun", topic: "general" }
+      };
+    }
+  }
+
   // Custom rule-based responsive logic satisfying the user's explicit instructions!
   if (isRude) {
     if (role === "sophia") {
@@ -448,7 +522,7 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
     } else {
       replyText = `Dude, that story was totally awesome! 📖 I love how it builds up and keeps you interested. Honestly, my opinion is that stories like this are perfect for learning because they aren't boring. What did you think of the ending? Did it surprise you?`;
     }
-  } else if (msg.includes("?") || msg.includes("what") || msg.includes("how") || msg.includes("why") || msg.includes("who") || msg.includes("where") || msg.includes("when") || msg.includes("is it") || msg.includes("are you") || msg.includes("правда ли") || msg.includes("почему") || msg.includes("зачем") || msg.includes("как")) {
+  } else if (msg.includes("what is") || msg.includes("how are") || msg.includes("why do") || msg.includes("правда ли") || msg.includes("почему") || msg.includes("зачем")) {
     // General question answering rule: answer, express opinion, ask leading question
     if (role === "sophia") {
       replyText = `That is an excellent question! 😊 Personally, I believe that learning to express your thoughts and opinions is the most wonderful part of mastering a language. To answer your question: practicing with real stories and asking questions is the fastest way to learn! What do you think is the most fun part of our English lessons so far?`;

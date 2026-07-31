@@ -1083,7 +1083,20 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
   });
   const [browserVoices, setBrowserVoices] = useState<SpeechSynthesisVoice[]>([]);
-  const [speechRecLang, setSpeechRecLang] = useState<"en-US" | "ru-RU">("en-US");
+  const [speechRecLang, setSpeechRecLang] = useState<"en-US" | "ru-RU">((): "en-US" | "ru-RU" => {
+    try {
+      const saved = localStorage.getItem("voice_speech_rec_lang");
+      return saved === "en-US" ? "en-US" : "ru-RU";
+    } catch (e) {
+      return "ru-RU";
+    }
+  });
+
+  useEffect(() => {
+    try {
+      localStorage.setItem("voice_speech_rec_lang", speechRecLang);
+    } catch (e) {}
+  }, [speechRecLang]);
 
   useEffect(() => {
     localStorage.setItem("voice_use_native_rec_v5", JSON.stringify(useNativeSpeechRec));
@@ -1382,6 +1395,75 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
   };
 
+  const callClientGeminiApi = async (
+    history: Array<{ role: string; text: string }>,
+    tutorRole: string,
+    userLevel: string
+  ): Promise<{ replyText: string; evaluatedLevel?: string; wordToAdd?: any } | null> => {
+    try {
+      const customKey = typeof window !== "undefined" ? (localStorage.getItem("user_gemini_api_key") || "").trim() : "";
+      const apiKey = customKey || "AIzaSyCA_svzuAGTWWRYctsp3Q-IlsDDtNY7naI";
+      if (!apiKey) return null;
+
+      const instructionsMap: Record<string, string> = {
+        sophia: "You are Sophia, a warm, cozy, highly empathetic, and encouraging English teacher for Russian students. Always answer translation questions directly (e.g. 'Как будет арбуз по-английски' -> 'Арбуз по-английски будет **watermelon**! 🍉').",
+        oliver: "You are Oliver, a strict, demanding, perfectionist, and highly structured English grammar supervisor. Give precise translations and grammar explanations immediately.",
+        alex: "You are Alex, an energetic, ultra-positive peer and tutor from NYC. Speak naturally, give direct translations immediately when asked!"
+      };
+      const tutorInstr = instructionsMap[tutorRole] || instructionsMap.sophia;
+
+      const systemPrompt = `${tutorInstr}
+
+CRITICAL RULES:
+1. If the user asks for a word or phrase translation (e.g. 'как будет арбуз', 'как переводится X', 'how to say Y'), give the EXACT English translation in the very first sentence with a clear emoji and example sentence.
+2. Return ONLY valid JSON matching this schema:
+{
+  "replyText": "your response in Markdown formatting",
+  "evaluatedLevel": "${userLevel}",
+  "wordToAdd": { "en": "english_word", "ru": "russian_translation", "pos": "noun|verb|adjective|adverb", "topic": "food|home|study|general" } or null
+}`;
+
+      const contents = history.map(m => ({
+        role: m.role === "user" ? "user" : "model",
+        parts: [{ text: m.text }]
+      }));
+
+      const modelsToTry = ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"];
+      for (const modelName of modelsToTry) {
+        try {
+          const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
+          const res = await fetch(url, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              contents,
+              systemInstruction: { parts: [{ text: systemPrompt }] },
+              generationConfig: { responseMimeType: "application/json" }
+            })
+          });
+
+          if (!res.ok) continue;
+          const json = await res.json();
+          const rawText = json?.candidates?.[0]?.content?.parts?.[0]?.text;
+          if (!rawText) continue;
+
+          const parsed = JSON.parse(rawText);
+          return {
+            replyText: parsed.replyText || "I'm here to help you practice English!",
+            evaluatedLevel: parsed.evaluatedLevel || userLevel,
+            wordToAdd: parsed.wordToAdd || null
+          };
+        } catch (e) {
+          console.warn(`[Client Gemini Call] Model ${modelName} failed:`, e);
+        }
+      }
+      return null;
+    } catch (e) {
+      console.warn("[Client Gemini Direct Call] Failed:", e);
+      return null;
+    }
+  };
+
   // --- 1. CHAT LOGIC ---
   const handleSendChatMessage = async (textOverride?: string | React.MouseEvent | React.KeyboardEvent) => {
     const isStringOverride = typeof textOverride === "string";
@@ -1471,25 +1553,34 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(true);
       }
     } catch (err: any) {
-      console.warn("[AI Chat] Fetch failed, using client offline tutor fallback:", err);
-      const offlineReply = getOfflineChatTutorReply(userMsgText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
+      console.warn("[AI Chat] Fetch failed, attempting direct client Gemini call:", err);
+      let replyData: any = await callClientGeminiApi(
+        targetMessages.concat({ role: "user", text: userMsgText }),
+        tutor,
+        getCurrentTutorLevel(tutor)
+      );
+
+      if (!replyData) {
+        console.warn("[AI Chat] Direct client Gemini call unavailable, using offline tutor fallback");
+        replyData = getOfflineChatTutorReply(userMsgText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
+      }
       
       setChatMessagesForSession(targetSessionId, prev => [...prev, { 
         role: "model", 
-        text: offlineReply.replyText,
+        text: replyData.replyText,
         timestamp: new Date().toISOString()
       }]);
 
-      if (offlineReply.evaluatedLevel) {
-        handleUpdateTutorLevel(tutor, offlineReply.evaluatedLevel);
+      if (replyData.evaluatedLevel) {
+        handleUpdateTutorLevel(tutor, replyData.evaluatedLevel);
       }
 
-      if (offlineReply.wordToAdd) {
+      if (replyData.wordToAdd) {
         setPendingWordToAdd({
-          en: offlineReply.wordToAdd.en,
-          ru: offlineReply.wordToAdd.ru,
-          pos: offlineReply.wordToAdd.pos || "noun",
-          topic: offlineReply.wordToAdd.topic || "general",
+          en: replyData.wordToAdd.en,
+          ru: replyData.wordToAdd.ru,
+          pos: replyData.wordToAdd.pos || "noun",
+          topic: replyData.wordToAdd.topic || "general",
           note: `Из диалога с ${tutor === "sophia" ? "Sophia" : tutor === "oliver" ? "Oliver" : "Alex"}`
         });
         setShowDictionaryButton(false);
@@ -1499,7 +1590,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }
 
       if (chatVoiceEnabledRef.current) {
-        speakText(offlineReply.replyText, () => {
+        speakText(replyData.replyText, () => {
           setShowDictionaryButton(true);
         });
       } else {
@@ -1829,10 +1920,20 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         setShowDictionaryButton(true);
       }
     } catch (err: any) {
-      console.warn("[AI Voice Chat] Fetch failed, using client offline tutor fallback:", err);
+      console.warn("[AI Voice Chat] Fetch failed, attempting direct client Gemini call:", err);
       const recognized = payload.text || accumulatedTranscriptRef.current.trim();
       const spokenText = recognized || "Привет! Практикуем устную речь.";
-      const offlineReply = getOfflineChatTutorReply(spokenText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
+
+      let replyData: any = await callClientGeminiApi(
+        targetVoiceMessages.filter(m => !m.text.includes("🎙️")).map(m => ({ role: m.role, text: m.text })).concat({ role: "user", text: spokenText }),
+        tutor,
+        getCurrentTutorLevel(tutor)
+      );
+
+      if (!replyData) {
+        console.warn("[AI Voice Chat] Direct client Gemini call unavailable, using offline tutor fallback");
+        replyData = getOfflineChatTutorReply(spokenText, tutor, getCurrentTutorLevel(tutor), new Date().toISOString());
+      }
 
       if (payload.audio && !payload.text) {
         setVoiceMessagesForSession(targetSessionId, prev => {
@@ -1844,18 +1945,18 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         });
       }
 
-      setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: offlineReply.replyText, timestamp: new Date().toISOString() }]);
+      setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "model", text: replyData.replyText, timestamp: new Date().toISOString() }]);
 
-      if (offlineReply.evaluatedLevel) {
-        handleUpdateTutorLevel(tutor, offlineReply.evaluatedLevel);
+      if (replyData.evaluatedLevel) {
+        handleUpdateTutorLevel(tutor, replyData.evaluatedLevel);
       }
 
-      if (offlineReply.wordToAdd) {
+      if (replyData.wordToAdd) {
         setPendingWordToAdd({
-          en: offlineReply.wordToAdd.en,
-          ru: offlineReply.wordToAdd.ru,
-          pos: offlineReply.wordToAdd.pos || "noun",
-          topic: offlineReply.wordToAdd.topic || "general",
+          en: replyData.wordToAdd.en,
+          ru: replyData.wordToAdd.ru,
+          pos: replyData.wordToAdd.pos || "noun",
+          topic: replyData.wordToAdd.topic || "general",
           note: `Из диалога с ${tutor === "sophia" ? "Sophia" : tutor === "oliver" ? "Oliver" : "Alex"}`
         });
         setShowDictionaryButton(false);
@@ -1865,7 +1966,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }
 
       if (voiceVoiceEnabledRef.current) {
-        speakText(offlineReply.replyText, () => {
+        speakText(replyData.replyText, () => {
           setShowDictionaryButton(true);
         });
       } else {
