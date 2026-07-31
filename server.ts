@@ -2052,8 +2052,8 @@ app.post("/api/ai-tts", async (req, res) => {
       .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
       .trim();
 
-    if (cleanTextForTts.length > 350) {
-      cleanTextForTts = cleanTextForTts.substring(0, 350);
+    if (cleanTextForTts.length > 1500) {
+      cleanTextForTts = cleanTextForTts.substring(0, 1500);
     }
 
     const ttsPromptPrefix = role === "alex" 
@@ -2075,7 +2075,7 @@ app.post("/api/ai-tts", async (req, res) => {
       }
     });
 
-    const speechResponse = await withTimeout(speechPromise, 8000, null);
+    const speechResponse = await withTimeout(speechPromise, 12000, null);
     if (speechResponse) {
       const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
       if (rawData) {

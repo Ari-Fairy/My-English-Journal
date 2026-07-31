@@ -1134,10 +1134,14 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const recordingTimerRef = useRef<NodeJS.Timeout | null>(null);
   const audioPlayerRef = useRef<HTMLAudioElement | null>(null);
   const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+  const speechCancelledRef = useRef<boolean>(false);
 
   const stopAllSpeech = () => {
+    speechCancelledRef.current = true;
     if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+      try {
+        window.speechSynthesis.cancel();
+      } catch (e) {}
     }
     if (currentAudioRef.current) {
       try {
@@ -1147,6 +1151,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       } catch (err) {
         console.warn("Error pausing currentAudioRef:", err);
       }
+      currentAudioRef.current = null;
     }
     if (audioPlayerRef.current) {
       try {
@@ -1207,6 +1212,9 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
   // Studio AI speech synthesis with browser fallback
   const speakText = async (text: string, onEnd?: () => void) => {
+    // Reset cancellation flag at start of new speech
+    speechCancelledRef.current = false;
+
     // Respect speaker toggle: do not speak if muted
     if ((activeTab === "chat" && !chatVoiceEnabledRef.current) || (activeTab === "voice" && !voiceVoiceEnabledRef.current)) {
       stopAllSpeech();
@@ -1221,7 +1229,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     }
 
     if (typeof window !== "undefined" && window.speechSynthesis) {
-      window.speechSynthesis.cancel();
+      try { window.speechSynthesis.cancel(); } catch (e) {}
     }
 
     if (currentAudioRef.current) {
@@ -1240,6 +1248,9 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         headers: getApiHeaders(),
         body: JSON.stringify({ text, role: tutor })
       });
+
+      if (speechCancelledRef.current) return;
+
       if (response.ok) {
         let data: any = null;
         try { data = await response.json(); } catch (e) {}
@@ -1249,30 +1260,36 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
           audio.playbackRate = speechPace === "slow" ? 0.8 : speechPace === "fast" ? 1.2 : 1.0;
           audio.onended = () => {
             setIsSpeechPlaying(false);
-            if (onEnd) onEnd();
+            if (onEnd && !speechCancelledRef.current) onEnd();
           };
           audio.onerror = () => {
-            fallbackBrowserSpeak(text, onEnd);
+            if (!speechCancelledRef.current) {
+              fallbackBrowserSpeak(text, onEnd);
+            }
           };
-          await audio.play();
-          return;
+          if (!speechCancelledRef.current) {
+            await audio.play();
+            return;
+          }
         }
       }
     } catch (e) {
       console.warn("[Studio TTS] API call failed, using fallback synthesizer:", e);
     }
 
-    fallbackBrowserSpeak(text, onEnd);
+    if (!speechCancelledRef.current) {
+      fallbackBrowserSpeak(text, onEnd);
+    }
   };
 
   const fallbackBrowserSpeak = (text: string, onEnd?: () => void) => {
     if (typeof window === "undefined" || !window.speechSynthesis) {
       setIsSpeechPlaying(false);
-      if (onEnd) onEnd();
+      if (onEnd && !speechCancelledRef.current) onEnd();
       return;
     }
 
-    window.speechSynthesis.cancel();
+    try { window.speechSynthesis.cancel(); } catch (e) {}
     
     let cleanText = text
       .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
@@ -1282,9 +1299,9 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       .replace(/[*#]/g, "")
       .trim();
 
-    if (!cleanText) {
+    if (!cleanText || speechCancelledRef.current) {
       setIsSpeechPlaying(false);
-      if (onEnd) onEnd();
+      if (onEnd && !speechCancelledRef.current) onEnd();
       return;
     }
 
@@ -1296,8 +1313,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     for (const line of rawLines) {
       if (!currentChunk) {
         currentChunk = line;
-      } else if (/^\d+[\.\)]/.test(line) || currentChunk.length < 40) {
-        // Append numbered items or short lines to previous chunk so they don't break into isolated robotic fragments
+      } else if (/^\d+[\.\)]/.test(line) || currentChunk.length < 50) {
         currentChunk += " " + line;
       } else {
         rawChunks.push(currentChunk);
@@ -1308,7 +1324,7 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
 
     const voices = browserVoices.length > 0 ? browserVoices : (typeof window !== "undefined" && window.speechSynthesis ? window.speechSynthesis.getVoices() : []);
 
-    // High quality natural English voice
+    // Pick ONE single consistent voice object for English and ONE for Russian to prevent voice jumping between paragraphs
     let englishVoice: SpeechSynthesisVoice | null = null;
     if (tutor === "sophia") {
       englishVoice = voices.find(v => {
@@ -1339,7 +1355,6 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
       }) || voices.find(v => v.lang.startsWith("en")) || null;
     }
 
-    // High quality natural Russian voice
     const russianVoice = voices.find(v => {
       const name = v.name.toLowerCase();
       const lang = v.lang.toLowerCase();
@@ -1354,17 +1369,17 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     let chunkIdx = 0;
 
     const speakNextChunk = () => {
-      if (chunkIdx >= rawChunks.length) {
+      if (speechCancelledRef.current || chunkIdx >= rawChunks.length) {
         setIsSpeechPlaying(false);
-        if (onEnd) onEnd();
+        if (onEnd && !speechCancelledRef.current) onEnd();
         return;
       }
 
       const chunk = rawChunks[chunkIdx];
       chunkIdx++;
 
-      if (!chunk) {
-        speakNextChunk();
+      if (!chunk || speechCancelledRef.current) {
+        if (!speechCancelledRef.current) speakNextChunk();
         return;
       }
 
@@ -1383,11 +1398,23 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
         utterance.rate = speechPace === "slow" ? 0.80 : speechPace === "fast" ? 1.20 : 1.00;
       }
 
-      utterance.onstart = () => setIsSpeechPlaying(true);
-      utterance.onend = () => speakNextChunk();
-      utterance.onerror = () => speakNextChunk();
+      utterance.onstart = () => {
+        if (!speechCancelledRef.current) {
+          setIsSpeechPlaying(true);
+        } else {
+          try { window.speechSynthesis.cancel(); } catch (e) {}
+        }
+      };
+      utterance.onend = () => {
+        if (!speechCancelledRef.current) speakNextChunk();
+      };
+      utterance.onerror = () => {
+        if (!speechCancelledRef.current) speakNextChunk();
+      };
 
-      window.speechSynthesis.speak(utterance);
+      if (!speechCancelledRef.current) {
+        window.speechSynthesis.speak(utterance);
+      }
     };
 
     speakNextChunk();
@@ -1822,10 +1849,10 @@ CRITICAL RULES:
     setVoiceLoading(true);
     setLoadingVoiceSessionId(targetSessionId);
     try {
-      if (payload.text) {
-        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text!, timestamp: new Date().toISOString() }]);
+      if (payload.audio) {
+        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text ? `🎙️ ${payload.text}` : "🎙️ [Расшифровка аудио...]", timestamp: new Date().toISOString() }]);
       } else {
-        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: "🎙️ [Голосовое сообщение]", timestamp: new Date().toISOString() }]);
+        setVoiceMessagesForSession(targetSessionId, prev => [...prev, { role: "user", text: payload.text || "🎙️ [Голосовое сообщение]", timestamp: new Date().toISOString() }]);
       }
 
       const response = await fetch(getApiUrl("/api/ai-voice-chat"), {
@@ -3577,7 +3604,30 @@ CRITICAL RULES:
             </button>
 
             {/* Auto Voice toggle & Reset buttons */}
-            <div className="md:ml-auto flex gap-1.5">
+            <div className="md:ml-auto flex gap-1.5 items-center">
+              {isSpeechPlaying && (
+                <button
+                  className="animate-pulse"
+                  style={{
+                    display: "flex",
+                    alignItems: "center",
+                    gap: 4,
+                    padding: "5px 12px",
+                    borderRadius: "999px",
+                    fontSize: 11,
+                    fontWeight: 700,
+                    background: "rgba(214,128,96,0.25)",
+                    color: "var(--rose)",
+                    border: "1px solid var(--rose)",
+                    cursor: "pointer",
+                    boxShadow: "0 0 10px rgba(214,128,96,0.3)"
+                  }}
+                  onClick={stopAllSpeech}
+                  title="Нажмите, чтобы моментально остановить озвучку"
+                >
+                  ⏹️ Стоп звук
+                </button>
+              )}
               <button
                 style={{
                   display: "flex",
@@ -4373,6 +4423,24 @@ CRITICAL RULES:
             <div style={{ fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)", paddingBottom: 6, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>🗣️ Журнал устного диалога</span>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                {isSpeechPlaying && (
+                  <button
+                    className="animate-pulse"
+                    style={{
+                      background: "rgba(214,128,96,0.25)",
+                      color: "var(--rose)",
+                      border: "1px solid var(--rose)",
+                      borderRadius: "4px",
+                      padding: "2px 8px",
+                      fontSize: 10,
+                      cursor: "pointer",
+                      fontWeight: 700
+                    }}
+                    onClick={stopAllSpeech}
+                  >
+                    ⏹️ Стоп
+                  </button>
+                )}
                 <button
                   style={{
                     background: voiceVoiceEnabled ? "rgba(143,160,128,0.2)" : "rgba(255,255,255,0.05)",
