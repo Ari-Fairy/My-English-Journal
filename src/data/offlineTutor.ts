@@ -250,18 +250,22 @@ export function getOfflineChatTutorReply(
 
   // Basic grammar corrections
   let correction = "";
-  if (msg.includes("i am agree") || msg.includes("i'm agree")) {
-    correction = " (By the way, in English we say 'I agree' instead of 'I am agree'! 😊)";
+  if (msg.includes("ago days") || msg.includes("ago weeks") || msg.includes("ago months") || msg.includes("ago years") || / \d+ ago /i.test(msg) || /ago \d+/i.test(msg)) {
+    correction = "\n\n💡 **Небольшая подсказка по грамматике:** В английском языке слово **'ago'** всегда ставится ПОСЛЕ отрезка времени. Правильно говорить: **'3 days ago'** (а не '3 ago days'). 😊";
+  } else if (msg.includes("i am agree") || msg.includes("i'm agree")) {
+    correction = "\n\n💡 **Подсказка:** Правильно говорить **'I agree'** (без 'am'), так как *agree* — это глагол. 😊";
   } else if (msg.includes("feel myself")) {
-    correction = " (Quick tip: say 'I feel good' or 'I feel happy' instead of 'I feel myself'! 🌸)";
+    correction = "\n\n💡 **Подсказка:** О хорошем самочувствии говорят **'I feel good / happy'** (без *myself*). 🌸";
   } else if (msg.includes("he go ") || msg.endsWith("he go")) {
-    correction = " (Remember to use 'he goes' for third person singular!)";
+    correction = "\n\n💡 **Подсказка:** Используйте **'he goes'** для 3-го лица единственного числа в Present Simple.";
   } else if (msg.includes("she go ") || msg.endsWith("she go")) {
-    correction = " (Remember to use 'she goes' for third person singular!)";
+    correction = "\n\n💡 **Подсказка:** Используйте **'she goes'** для 3-го лица единственного числа.";
+  } else if (msg.includes("i have 20 years") || msg.includes("i have ") && msg.includes(" years")) {
+    correction = "\n\n💡 **Подсказка:** Для возраста используют глагол *to be*: **'I am 20 years old'**.";
   }
 
-  // Check if message is explicitly a greeting
-  const isExplicitGreeting = /^(hello|hi|hey|good morning|good afternoon|good evening|привет|здравствуй|добрый день|доброе утро|добрый вечер)/i.test(msg);
+  // Check if message is strictly a standalone short greeting without additional clauses
+  const isExplicitGreeting = msg.length < 25 && /^(hello|hi|hey|good morning|good afternoon|good evening|привет|здравствуй|добрый день|доброе утро|добрый вечер)[\!\?\.\s]*$/i.test(msg);
 
   let timeGreetingPrefix = "";
   if (isExplicitGreeting) {
@@ -287,13 +291,19 @@ export function getOfflineChatTutorReply(
   let replyText = "";
   let wordToAdd = null;
 
-  // 1. User submitting numbered answers or translations
-  const isSunTaskSet = msg.includes("sun") || msg.includes("family") || msg.includes("quckly") || msg.includes("quickly") || msg.includes("не знаю") || msg.includes("dream");
-  const isFriendTaskSet = msg.includes("friend") || msg.includes("water") || msg.includes("city") || msg.includes("read");
-  const isNumberedAnswers = /1[\s\.\)].*2[\s\.\)]/i.test(msg) || isSunTaskSet || isFriendTaskSet;
-  const isAskingIfCorrect = (msg.includes("правильно") || msg.includes("перевел") || msg.includes("перевела") || msg.includes("проверь") || msg.includes("correct") || msg.includes("right"));
-
-  if (isSunTaskSet) {
+  // 1. Birthday / Party / Celebration Topic
+  if (msg.includes("birthday") || msg.includes("party") || msg.includes("день рождения") || msg.includes("праздник") || msg.includes("отмечал") || msg.includes("отпраздновал") || msg.includes("отметил")) {
+    wordToAdd = { en: "celebration", ru: "празднование, торжество", pos: "noun", topic: "general" };
+    if (role === "sophia") {
+      replyText = `${timeGreetingPrefix}Happy Birthday! 🥳🎉 Поздравляю с днем рождения (или с прошедшим праздником)! Счастья, радости и море вдохновения! How was your birthday party? Did you get nice presents or have a delicious birthday cake with your friends? Tell me all about it! 🌸${correction}`;
+    } else if (role === "oliver") {
+      replyText = `${timeGreetingPrefix}Happy Birthday. 🎉 Примите мои поздравления с днем рождения. Желаю успехов и академической точности в изучении английского языка. How did you celebrate your birthday party? Please describe the event in 2-3 structured English sentences.${correction}`;
+    } else {
+      replyText = `${timeGreetingPrefix}Yo, Happy Birthday! 🥳🎉 С днем рождения! Hope your birthday party was absolute fire! What was the coolest gift or best moment of your birthday? Spill the details! ⚡${correction}`;
+    }
+  }
+  // 2. User submitting numbered answers or translations
+  else if (msg.includes("sun") || msg.includes("family") || msg.includes("quckly") || msg.includes("quickly") || msg.includes("dream") || /1[\s\.\)].*2[\s\.\)]/i.test(msg)) {
     wordToAdd = { en: "dream", ru: "мечта, мечтать", pos: "noun", topic: "general" };
     const hasQucklySpelling = msg.includes("quckly");
     const spellingNote = hasQucklySpelling ? " (обрати внимание на опечатку: *quckly* ➔ **quickly**!)" : "";
@@ -492,12 +502,13 @@ Drop your translations below when ready! ⚡`;
         else replyText = alexVariants[salt];
       }
     } else {
+      const cleanUserMsg = (userMessage || "").trim();
       if (role === "sophia") {
-        replyText = `${timeGreetingPrefix}Thank you for sharing that with me! You are expressing your thoughts very clearly. What are your plans or goals for today?${correction}`;
+        replyText = `${timeGreetingPrefix}That's so interesting! I love hearing about what you're doing. 🌸 You said: "${cleanUserMsg}". Tell me a bit more details about that! What was the best part?${correction}`;
       } else if (role === "oliver") {
-        replyText = `${timeGreetingPrefix}I appreciate your input. Your sentence structure is progressing nicely. Could you elaborate a bit more on your main point?${correction}`;
+        replyText = `${timeGreetingPrefix}I have reviewed your English statement: "${cleanUserMsg}". Let's continue practicing. Please expand on this topic in 2-3 additional sentences.${correction}`;
       } else {
-        replyText = `${timeGreetingPrefix}Awesome! Thanks for sharing. How's everything else going with you today? What else is on your mind?${correction}`;
+        replyText = `${timeGreetingPrefix}Awesome! You said: "${cleanUserMsg}"! ⚡ That sounds super cool. What else happened? Tell me more!${correction}`;
       }
     }
   }

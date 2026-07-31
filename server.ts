@@ -284,7 +284,9 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
   
   // Basic grammar corrections
   let correction = "";
-  if (msg.includes("i am agree") || msg.includes("i'm agree")) {
+  if (msg.includes("ago days") || msg.includes("ago weeks") || msg.includes("ago months") || msg.includes("ago years") || / \d+ ago /i.test(msg) || /ago \d+/i.test(msg)) {
+    correction = "\n\n💡 **Небольшая подсказка по грамматике:** В английском языке слово **'ago'** всегда ставится ПОСЛЕ отрезка времени. Правильно говорить: **'3 days ago'** (а не '3 ago days'). 😊";
+  } else if (msg.includes("i am agree") || msg.includes("i'm agree")) {
     correction = " (By the way, in English we say 'I agree' instead of 'I am agree' because 'agree' is a verb! 😊)";
   } else if (msg.includes("feel myself")) {
     correction = " (Quick tip: in English we say 'I feel good' or 'I feel happy' instead of 'I feel myself' when talking about emotions! 🌸)";
@@ -308,8 +310,8 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
   const isAfternoon = hour >= 12 && hour < 17;
   const isEvening = hour >= 17 && hour < 23;
 
-  // Check if message is explicitly a greeting
-  const isExplicitGreeting = /^(hello|hi|hey|good morning|good afternoon|good evening|привет|здравствуй|добрый день|доброе утро|добрый вечер)/i.test(msg);
+  // Check if message is strictly a standalone short greeting
+  const isExplicitGreeting = msg.length < 25 && /^(hello|hi|hey|good morning|good afternoon|good evening|привет|здравствуй|добрый день|доброе утро|добрый вечер)[\!\?\.\s]*$/i.test(msg);
 
   // Determine greeting prefix ONLY if explicitly greeted
   let timeGreetingPrefix = "";
@@ -335,6 +337,19 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
 
   let replyText = "";
   let wordToAdd = null;
+
+  // Birthday / Party / Celebration topic check
+  if (msg.includes("birthday") || msg.includes("party") || msg.includes("день рождения") || msg.includes("праздник") || msg.includes("отмечал") || msg.includes("отпраздновал") || msg.includes("отметил")) {
+    wordToAdd = { en: "celebration", ru: "празднование, торжество", pos: "noun", topic: "general" };
+    if (role === "sophia") {
+      replyText = `${timeGreetingPrefix}Happy Birthday! 🥳🎉 Поздравляю с днем рождения (или с прошедшим праздником)! Счастья, радости и море вдохновения! How was your birthday party? Did you get nice presents or have a delicious birthday cake with your friends? Tell me all about it! 🌸${correction}`;
+    } else if (role === "oliver") {
+      replyText = `${timeGreetingPrefix}Happy Birthday. 🎉 Примите мои поздравления с днем рождения. Желаю успехов и академической точности в изучении английского языка. How did you celebrate your birthday party? Please describe the event in 2-3 structured English sentences.${correction}`;
+    } else {
+      replyText = `${timeGreetingPrefix}Yo, Happy Birthday! 🥳🎉 С днем рождения! Hope your birthday party was absolute fire! What was the coolest gift or best moment of your birthday? Spill the details! ⚡${correction}`;
+    }
+    return { replyText, evaluatedLevel: userLevel || "A1", wordToAdd };
+  }
 
   const topics = {
     food: {
@@ -389,8 +404,20 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
     matchedTopic = "travel";
   }
 
-  // Greeting checks
-  const isGreeting = msg.includes("hello") || msg.includes("hi ") || msg === "hi" || msg.includes("hey") || msg.includes("greetings") || msg.includes("how are you");
+  // Greeting checks: MUST be strictly isolated greeting, NOT a full conversational turn containing 'hello'
+  const cleanText = msg.replace(/[!.,?]/g, "").trim();
+  const isGreeting = (
+    cleanText === "hello" ||
+    cleanText === "hi" ||
+    cleanText === "hey" ||
+    cleanText === "greetings" ||
+    cleanText === "how are you" ||
+    cleanText === "good morning" ||
+    cleanText === "good afternoon" ||
+    cleanText === "good evening" ||
+    cleanText === "привет" ||
+    cleanText === "здравствуй"
+  ) || (cleanText.length <= 12 && (cleanText.startsWith("hello") || cleanText.startsWith("hi") || cleanText.startsWith("hey")));
 
   // Check for explicit word translation query (e.g. "арбуз", "как будет арбуз", "по-английски арбуз")
   const dictWords: { [key: string]: { en: string; emoji: string; pos: string; topic: string } } = {
@@ -523,6 +550,19 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
     };
   }
 
+  // Additional grammar corrections if not already set
+  if (!correction) {
+    if (/\d+\s*ago\s*(days|months|years|weeks|hours)/i.test(msg) || msg.includes("ago days") || msg.includes("ago months") || msg.includes("ago years")) {
+      correction = "\n\n💡 *Grammar tip:* In English, we place time units BEFORE 'ago' (e.g. **'3 days ago'**, NOT '3 ago days'). Keep up the great work!";
+    } else if (msg.includes("i am agree") || msg.includes("i'm agree")) {
+      correction = "\n\n💡 *Grammar tip:* In English, we say **'I agree'** (without 'am').";
+    } else if (msg.includes("feel myself")) {
+      correction = "\n\n💡 *Grammar tip:* Say **'I feel good'** or **'I feel happy'** instead of 'I feel myself'.";
+    } else if (/\b(he|she)\s+go\b/i.test(msg)) {
+      correction = "\n\n💡 *Grammar tip:* Remember third-person singular: **'he/she goes'**!";
+    }
+  }
+
   // Custom rule-based responsive logic satisfying the user's explicit instructions!
   if (isRude) {
     if (role === "sophia") {
@@ -540,6 +580,15 @@ function getOfflineChatTutorReply(userMessage: string, role: string, userLevel: 
       replyText = `${timeGreetingPrefix}I must point out that studying English at this hour is highly inefficient for cognitive retention. It is past bedtime. 😠 Please prioritize rest, or keep your input exceptionally brief for grammar verification. Why are you awake?`;
     } else {
       replyText = `${timeGreetingPrefix}Dude, it is super late! 🦉 Are you a total night owl or just grinding crazy hard? I'm down to chat, but don't forget to get some shut-eye, alright? What's keeping you up?`;
+    }
+  } else if (msg.includes("birthday") || msg.includes("party") || msg.includes("праздник") || msg.includes("день рождения") || msg.includes("celebrat") || msg.includes("родилась") || msg.includes("праздновать")) {
+    wordToAdd = { en: "celebration", ru: "праздник, празднование", pos: "noun", topic: "general" };
+    if (role === "sophia") {
+      replyText = `Happy Birthday! 🎉🎂 How exciting that you had a birthday party! I would love to hear all about it. What did you do at the party, did you get special gifts or eat a delicious cake?${correction}`;
+    } else if (role === "oliver") {
+      replyText = `Accept my congratulations on your birthday party! 🎈 Tell me in 2-3 precise English sentences: how did you celebrate and who was invited?${correction}`;
+    } else {
+      replyText = `Yo, Happy Birthday! 🥳🎉 That's awesome that you had a party! Tell me all about it — what was the best moment or coolest gift you got?${correction}`;
     }
   } else if (
     msg.includes("американцы") || msg.includes("амереканцы") || msg.includes("америк") || msg.includes("americans") || msg.includes("american") ||
@@ -1647,10 +1696,18 @@ You MUST adapt your response language, grammatical structures, and vocabulary di
 - For C1-C2: use advanced, rich, natural, and idiomatic native-level English, with almost no Russian unless explicitly requested.
 Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
 
-    const isFirstMessage = !messages || messages.length <= 1;
+    const lastUserMsgText = (messages && messages.length > 0) ? (messages[messages.length - 1]?.text || "").trim().toLowerCase() : "";
+    const isJustGreetingText = lastUserMsgText === "hello" || lastUserMsgText === "hi" || lastUserMsgText === "hey" || lastUserMsgText === "привет" || lastUserMsgText.length <= 8;
+    const isFirstMessage = (!messages || messages.length === 0) || (messages.length === 1 && isJustGreetingText);
 
     let baseInstruction = `${selectedInstruction}
 Respond primarily in English. Keep your response conversational, supportive, and scannable. 
+
+[STUDENT ERROR CORRECTION & CONTENT ENGAGEMENT MANDATE - CRITICAL]:
+1. Carefully inspect the student's input for any English grammar, spelling, tense, or word choice errors (e.g. "3 ago days" instead of "3 days ago", "I am agree" instead of "I agree", "I feel myself", "he go", etc.).
+2. If the student made a mistake in their English, ALWAYS start your response by pointing out the error in a friendly, constructive way, showing the correct phrasing (e.g. "💡 Quick tip: In English, we say **'3 days ago'** (time unit + ago), not '3 ago days'!").
+3. Respond directly, thoughtfully, and enthusiastically to the specific topic, story, or statement the student shared (e.g. if they talk about a birthday party, congratulate them, react to their news, ask about their party, gifts, or cake!). NEVER reply with a generic canned greeting or ignore their story!
+4. Always end your message with a relevant follow-up question in English to keep the conversation flowing naturally.
 
 [QUESTION-ANSWERING & OPINION RULE - CRITICAL]:
 If the student asks a question (such as explaining a rule, a difference between words like "little" vs "a little", or how English works), you MUST answer it directly, completely, and comprehensively in this response. Never give an empty intro or stall without explaining.
