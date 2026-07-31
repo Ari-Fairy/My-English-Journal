@@ -1146,34 +1146,27 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
   const videoRef = useRef<HTMLVideoElement | null>(null);
   const streamRef = useRef<MediaStream | null>(null);
 
-  // Helper to force scroll container to the absolute bottom
-  const scrollToBottomContainer = (containerId: string, endRef?: React.RefObject<HTMLDivElement | null>) => {
-    const doScroll = () => {
-      const el = document.getElementById(containerId);
-      if (el) {
-        el.scrollTop = el.scrollHeight;
-      }
-      endRef?.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-    };
-    doScroll();
-    const t1 = setTimeout(doScroll, 60);
-    const t2 = setTimeout(doScroll, 200);
-    return () => { clearTimeout(t1); clearTimeout(t2); };
+  // Helper to scroll container ONLY (never whole window) to bottom
+  const scrollToBottomContainer = (containerId: string) => {
+    const el = document.getElementById(containerId);
+    if (el) {
+      el.scrollTop = el.scrollHeight;
+    }
   };
 
-  // Auto-scroll chat to bottom on new messages, session switch, or tab switch
+  // Auto-scroll chat inside container on new messages, session switch, or tab switch
   useEffect(() => {
     if (activeTab === "chat") {
-      scrollToBottomContainer("ai_chat_scroll_container", chatEndRef);
+      scrollToBottomContainer("ai_chat_scroll_container");
     }
-  }, [chatMessages, chatLoading, activeChatSessionId, activeTab]);
+  }, [chatMessages.length, chatLoading, activeChatSessionId, activeTab]);
 
-  // Auto-scroll voice to bottom on new messages, session switch, or tab switch
+  // Auto-scroll voice inside container on new messages, session switch, or tab switch
   useEffect(() => {
     if (activeTab === "voice") {
-      scrollToBottomContainer("ai_voice_scroll_container", voiceEndRef);
+      scrollToBottomContainer("ai_voice_scroll_container");
     }
-  }, [voiceMessages, voiceLoading, activeVoiceSessionId, activeTab]);
+  }, [voiceMessages.length, voiceLoading, activeVoiceSessionId, activeTab]);
 
   // Studio AI speech synthesis with browser fallback
   const speakText = async (text: string, onEnd?: () => void) => {
@@ -1774,7 +1767,8 @@ CRITICAL RULES:
 
   const handleProcessSpokenAudio = async (blob: Blob) => {
     setVoiceLoading(true);
-    const recognizedText = accumulatedTranscriptRef.current.trim();
+    const liveText = voiceInputText.replace("Слушаю вас...", "").trim();
+    const recognizedText = Array.from(new Set([accumulatedTranscriptRef.current.trim(), liveText])).filter(Boolean).join(" ").trim();
     accumulatedTranscriptRef.current = "";
     setVoiceInputText("");
 

@@ -2391,8 +2391,11 @@ app.post("/api/ai-voice-chat", async (req, res) => {
 
     // Fallback: If audio transcription was empty or failed, use client-provided text if available
     if (!userText.trim() && req.body.text && typeof req.body.text === "string") {
-      userText = req.body.text.trim();
-      console.log("[Voice Chat] Using client-provided fallback transcript:", userText);
+      const candidate = req.body.text.replace("Слушаю вас...", "").replace(/^🎙️\s*/, "").trim();
+      if (candidate && candidate !== "[Расшифровка аудио...]" && candidate !== "[Голосовое сообщение]") {
+        userText = candidate;
+        console.log("[Voice Chat] Using client-provided fallback transcript:", userText);
+      }
     }
 
     if (!userText.trim()) {
