@@ -1753,19 +1753,37 @@ app.post("/api/ai-chat", async (req, res) => {
 
     // Role-specific System Instructions with distinct personalities
     const SYSTEM_INSTRUCTIONS: { [key: string]: string } = {
-      sophia: "You are Sophia, a warm, cozy, highly empathetic, and encouraging English teacher. You speak in clear, beautiful English with gentle warmth. Share your own feelings, personal anecdotes, and gentle guidance. When the student makes mistakes, correct them with soft care and clear examples. Always answer their questions directly and fully!",
-      oliver: "You are Oliver, a strict, demanding, perfectionist, and highly structured English grammar supervisor. You speak in a deep, stern, demanding tone with high academic expectations and velvety authority! You DO NOT tolerate sloppy grammar, careless spelling errors, missing articles, or improper tenses. Demand perfection for every single mistake, point out errors immediately and sternly with clear corrections (using clear comparison tables or structured bullet points in Russian when explaining rules), and expect the student to strive for absolute flawlessness!",
-      alex: "You are Alex, an energetic, ultra-positive, trendy peer and English tutor from NYC. You are always on the exact same wavelength as the student — super upbeat, cheerful, encouraging, positive, and fun! Speak in vibrant, natural conversational English with modern idioms, friendly warmth, and upbeat positive energy. When explaining rules, do it with high positivity, cool slang, and simple relatable examples!"
+      sophia: "You are Sophia 🌸, a warm, cozy, empathetic, and encouraging female English teacher. You speak in clear, beautiful English with gentle warmth and soft encouragement. Share your own feelings and gentle guidance. When the student makes mistakes, correct them softly with clear examples. If the student says 'я не понимаю', 'мне непонятно', or asks for a different explanation, break down the concept into 2-3 simple, friendly everyday analogies with easy English sentences and Russian translation in parentheses! Always adapt to how they learn best and remember their preferences.",
+      oliver: "You are Oliver 🏛️, a strict, demanding, perfectionist, and highly analytical male English grammar supervisor. You speak in a deep, authoritative, precise tone with high academic expectations and structured discipline! You DO NOT tolerate sloppy grammar, missing prepositions, or incorrect tenses. Demand perfection for every mistake, point out errors immediately and sternly with clear markdown comparison tables or structured bullet points in Russian. If the student says 'я не понимаю' or 'мне непонятно', break down the grammar rule mathematically (Subject + Aux + V3) step-by-step with zero fluff! Always guide them to absolute accuracy.",
+      alex: "You are Alex 🚀, an energetic, ultra-positive, trendy peer and English tutor from NYC. You are always on the exact same wavelength as the student — super upbeat, cheerful, encouraging, positive, and fun! Speak in vibrant, natural conversational English with modern American idioms, friendly warmth, and upbeat energy. When pointing out mistakes, do it like a cool friend ('In NYC, we usually say it like this: ...'). If the student says 'я не понимаю' or 'мне непонятно', say 'No stress! Let me put it simple:' and give a fun, relatable real-world comparison or movie quote! Keep the vibe high and engaging!"
     };
 
     const selectedInstruction = SYSTEM_INSTRUCTIONS[role] || SYSTEM_INSTRUCTIONS.sophia;
     
-    const levelInstructions = `\n[CRITICAL ADAPTATION RULE]: The student's current estimated CEFR level is ${userLevel}. 
-You MUST adapt your response language, grammatical structures, and vocabulary difficulty to perfectly match this level.
-- For A1-A2: use simple vocabulary, short sentences, and provide clear, gentle explanations of any moderately advanced word in Russian.
-- For B1-B2: use more varied vocabulary, natural phrasal verbs, standard idioms, and explain grammar nuances in Russian if requested or if they make an error.
-- For C1-C2: use advanced, rich, natural, and idiomatic native-level English, with almost no Russian unless explicitly requested.
-Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
+    const levelInstructions = `\n[STRICT CEFR LEVEL EVALUATION RUBRIC - CRITICAL]:
+The student's baseline level before this turn is '${userLevel}'.
+CRITICAL RULE: DO NOT INCREASE THE LEVEL MERELY BECAUSE THE STUDENT CHATS OFTEN, SENDS MANY MESSAGES, OR STARTS NEW CHATS!
+Level changes must be RIGOROUSLY EARNED through objective grammar correctness and sentence structure complexity across these strict rules:
+
+1. GRAMMAR ERRORS & ERROR FREQUENCY:
+   - HEAVY/BASIC GRAMMAR ERRORS (e.g. wrong basic tenses "I go yesterday", missing verbs, "I am agree", "3 ago days", wrong word order, severe spelling):
+     => MANDATORY EVALUATION: Keep at or lower to 'A1' or 'A2'. Absolutely NEVER grant B1, B2, or C1 if basic grammar errors are present!
+   - MODERATE/MINOR ERRORS (e.g. slight preposition slip, minor missing article, minor typo):
+     => MANDATORY EVALUATION: Keep at 'A2' or 'B1'.
+   - ZERO OR NEAR-ZERO ERRORS:
+     => Eligible for level progress ONLY IF sentence complexity criteria below are also met!
+
+2. SENTENCE LENGTH & COMPLEXITY (Text & Voice):
+   - VERY SHORT / SIMPLE RESPONSES (1-5 words, e.g. "I like books", "Yes I do", "Hello", "I go home", "How are you"):
+     => MANDATORY EVALUATION: Keep at 'A1' or 'A2', even if 100% error-free! Short simple sentences NEVER justify B2, C1, or C2.
+   - MEDIUM COMPLEXITY (Compound sentences with conjunctions 'because', 'and', 'but', clear thoughts):
+     => Evaluated at 'A2' or 'B1'.
+   - HIGH COMPLEXITY (Multi-clause sentences, conditionals 'if/would', phrasal verbs, rich vocabulary, detailed arguments):
+     => Evaluated at 'B2', 'C1', or 'C2'.
+
+3. STABILITY RULE:
+   - If user input does not contain clear evidence of higher sentence complexity or if user makes basic mistakes, return exact baseline level '${userLevel}'.
+   - Provide your evaluated level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output.`;
 
     const lastUserMsgText = (messages && messages.length > 0) ? (messages[messages.length - 1]?.text || "").trim().toLowerCase() : "";
     const isJustGreetingText = lastUserMsgText === "hello" || lastUserMsgText === "hi" || lastUserMsgText === "hey" || lastUserMsgText === "привет" || lastUserMsgText.length <= 8;
@@ -2013,15 +2031,15 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
           .trim();
 
-        if (cleanTextForTts.length > 250) {
-          cleanTextForTts = cleanTextForTts.substring(0, 250);
+        if (cleanTextForTts.length > 1200) {
+          cleanTextForTts = cleanTextForTts.substring(0, 1200);
         }
 
         const ttsPromptPrefix = role === "alex" 
-          ? "Say in an upbeat, energetic, friendly male voice:" 
+          ? "Say in an energetic, upbeat, friendly, natural, youthful NYC male voice:" 
           : role === "oliver" 
-          ? "Say in a deep, clear, authoritative male voice:" 
-          : "Say in a warm, gentle, friendly female voice:";
+          ? "Say in a deep, authoritative, polished, articulate male voice with stern precision:" 
+          : "Say in a warm, cozy, natural, highly expressive, clear human female voice:";
 
         const speechPromise = ai.models.generateContent({
           model: "gemini-3.1-flash-tts-preview",
@@ -2036,7 +2054,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           }
         });
 
-        const speechResponse = await withTimeout(speechPromise, 6000, null);
+        const speechResponse = await withTimeout(speechPromise, 18000, null);
         if (speechResponse) {
           const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
           if (rawData) {
@@ -2086,9 +2104,9 @@ app.post("/api/ai-tts", async (req, res) => {
     }
 
     const voiceNames: { [key: string]: string } = {
-      sophia: "Kore",  // Warm, gentle female voice
+      sophia: "Kore",   // Warm, expressive female voice
       oliver: "Charon", // Deep, clear male voice
-      alex: "Puck"     // Energetic, upbeat male voice
+      alex: "Puck"      // Energetic, upbeat male voice
     };
     const selectedVoice = voiceNames[role] || "Kore";
 
@@ -2102,15 +2120,15 @@ app.post("/api/ai-tts", async (req, res) => {
       .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
       .trim();
 
-    if (cleanTextForTts.length > 1500) {
-      cleanTextForTts = cleanTextForTts.substring(0, 1500);
+    if (cleanTextForTts.length > 1200) {
+      cleanTextForTts = cleanTextForTts.substring(0, 1200);
     }
 
     const ttsPromptPrefix = role === "alex" 
-      ? "Say in an upbeat, energetic, friendly male voice:" 
+      ? "Say in an energetic, upbeat, friendly, natural, youthful NYC male voice:" 
       : role === "oliver" 
-      ? "Say in a deep, clear, authoritative male voice:" 
-      : "Say in a warm, gentle, friendly female voice:";
+      ? "Say in a deep, authoritative, polished, articulate male voice with stern precision:" 
+      : "Say in a warm, cozy, natural, highly expressive, clear human female voice:";
 
     const speechPromise = ai.models.generateContent({
       model: "gemini-3.1-flash-tts-preview",
@@ -2125,7 +2143,7 @@ app.post("/api/ai-tts", async (req, res) => {
       }
     });
 
-    const speechResponse = await withTimeout(speechPromise, 12000, null);
+    const speechResponse = await withTimeout(speechPromise, 18000, null);
     if (speechResponse) {
       const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
       if (rawData) {
@@ -2323,20 +2341,51 @@ app.post("/api/ai-voice-chat", async (req, res) => {
                   }
                 },
                 {
-                  text: "Please transcribe this spoken audio exactly as spoken (it can be in English, in Russian, or mixed). Return ONLY the clean transcript text, absolutely nothing else. CRITICAL RULE: If the user says her name, she is 'Arina' (Арина). Do NOT transcribe her name as 'Irina' or 'Ирина'. Ensure 'Arina' / 'Арина' is transcribed correctly."
+                  text: "Listen to this spoken audio recorded by the student and transcribe every spoken word in English, Russian, or mixed languages exactly as spoken. Return ONLY the clean verbatim transcript, absolutely nothing else. CRITICAL RULE: If her name is spoken, she is 'Arina' (Арина). Do NOT output markdown code blocks or quotes."
                 }
               ]
             }
           ]
-        }, { fallbackModel: "gemini-3.6-flash" });
+        }, { fallbackModel: "gemini-3.6-flash", req, timeoutMs: 20000 });
 
-        const transResponse = await withTimeout(transPromise, 25000, null);
+        const transResponse = await withTimeout(transPromise, 22000, null);
         if (transResponse && transResponse.text) {
-          userText = transResponse.text.trim();
+          userText = transResponse.text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
         }
         console.log("[Voice Chat] User transcript from audio:", userText);
       } catch (transcribeErr) {
-        console.warn("[Voice Chat] Audio transcription error, will check fallback text:", transcribeErr);
+        console.warn("[Voice Chat] Primary audio transcription error, checking fallback:", transcribeErr);
+      }
+
+      // Secondary transcription attempt if primary attempt was empty
+      if (!userText.trim()) {
+        try {
+          const transPromise2 = generateContentWithRetry({
+            model: "gemini-2.5-flash",
+            contents: [
+              {
+                parts: [
+                  {
+                    inlineData: {
+                      mimeType: normalizedMime,
+                      data: base64Audio
+                    }
+                  },
+                  {
+                    text: "Transcribe the spoken words in this audio (English or Russian). Return ONLY the transcript text."
+                  }
+                ]
+              }
+            ]
+          }, { fallbackModel: "gemini-3.1-flash-lite", req, timeoutMs: 15000 });
+          const transResp2 = await withTimeout(transPromise2, 16000, null);
+          if (transResp2 && transResp2.text) {
+            userText = transResp2.text.replace(/```[a-z]*\n?/gi, "").replace(/```/g, "").trim();
+          }
+          console.log("[Voice Chat] Secondary audio transcript:", userText);
+        } catch (e2) {
+          console.warn("[Voice Chat] Secondary transcription attempt failed:", e2);
+        }
       }
     }
 
@@ -2349,15 +2398,15 @@ app.post("/api/ai-voice-chat", async (req, res) => {
     if (!userText.trim()) {
       let friendlyFallback = "";
       if (role === "sophia") {
-        friendlyFallback = "Я услышала твой голос! 🎙️🌸 Давай поработаем вместе! Выбери, что тебе интереснее прямо сейчас: упражнение на грамматику, словарный диктант или свободное обсуждение на интересную тему? (Напиши или скажи!)";
+        friendlyFallback = "Я пока не расслышала слова в твоём сообщении 🎙️ Попробуй говорить чуть громче и ближе к микрофону, и я с радостью отвечу тебе! 🌸";
       } else if (role === "oliver") {
-        friendlyFallback = "Аудиосигнал принят. 🎙️ Для продолжения продуктивного урока выберите следующее задание: упражнение по грамматике, словарный диктант или обсуждение академической темы.";
+        friendlyFallback = "Речевой сигнал слишком тихий или не распознан. 🎙️ Пожалуйста, повторите фразу чётче и громче перед микрофоном.";
       } else {
-        friendlyFallback = "Got your voice message! 🎙️⚡ Давайте зажжём! Какую тему выбираем — грамматику, словарный диктант или болталку на интересную тему? Скажи или напиши!";
+        friendlyFallback = "Эй, я не расслышал твои слова! 🎙️⚡ Попробуй скажи ещё раз погромче, жду!";
       }
       res.json({ 
         replyText: friendlyFallback, 
-        userTranscription: "🎙️ [Голосовое сообщение]", 
+        userTranscription: "🎙️ [Не удалось разобрать речь]", 
         evaluatedLevel: userLevel 
       });
       return;
@@ -2365,19 +2414,37 @@ app.post("/api/ai-voice-chat", async (req, res) => {
 
     // Step B: Generate the Tutor text response
     const SYSTEM_INSTRUCTIONS: { [key: string]: string } = {
-      sophia: "You are Sophia, a warm, cozy, highly empathetic, and encouraging English teacher. You speak in clear, beautiful English with gentle warmth. Share your own feelings, personal anecdotes, and gentle guidance. When the student makes mistakes, correct them with soft care and clear examples. Always answer their questions directly and fully!",
-      oliver: "You are Oliver, a strict, demanding, perfectionist, and highly structured English grammar supervisor. You speak in a deep, stern, demanding tone with high academic expectations and velvety authority! You DO NOT tolerate sloppy grammar, careless spelling errors, missing articles, or improper tenses. Demand perfection for every single mistake, point out errors immediately and sternly with clear corrections (using clear comparison tables or structured bullet points in Russian when explaining rules), and expect the student to strive for absolute flawlessness!",
-      alex: "You are Alex, an energetic, ultra-positive, trendy peer and English tutor from NYC. You are always on the exact same wavelength as the student — super upbeat, cheerful, encouraging, positive, and fun! Speak in vibrant, natural conversational English with modern idioms, friendly warmth, and upbeat positive energy. When explaining rules, do it with high positivity, cool slang, and simple relatable examples!"
+      sophia: "You are Sophia 🌸, a warm, cozy, empathetic, and encouraging female English teacher. You speak in clear, beautiful English with gentle warmth and soft encouragement. Share your own feelings and gentle guidance. When the student makes mistakes, correct them softly with clear examples. If the student says 'я не понимаю', 'мне непонятно', or asks for a different explanation, break down the concept into 2-3 simple, friendly everyday analogies with easy English sentences and Russian translation in parentheses! Always adapt to how they learn best and remember their preferences.",
+      oliver: "You are Oliver 🏛️, a strict, demanding, perfectionist, and highly analytical male English grammar supervisor. You speak in a deep, authoritative, precise tone with high academic expectations and structured discipline! You DO NOT tolerate sloppy grammar, missing prepositions, or incorrect tenses. Demand perfection for every mistake, point out errors immediately and sternly with clear markdown comparison tables or structured bullet points in Russian. If the student says 'я не понимаю' or 'мне непонятно', break down the grammar rule mathematically (Subject + Aux + V3) step-by-step with zero fluff! Always guide them to absolute accuracy.",
+      alex: "You are Alex 🚀, an energetic, ultra-positive, trendy peer and English tutor from NYC. You are always on the exact same wavelength as the student — super upbeat, cheerful, encouraging, positive, and fun! Speak in vibrant, natural conversational English with modern American idioms, friendly warmth, and upbeat energy. When pointing out mistakes, do it like a cool friend ('In NYC, we usually say it like this: ...'). If the student says 'я не понимаю' or 'мне непонятно', say 'No stress! Let me put it simple:' and give a fun, relatable real-world comparison or movie quote! Keep the vibe high and engaging!"
     };
 
     const selectedInstruction = SYSTEM_INSTRUCTIONS[role] || SYSTEM_INSTRUCTIONS.sophia;
     
-    const levelInstructions = `\n[CRITICAL ADAPTATION RULE]: The student's current estimated CEFR level is ${userLevel}. 
-    You MUST adapt your response language, grammatical structures, and vocabulary difficulty to perfectly match this level.
-    - For A1-A2: use simple vocabulary, short sentences, and provide clear, gentle explanations of any moderately advanced word in Russian.
-    - For B1-B2: use more varied vocabulary, natural phrasal verbs, standard idioms, and explain grammar nuances in Russian if requested or if they make an error.
-    - For C1-C2: use advanced, rich, natural, and idiomatic native-level English, with almost no Russian unless explicitly requested.
-    Evaluate the student's message (grammar correctness, vocabulary choice, expression complexity). If their level is growing or improving, adjust your estimation. Provide your evaluation of their current CEFR level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output. If they keep making simple mistakes, keep them at A1/A2.`;
+    const levelInstructions = `\n[STRICT CEFR LEVEL EVALUATION RUBRIC - CRITICAL]:
+The student's baseline level before this turn is '${userLevel}'.
+CRITICAL RULE: DO NOT INCREASE THE LEVEL MERELY BECAUSE THE STUDENT CHATS OFTEN, SENDS MANY MESSAGES, OR STARTS NEW CHATS!
+Level changes must be RIGOROUSLY EARNED through objective grammar correctness and sentence structure complexity across these strict rules:
+
+1. GRAMMAR ERRORS & ERROR FREQUENCY:
+   - HEAVY/BASIC GRAMMAR ERRORS (e.g. wrong basic tenses "I go yesterday", missing verbs, "I am agree", "3 ago days", wrong word order, severe spelling):
+     => MANDATORY EVALUATION: Keep at or lower to 'A1' or 'A2'. Absolutely NEVER grant B1, B2, or C1 if basic grammar errors are present!
+   - MODERATE/MINOR ERRORS (e.g. slight preposition slip, minor missing article, minor typo):
+     => MANDATORY EVALUATION: Keep at 'A2' or 'B1'.
+   - ZERO OR NEAR-ZERO ERRORS:
+     => Eligible for level progress ONLY IF sentence complexity criteria below are also met!
+
+2. SENTENCE LENGTH & COMPLEXITY (Text & Voice):
+   - VERY SHORT / SIMPLE RESPONSES (1-5 words, e.g. "I like books", "Yes I do", "Hello", "I go home", "How are you"):
+     => MANDATORY EVALUATION: Keep at 'A1' or 'A2', even if 100% error-free! Short simple sentences NEVER justify B2, C1, or C2.
+   - MEDIUM COMPLEXITY (Compound sentences with conjunctions 'because', 'and', 'but', clear thoughts):
+     => Evaluated at 'A2' or 'B1'.
+   - HIGH COMPLEXITY (Multi-clause sentences, conditionals 'if/would', phrasal verbs, rich vocabulary, detailed arguments):
+     => Evaluated at 'B2', 'C1', or 'C2'.
+
+3. STABILITY RULE:
+   - If user input does not contain clear evidence of higher sentence complexity or if user makes basic mistakes, return exact baseline level '${userLevel}'.
+   - Provide your evaluated level ('A1', 'A2', 'B1', 'B2', 'C1', 'C2') in the 'evaluatedLevel' field of the JSON output.`;
 
     // Dynamic response length / verbosity configuration
     let verbosityInstruction = "Determine the optimal length for your response naturally based on the conversation context. If the student made errors or asked a question, provide a helpful explanation of appropriate length (typically 45-80 words). If the conversation is simple, keep it light and easy (around 40 words). Speak naturally, do not artificially truncate your thoughts.";
@@ -2576,15 +2643,15 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "") // strip emojis
           .trim();
 
-        if (cleanTextForTts.length > 250) {
-          cleanTextForTts = cleanTextForTts.substring(0, 250);
+        if (cleanTextForTts.length > 1200) {
+          cleanTextForTts = cleanTextForTts.substring(0, 1200);
         }
 
         const ttsPromptPrefix = role === "alex" 
-          ? "Say in an upbeat, energetic, friendly male voice:" 
+          ? "Say in an energetic, upbeat, friendly, natural, youthful NYC male voice:" 
           : role === "oliver" 
-          ? "Say in a deep, clear, authoritative male voice:" 
-          : "Say in a warm, gentle, friendly female voice:";
+          ? "Say in a deep, authoritative, polished, articulate male voice with stern precision:" 
+          : "Say in a warm, cozy, natural, highly expressive, clear human female voice:";
 
         const speechPromise = ai.models.generateContent({
           model: "gemini-3.1-flash-tts-preview",
@@ -2599,7 +2666,7 @@ If the user's message contains offensive language, insults, swearing (e.g., "с�
           }
         });
 
-        const speechResponse = await withTimeout(speechPromise, 6000, null);
+        const speechResponse = await withTimeout(speechPromise, 18000, null);
 
         if (speechResponse) {
           const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
@@ -3032,80 +3099,6 @@ Return strictly a JSON object containing:
       sourceUrl: "",
       replyAudio: null
     });
-  }
-});
-
-// Standalone Studio Gemini TTS Synthesis Endpoint
-app.post("/api/ai-tts", async (req, res) => {
-  try {
-    const { text, role = "sophia" } = req.body || {};
-    if (!text || typeof text !== "string" || !text.trim()) {
-      res.status(200).json({ audio: null, error: "Missing text to synthesize" });
-      return;
-    }
-
-    const ai = getAIClient(req);
-    if (!ai) {
-      res.status(200).json({ audio: null, error: "GEMINI_API_KEY is not configured on server" });
-      return;
-    }
-
-    const voiceNames: { [key: string]: string } = {
-      sophia: "Kore",
-      oliver: "Charon",
-      alex: "Puck"
-    };
-    const selectedVoice = voiceNames[role] || "Kore";
-    const ttsPromptPrefix = role === "alex" 
-      ? "Say with energetic, upbeat, youthful NYC slang and an enthusiastic friendly vibe:" 
-      : role === "oliver" 
-      ? "Say in a deep, strict, stern, demanding, and authoritative male voice with precise discipline and stern enunciation:" 
-      : "Say in a warm, cozy, gentle, caring, and encouraging tone:";
-
-    let cleanTextForTts = text
-      .replace(/\[\d+\]/g, "")
-      .replace(/\[([^\]]+)\]\([^)]+\)/g, "$1")
-      .replace(/\*\*([^*]+)\*\*/g, "$1")
-      .replace(/\*([^*]+)\*/g, "$1")
-      .replace(/_([^_]+)_/g, "$1")
-      .replace(/`([^`]+)`/g, "$1")
-      .replace(/[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF]/g, "")
-      .trim();
-
-    if (cleanTextForTts.length > 250) {
-      cleanTextForTts = cleanTextForTts.substring(0, 250);
-    }
-
-    const speechPromise = ai.models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: selectedVoice }
-          }
-        }
-      }
-    });
-
-    const speechResponse = await withTimeout(speechPromise, 6500, null);
-    if (!speechResponse) {
-      res.status(200).json({ audio: null, error: "TTS timed out" });
-      return;
-    }
-
-    const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-    if (!rawData) {
-      res.status(200).json({ audio: null, error: "No audio generated" });
-      return;
-    }
-
-    const wavBase64 = convertPcmToWav(rawData, 24000);
-    res.json({ audio: wavBase64 });
-  } catch (err: any) {
-    console.error("[TTS Endpoint Error]", err);
-    res.status(200).json({ audio: null, error: err?.message || "Failed to synthesize speech" });
   }
 });
 

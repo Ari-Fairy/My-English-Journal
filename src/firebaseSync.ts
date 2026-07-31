@@ -7,7 +7,8 @@ import {
   getDocs, 
   query, 
   where, 
-  writeBatch 
+  writeBatch,
+  onSnapshot 
 } from "firebase/firestore";
 import { db, auth } from "./firebase";
 import { Word, IrregularVerb, UserProgress } from "./types";
@@ -324,6 +325,41 @@ export async function fetchUserAiSessions(userId: string): Promise<{ chatSession
     handleFirestoreError(error, OperationType.GET, `users/${userId}/ai_sessions`);
     return null;
   }
+}
+
+// Subscribe to real-time user AI chat & voice sessions from Firestore
+export function subscribeUserAiSessions(
+  userId: string,
+  onUpdate: (data: { chatSessions: any[]; voiceSessions: any[] }) => void
+): () => void {
+  const chatDocRef = doc(db, `users/${userId}/ai_sessions`, "chat_sessions");
+  const voiceDocRef = doc(db, `users/${userId}/ai_sessions`, "voice_sessions");
+
+  let currentChatSessions: any[] = [];
+  let currentVoiceSessions: any[] = [];
+
+  const unsubChat = onSnapshot(chatDocRef, (snap) => {
+    if (snap.exists() && Array.isArray(snap.data()?.sessions)) {
+      currentChatSessions = snap.data().sessions;
+    }
+    onUpdate({ chatSessions: currentChatSessions, voiceSessions: currentVoiceSessions });
+  }, (err) => {
+    console.warn("Error subscribing to chat_sessions:", err);
+  });
+
+  const unsubVoice = onSnapshot(voiceDocRef, (snap) => {
+    if (snap.exists() && Array.isArray(snap.data()?.sessions)) {
+      currentVoiceSessions = snap.data().sessions;
+    }
+    onUpdate({ chatSessions: currentChatSessions, voiceSessions: currentVoiceSessions });
+  }, (err) => {
+    console.warn("Error subscribing to voice_sessions:", err);
+  });
+
+  return () => {
+    unsubChat();
+    unsubVoice();
+  };
 }
 
 // Batch reset user study data atomically using writeBatch to avoid connection limits and timeouts

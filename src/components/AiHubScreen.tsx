@@ -26,7 +26,7 @@ import {
 import { Word, UserProgress } from "../types";
 import { getApiUrl, getApiHeaders } from "../utils";
 import { User } from "firebase/auth";
-import { fetchUserAiSessions, saveUserAiSessions } from "../firebaseSync";
+import { fetchUserAiSessions, saveUserAiSessions, subscribeUserAiSessions } from "../firebaseSync";
 import { getOfflineChatTutorReply, getNextOfflineTopic } from "../data/offlineTutor";
 
 function formatMessageTimestamp(isoString?: string) {
@@ -510,6 +510,8 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     return savedId || "voice-default-sophia";
   });
 
+  const isCloudLoadedRef = useRef<boolean>(false);
+
   useEffect(() => {
     localStorage.setItem("ai_hub_chat_sessions_v2", JSON.stringify(chatSessions));
   }, [chatSessions]);
@@ -518,84 +520,47 @@ export default function AiHubScreen({ words, stats, onSaveWord, onSaveProgress, 
     localStorage.setItem("ai_hub_voice_sessions_v3", JSON.stringify(voiceSessions));
   }, [voiceSessions]);
 
-  // Firestore session account synchronization for logged-in users
-  useEffect(() => {
-    if (!user || !user.uid) return;
-    let isMounted = true;
-    fetchUserAiSessions(user.uid).then(data => {
-      if (isMounted && data) {
-        if (Array.isArray(data.chatSessions) && data.chatSessions.length > 0) {
-          setChatSessions(prevLocal => {
-            const mergedMap = new Map<string, ChatSession>();
-            prevLocal.forEach(s => mergedMap.set(s.id, s));
-            data.chatSessions.forEach((remoteSession: ChatSession) => {
-              const local = mergedMap.get(remoteSession.id);
-              if (!local) {
-                mergedMap.set(remoteSession.id, remoteSession);
-              } else {
-                // Merge message lists to preserve both local and remote messages
-                const msgMap = new Map<string, any>();
-                (local.messages || []).forEach(m => {
-                  const key = `${m.role}:${m.text}`;
-                  msgMap.set(key, m);
-                });
-                (remoteSession.messages || []).forEach(m => {
-                  const key = `${m.role}:${m.text}`;
-                  if (!msgMap.has(key)) {
-                    msgMap.set(key, m);
-                  }
-                });
-                mergedMap.set(remoteSession.id, {
-                  ...remoteSession,
-                  ...local,
-                  messages: Array.from(msgMap.values())
-                });
-              }
-            });
-            return Array.from(mergedMap.values());
-          });
-        }
-        if (Array.isArray(data.voiceSessions) && data.voiceSessions.length > 0) {
-          setVoiceSessions(prevLocal => {
-            const mergedMap = new Map<string, VoiceSession>();
-            prevLocal.forEach(s => mergedMap.set(s.id, s));
-            data.voiceSessions.forEach((remoteSession: VoiceSession) => {
-              const local = mergedMap.get(remoteSession.id);
-              if (!local) {
-                mergedMap.set(remoteSession.id, remoteSession);
-              } else {
-                const msgMap = new Map<string, any>();
-                (local.voiceMessages || []).forEach(m => {
-                  const key = `${m.role}:${m.text}`;
-                  msgMap.set(key, m);
-                });
-                (remoteSession.voiceMessages || []).forEach(m => {
-                  const key = `${m.role}:${m.text}`;
-                  if (!msgMap.has(key)) {
-                    msgMap.set(key, m);
-                  }
-                });
-                mergedMap.set(remoteSession.id, {
-                  ...remoteSession,
-                  ...local,
-                  voiceMessages: Array.from(msgMap.values())
-                });
-              }
-            });
-            return Array.from(mergedMap.values());
-          });
-        }
+  function deduplicateSessions<T extends { id: string }>(sessions: T[]): T[] {
+    if (!Array.isArray(sessions)) return [];
+    const seenIds = new Set<string>();
+    const result: T[] = [];
+    for (const s of sessions) {
+      if (s && s.id && !seenIds.has(s.id)) {
+        seenIds.add(s.id);
+        result.push(s);
       }
-    }).catch(err => {
-      console.warn("Could not fetch user AI sessions from Firestore:", err);
+    }
+    return result;
+  }
+
+  // Real-time Firestore session account synchronization across all browsers and devices
+  useEffect(() => {
+    if (!user || !user.uid) {
+      isCloudLoadedRef.current = false;
+      return;
+    }
+
+    const unsubscribe = subscribeUserAiSessions(user.uid, (remoteData) => {
+      isCloudLoadedRef.current = true;
+      if (Array.isArray(remoteData.chatSessions) && remoteData.chatSessions.length > 0) {
+        setChatSessions(deduplicateSessions(remoteData.chatSessions));
+      }
+      if (Array.isArray(remoteData.voiceSessions) && remoteData.voiceSessions.length > 0) {
+        setVoiceSessions(deduplicateSessions(remoteData.voiceSessions));
+      }
     });
-    return () => { isMounted = false; };
+
+    return () => {
+      unsubscribe();
+    };
   }, [user?.uid]);
 
   useEffect(() => {
-    if (!user || !user.uid) return;
+    if (!user || !user.uid || !isCloudLoadedRef.current) return;
     const saveTimer = setTimeout(() => {
-      saveUserAiSessions(user.uid, chatSessions, voiceSessions).catch(err => {
+      const cleanChat = deduplicateSessions(chatSessions);
+      const cleanVoice = deduplicateSessions(voiceSessions);
+      saveUserAiSessions(user.uid, cleanChat, cleanVoice).catch(err => {
         console.warn("Could not save user AI sessions to Firestore:", err);
       });
     }, 1200);
@@ -1914,13 +1879,13 @@ CRITICAL RULES:
 
       if (voiceVoiceEnabledRef.current) {
         if (data.replyAudio) {
+          stopAllSpeech();
+          speechCancelledRef.current = false;
           setIsSpeechPlaying(true);
           const onPlaybackEnd = () => {
             setIsSpeechPlaying(false);
             setShowDictionaryButton(true);
           };
-
-          stopAllSpeech();
 
           if (audioPlayerRef.current) {
             audioPlayerRef.current.src = data.replyAudio;
@@ -3605,29 +3570,6 @@ CRITICAL RULES:
 
             {/* Auto Voice toggle & Reset buttons */}
             <div className="md:ml-auto flex gap-1.5 items-center">
-              {isSpeechPlaying && (
-                <button
-                  className="animate-pulse"
-                  style={{
-                    display: "flex",
-                    alignItems: "center",
-                    gap: 4,
-                    padding: "5px 12px",
-                    borderRadius: "999px",
-                    fontSize: 11,
-                    fontWeight: 700,
-                    background: "rgba(214,128,96,0.25)",
-                    color: "var(--rose)",
-                    border: "1px solid var(--rose)",
-                    cursor: "pointer",
-                    boxShadow: "0 0 10px rgba(214,128,96,0.3)"
-                  }}
-                  onClick={stopAllSpeech}
-                  title="Нажмите, чтобы моментально остановить озвучку"
-                >
-                  ⏹️ Стоп звук
-                </button>
-              )}
               <button
                 style={{
                   display: "flex",
@@ -3643,12 +3585,10 @@ CRITICAL RULES:
                   cursor: "pointer"
                 }}
                 onClick={() => {
+                  stopAllSpeech();
                   const newState = !chatVoiceEnabled;
                   chatVoiceEnabledRef.current = newState;
                   setChatVoiceEnabled(newState);
-                  if (!newState) {
-                    stopAllSpeech();
-                  }
                 }}
               >
                 {chatVoiceEnabled ? "🔊 Спикер: ВКЛ" : "🔇 Спикер: ВЫКЛ"}
@@ -4423,24 +4363,6 @@ CRITICAL RULES:
             <div style={{ fontSize: 11, color: "var(--muted)", borderBottom: "1px solid var(--border)", paddingBottom: 6, marginBottom: 4, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
               <span>🗣️ Журнал устного диалога</span>
               <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
-                {isSpeechPlaying && (
-                  <button
-                    className="animate-pulse"
-                    style={{
-                      background: "rgba(214,128,96,0.25)",
-                      color: "var(--rose)",
-                      border: "1px solid var(--rose)",
-                      borderRadius: "4px",
-                      padding: "2px 8px",
-                      fontSize: 10,
-                      cursor: "pointer",
-                      fontWeight: 700
-                    }}
-                    onClick={stopAllSpeech}
-                  >
-                    ⏹️ Стоп
-                  </button>
-                )}
                 <button
                   style={{
                     background: voiceVoiceEnabled ? "rgba(143,160,128,0.2)" : "rgba(255,255,255,0.05)",
@@ -4453,12 +4375,10 @@ CRITICAL RULES:
                     fontWeight: 600
                   }}
                   onClick={() => {
+                    stopAllSpeech();
                     const nextVal = !voiceVoiceEnabled;
                     voiceVoiceEnabledRef.current = nextVal;
                     setVoiceVoiceEnabled(nextVal);
-                    if (!nextVal) {
-                      stopAllSpeech();
-                    }
                   }}
                 >
                   {voiceVoiceEnabled ? "🔊 Авто: ВКЛ" : "🔇 Авто: ВЫКЛ"}
