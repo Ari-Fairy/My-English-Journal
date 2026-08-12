@@ -1,11 +1,15 @@
 import { useState, useMemo, useEffect, useRef } from "react";
 import { Word, UserProgress } from "../types";
-import { speak, getLocalDateString, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
+import { speak, primeSpeechSynthesis, getLocalDateString, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
+import { getWordsForCategory } from "../categories";
+import { POS_DEFAULT, TOPICS_DEFAULT } from "../data";
 
 interface StudyScreenProps {
   words: Word[];
   stats: UserProgress;
   sessionType: "learn" | "review" | "mandatory";
+  categoryId?: string | null;
+  isGlobalReview?: boolean;
   onSaveWord: (word: Word) => void;
   onSaveWords?: (words: Word[]) => void;
   onSaveProgress: (stats: UserProgress) => void;
@@ -16,11 +20,15 @@ export default function StudyScreen({
   words, 
   stats, 
   sessionType, 
+  categoryId,
+  isGlobalReview,
   onSaveWord, 
   onSaveWords,
   onSaveProgress, 
   onExit 
 }: StudyScreenProps) {
+  const [currentCatId, setCurrentCatId] = useState<string | null>(categoryId || stats.activeCategoryId || "cat_base");
+
   const getSessionLimit = () => {
     if (sessionType === "review") {
       return stats.sessionReviewLimit || stats.dailyWordsLimit || 15;
@@ -63,6 +71,10 @@ export default function StudyScreen({
   const sessionSavedRef = useRef(false);
 
   useEffect(() => {
+    primeSpeechSynthesis();
+  }, []);
+
+  useEffect(() => {
     if (stage === "done" && !sessionSavedRef.current) {
       sessionSavedRef.current = true;
       const now = Date.now();
@@ -71,43 +83,26 @@ export default function StudyScreen({
         secondLastReviewSessionTime: stats.lastReviewSessionTime || 0,
         lastReviewSessionTime: now
       };
-
-      const reviewedIds = new Set(queue.map(w => w.id));
-
-      // Batch all sub-8-hour review words to exactly 4 hours from now to completely prevent "one by one" drip feeding.
-      const eightHoursFromNow = now + 8 * 3600 * 1000;
-      const fourHoursFromNow = now + 4 * 3600 * 1000;
-      const wordsToUpdate = words.filter(w => {
-        if (!w.learned || (w.streak || 0) >= 10) return false;
-        const dueMs = getWordNextReviewTimeMs(w);
-        return dueMs < eightHoursFromNow;
-      });
-
-      if (wordsToUpdate.length > 0 && onSaveWords) {
-        const rescheduled = wordsToUpdate.map(w => {
-          const wasReviewed = reviewedIds.has(w.id);
-          // If a word was due but NOT reviewed in this session (e.g. limit or skipped), postpone it to tomorrow (24 hours)
-          // Otherwise (for recently reviewed words, and words due soon), batch them to exactly 4 hours from now!
-          let newReviewTime = fourHoursFromNow;
-          if (!wasReviewed && getWordNextReviewTimeMs(w) <= now) {
-            newReviewTime = now + 24 * 3600 * 1000;
-          }
-
-          return {
-            ...w,
-            nextReviewDate: new Date(newReviewTime).toISOString(),
-            consecutiveErrors: 0,
-            isProblematic: false
-          };
-        });
-        onSaveWords(rescheduled);
-      }
-
       onSaveProgress(updatedStats);
     }
-  }, [stage, sessionType, stats, onSaveProgress, queue, words, onSaveWords]);
+  }, [stage, stats, onSaveProgress]);
 
   const cur = queue[idx];
+
+  const getPosLabel = (posKey?: string) => {
+    if (!posKey) return "";
+    const custom = stats.customPos?.[posKey];
+    if (custom) return custom;
+    return POS_DEFAULT[posKey] || posKey;
+  };
+
+  const getTopicLabel = (topicKey?: string) => {
+    if (!topicKey) return "";
+    const custom = stats.customTopics?.[topicKey];
+    if (custom) return custom;
+    return TOPICS_DEFAULT[topicKey] || topicKey;
+  };
+
   const pDir = cur ? (dir === "mixed" ? (cur.id.charCodeAt(0) + idx) % 2 === 0 ? "en-ru" : "ru-en" : dir) : "en-ru";
   const prompt = cur ? (pDir === "en-ru" ? cur.en : cur.ru) : "";
   const expected = cur ? (pDir === "en-ru" ? cur.ru : cur.en) : "";
@@ -324,15 +319,22 @@ export default function StudyScreen({
     return Math.max(0, dueTime - Date.now());
   };
 
-  const getPool = () => {
-    if (sessionType === "learn") return words.filter(w => !w.learned);
+  const getPool = (catIdParam?: string | null) => {
+    const categories = stats.categories || [];
+    const activeCatId = catIdParam !== undefined ? catIdParam : currentCatId;
+
+    const baseWords = (!isGlobalReview && activeCatId && activeCatId !== "all")
+      ? getWordsForCategory(words, activeCatId, categories)
+      : words;
+
+    if (sessionType === "learn") return baseWords.filter(w => !w.learned);
     if (sessionType === "mandatory") {
-      return words.filter(w => w.learned && w.isMandatoryEndOfDay);
+      return baseWords.filter(w => w.learned && w.isMandatoryEndOfDay);
     }
     if (sessionType === "review") {
-      return getEffectiveDueWords(words, stats).dueWords;
+      return getEffectiveDueWords(baseWords, stats).dueWords;
     }
-    return words.filter(w => w.learned);
+    return baseWords.filter(w => w.learned);
   };
 
   // Sound signals
@@ -389,18 +391,12 @@ export default function StudyScreen({
       const isProblematic = currentConsecErrors >= 2;
       const isMandatoryEndOfDay = currentConsecErrors >= 3;
 
-      let intervalMin = 15; // default fallback
+      let intervalMin = 60; // Minimum 1 hour on error
       const prevInterval = cur.intervalMinutes || 240;
 
-      if (prevInterval >= 1440) {
-        // Daily intervals fall back 1 step
-        if (prevInterval === 10080) intervalMin = 4320;      // 7 days -> 3 days
-        else if (prevInterval === 4320) intervalMin = 1440;  // 3 days -> 24 hours
-        else if (prevInterval === 1440) intervalMin = 240;   // 24 hours -> 4 hours
-      } else {
-        // Sub-daily intervals (< 1440) fall back to 15 mins
-        intervalMin = 15;
-      }
+      if (prevInterval >= 10080) intervalMin = 1440;       // 7 days -> 24 hours
+      else if (prevInterval >= 4320) intervalMin = 240;    // 3 days -> 4 hours
+      else intervalMin = 60;                               // <= 24 hours -> 1 hour minimum
 
       const nextReviewDate = new Date(nowMs + intervalMin * 60 * 1000).toISOString();
 
@@ -428,21 +424,18 @@ export default function StudyScreen({
     } else {
       // Correct answer
       const isNewWord = !cur.learned || !cur.lastReviewed;
-      let intervalMin = 240; // Default fallback (4 hours)
+      let intervalMin = 240; // Default 4 hours on correct answer
       let newStreak = cur.streak;
 
       if (isNewWord) {
-        // New word answered correctly: interval gets 4 hours (240 min)
+        // New word answered correctly: 4 hours interval
         intervalMin = 240;
-        newStreak = 3; // Equivalent to level 2 (4 hours)
+        newStreak = 2;
       } else {
-        // Advance interval level
+        // Advance interval level (4 hours -> 24 hours -> 3 days -> 7 days -> 14 days -> 30 days)
         const prevInterval = cur.intervalMinutes || 240;
-        if (prevInterval === 15) {
-          intervalMin = 60; // 15 mins -> 1 hour
-          newStreak = 1;
-        } else if (prevInterval === 60) {
-          intervalMin = 240; // 1 hour -> 4 hours
+        if (prevInterval < 240) {
+          intervalMin = 240; // < 4 hours -> 4 hours
           newStreak = 2;
         } else if (prevInterval === 240) {
           intervalMin = 1440; // 4 hours -> 24 hours (1 day)
@@ -451,11 +444,14 @@ export default function StudyScreen({
           intervalMin = 4320; // 24 hours -> 3 days
           newStreak = 4;
         } else if (prevInterval === 4320) {
-          intervalMin = 10080; // 3 days -> 7 days (maximum)
+          intervalMin = 10080; // 3 days -> 7 days
           newStreak = 5;
-        } else if (prevInterval >= 10080) {
-          intervalMin = 10080; // stays at 7 days
-          newStreak = Math.max(5, (cur.streak || 5) + 1);
+        } else if (prevInterval === 10080) {
+          intervalMin = 20160; // 7 days -> 14 days
+          newStreak = 6;
+        } else if (prevInterval >= 20160) {
+          intervalMin = 43200; // 14 days -> 30 days
+          newStreak = Math.max(7, (cur.streak || 7) + 1);
         }
       }
 
@@ -711,26 +707,154 @@ export default function StudyScreen({
     );
   }
 
+  // Subcategory / Category family navigation logic
+  const categories = stats.categories || [];
+  const activeCatObj = categories.find(c => c.id === currentCatId);
+  const parentCatObj = activeCatObj?.parentId ? categories.find(c => c.id === activeCatObj.parentId) : null;
+  const rootParent = parentCatObj || activeCatObj;
+
+  // Sibling subcategories under the root parent category
+  const siblingSubCats = rootParent ? categories.filter(c => c.parentId === rootParent.id && !c.archived) : [];
+
+  // Next subcategory in this main category family that has unlearned words
+  const nextSubWithWords = siblingSubCats.find(sub => {
+    if (sub.id === currentCatId) return false;
+    const subWords = getWordsForCategory(words, sub.id, categories);
+    return subWords.some(w => !w.learned);
+  });
+
+  // Calculate statistics for the root main category family
+  const rootCatWords = rootParent ? getWordsForCategory(words, rootParent.id, categories) : [];
+  const rootUnlearnedWords = rootCatWords.filter(w => !w.learned);
+  const isRootFullyLearned = rootCatWords.length > 0 && rootUnlearnedWords.length === 0;
+
+  const startStudyNextCategory = (nextCatId: string) => {
+    setCurrentCatId(nextCatId);
+    const pool = getPool(nextCatId);
+    const withErrors = shuffle(pool.filter(w => w.wrong > w.correct));
+    const rest = shuffle(pool.filter(w => w.wrong <= w.correct));
+    const limit = getSessionLimit();
+
+    setQueue([...withErrors, ...rest].slice(0, limit));
+    setIdx(0);
+    setWrongIds([]);
+    setSessionMistakes([]);
+    setSessionLearnedIds([]);
+    setIsRepeatRound(false);
+    setAnswered(false);
+    setAns("");
+    setOk(null);
+    setHint(false);
+    setScore({ c: 0, w: 0 });
+    sessionSavedRef.current = false;
+    setStage("session");
+  };
+
   if (stage === "done") {
     return (
-      <div className="fade-in" style={{ textAlign: "center", paddingTop: 40 }}>
-        <div style={{ fontSize: 56 }}>🕊️</div>
-        <h2 className="section-title">Отлично!</h2>
-        <p className="sub-text">Сессия завершена</p>
-        <div className="card" style={{ marginTop: 20, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
+      <div className="fade-in" style={{ textAlign: "center", paddingTop: 30, maxWidth: 500, margin: "0 auto" }}>
+        <div style={{ fontSize: 56, marginBottom: 8 }}>🕊️</div>
+        <h2 className="section-title" style={{ margin: 0 }}>Отлично!</h2>
+        <p className="sub-text" style={{ marginTop: 4 }}>Сессия завершена</p>
+
+        <div className="card" style={{ marginTop: 16, display: "grid", gridTemplateColumns: "1fr 1fr", gap: 16 }}>
           <div><div className="stat-num" style={{ color: "var(--sage)" }}>{score.c}</div><div className="stat-label">верно</div></div>
           <div><div className="stat-num" style={{ color: "var(--rose)" }}>{score.w}</div><div className="stat-label">ошибки</div></div>
         </div>
-        <button className="btn btn-primary" style={{ width: "100%", marginTop: 20, padding: 16 }} onClick={onExit}>Завершить</button>
+
+        {/* Next Subcategory Recommendation */}
+        {nextSubWithWords ? (
+          <div className="card" style={{ marginTop: 16, textAlign: "left", background: "rgba(143,160,128,0.12)", border: "1px solid var(--sage)", borderRadius: 14, padding: 16 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sage)", textTransform: "uppercase", letterSpacing: "0.5px", marginBottom: 6 }}>
+              📂 Следующая подкатегория:
+            </div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--charcoal)", marginBottom: 4 }}>
+              {nextSubWithWords.icon || "📖"} {nextSubWithWords.name}
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 14 }}>
+              В вашей основной категории «{rootParent?.name}» ещё есть невыученные слова.
+            </div>
+            <button 
+              className="btn btn-primary" 
+              style={{ width: "100%", padding: 14, fontSize: 14, fontWeight: 700 }}
+              onClick={() => startStudyNextCategory(nextSubWithWords.id)}
+            >
+              ▶ Учить следующую подкатегорию «{nextSubWithWords.name}»
+            </button>
+          </div>
+        ) : isRootFullyLearned ? (
+          <div className="card" style={{ marginTop: 16, textAlign: "center", background: "rgba(245, 158, 11, 0.12)", border: "1px solid #f59e0b", borderRadius: 14, padding: 16 }}>
+            <div style={{ fontSize: 36, marginBottom: 6 }}>🎉</div>
+            <div style={{ fontSize: 16, fontWeight: 700, color: "var(--charcoal)", marginBottom: 6 }}>
+              Поздравляем! Вся категория выучена!
+            </div>
+            <div style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 8 }}>
+              Вы полностью выучили все подкатегории и слова из основной категории <strong>«{rootParent?.name || activeCatObj?.name}»</strong>!
+            </div>
+            <div style={{ fontSize: 12, color: "var(--charcoal)", fontWeight: 600 }}>
+              Так как невыученных слов больше нет, выберите другую категорию или подкатегорию для изучения.
+            </div>
+          </div>
+        ) : null}
+
+        <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 16 }}>
+          <button className="btn btn-primary" style={{ width: "100%", padding: 16, fontWeight: 700 }} onClick={onExit}>
+            📚 Выбрать другую категорию
+          </button>
+        </div>
       </div>
     );
   }
 
   if (!cur) {
+    const activeSubWords = activeCatObj ? getWordsForCategory(words, activeCatObj.id, categories) : [];
+
     return (
-      <div style={{ textAlign: "center", paddingTop: 40 }}>
-        <p style={{ marginBottom: 12 }}>В этой категории нет доступных слов для тренировки.</p>
-        <button className="btn btn-primary" onClick={onExit}>Назад</button>
+      <div className="fade-in" style={{ textAlign: "center", paddingTop: 40, maxWidth: 500, margin: "0 auto" }}>
+        <div style={{ fontSize: 48, marginBottom: 12 }}>
+          {isRootFullyLearned ? "🎉" : "📭"}
+        </div>
+
+        <h3 style={{ fontSize: 18, fontWeight: 700, color: "var(--charcoal)", marginBottom: 8 }}>
+          {isRootFullyLearned 
+            ? `Все слова в категории «${rootParent?.name || activeCatObj?.name}» выучены!`
+            : `В подкатегории «${activeCatObj?.name || "Категория"}» нет невыученных слов`}
+        </h3>
+
+        <p style={{ fontSize: 13, color: "var(--muted)", lineHeight: 1.5, marginBottom: 20 }}>
+          {isRootFullyLearned ? (
+            <>
+              Вы полностью выучили все подкатегории и слова в категории <strong>«{rootParent?.name || activeCatObj?.name}»</strong>.
+              Так как невыученных слов не осталось, выберите другую категорию для изучения или добавьте новые слова.
+            </>
+          ) : (
+            <>
+              В подкатегории <strong>«{activeCatObj?.name || "Категория"}»</strong> {activeSubWords.length === 0 ? "пока нет слов" : "все слова уже 100% выучены"}.
+            </>
+          )}
+        </p>
+
+        {nextSubWithWords && (
+          <div className="card" style={{ marginBottom: 16, textAlign: "left", background: "rgba(143,160,128,0.12)", border: "1px solid var(--sage)", padding: 14, borderRadius: 12 }}>
+            <div style={{ fontSize: 12, fontWeight: 700, color: "var(--sage)", marginBottom: 4 }}>
+              📂 В этой же основной категории есть другая подкатегория:
+            </div>
+            <div style={{ fontSize: 14, fontWeight: 700, color: "var(--charcoal)", marginBottom: 10 }}>
+              {nextSubWithWords.icon || "📖"} {nextSubWithWords.name}
+            </div>
+            <button 
+              className="btn btn-primary" 
+              style={{ width: "100%", padding: 12, fontSize: 13, fontWeight: 700 }}
+              onClick={() => startStudyNextCategory(nextSubWithWords.id)}
+            >
+              ▶ Перейти к подкатегории «{nextSubWithWords.name}»
+            </button>
+          </div>
+        )}
+
+        <button className="btn btn-primary" style={{ width: "100%", padding: 14 }} onClick={onExit}>
+          📚 Выбрать другую категорию
+        </button>
       </div>
     );
   }
@@ -760,10 +884,7 @@ export default function StudyScreen({
           className="card" 
           style={{ 
             marginTop: 18, 
-            paddingTop: 0, 
-            paddingBottom: 0, 
-            paddingLeft: 0, 
-            paddingRight: 0, 
+            padding: 0, 
             borderRadius: "1.75rem", 
             overflow: "hidden",
             transition: "all 0.25s ease",
@@ -777,23 +898,27 @@ export default function StudyScreen({
         >
           <div className="flip-card" onClick={() => { if (!answered) setAns(cardFlipped ? "" : "flipped"); }}>
             <div className={`flip-inner ${cardFlipped ? "flipped" : ""}`}>
-              <div className="flip-front">
-                <div style={{ paddingTop: 20, paddingBottom: 20 }}>
-                  <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "Русский" : "English"}</div>
-                  <div className="study-word">{pDir === "en-ru" ? cur.ru : cur.en}</div>
-                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 16 }}>Нажми чтобы увидеть перевод →</div>
+              <div className="flip-front" style={{ padding: "20px 16px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", boxSizing: "border-box" }}>
+                <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "Русский" : "English"}</div>
+                <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.ru : cur.en}</div>
+                <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
+                  {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
+                  {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
                 </div>
-                <button className="btn btn-ghost" style={{ fontSize: 18, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.ru : cur.en, pDir === "en-ru" ? "ru-RU" : "en-US"); }}>🔊</button>
+                <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>Нажми чтобы увидеть перевод →</div>
+                <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.ru : cur.en, pDir === "en-ru" ? "ru-RU" : "en-US"); }}>🔊</button>
               </div>
-              <div className="flip-back">
+              <div className="flip-back" style={{ padding: "20px 16px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", boxSizing: "border-box" }}>
                 {cardFlipped ? (
                   <>
-                    <div style={{ paddingTop: 20, paddingBottom: 20 }}>
-                      <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
-                      <div className="study-word">{pDir === "en-ru" ? cur.en : cur.ru}</div>
-                      <div style={{ fontSize: 11, color: "#aaa", marginTop: 16 }}>← Нажми чтобы вернуться</div>
+                    <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
+                    <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.en : cur.ru}</div>
+                    <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
+                      {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
+                      {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
                     </div>
-                    <button className="btn btn-ghost" style={{ fontSize: 18, paddingLeft: 20, paddingRight: 20, paddingBottom: 20 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
+                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>← Нажми чтобы вернуться</div>
+                    <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
                   </>
                 ) : (
                   <div style={{ height: "100%" }} />
@@ -919,6 +1044,10 @@ export default function StudyScreen({
             <>
               <div className="sub-text" style={{ marginBottom: 8 }}>{pDir === "en-ru" ? "English" : "Russian"}</div>
               <div className="study-word">{prompt}</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
+                {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
+                {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
+              </div>
               {!answered && <button className="btn btn-ghost" style={{ marginTop: 12, fontSize: 12 }} onClick={() => setHint(!hint)}>{hint ? <span className="hint-box">🔑 «{expected[0]}» · {expected.length} симв.</span> : "💡 Подсказка"}</button>}
             </>
           )}
@@ -926,11 +1055,10 @@ export default function StudyScreen({
             <div style={{ marginTop: 18 }}>
               <div style={{ fontSize: 13, fontWeight: 700, textTransform: "uppercase", letterSpacing: ".1em", marginBottom: 4, color: ok ? "var(--sage)" : "var(--rose)" }}>{ok ? "Perfect ✨" : "Неверно"}</div>
               <div style={{ fontSize: 18, fontWeight: 500 }}>{cur.en} — {cur.ru}</div>
-              {cur.partOfSpeech && (
-                <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 4 }}>
-                  [{cur.partOfSpeech}] {cur.topic ? `• тема: ${cur.topic}` : ""}
-                </div>
-              )}
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 6, display: "flex", gap: 10, justifyContent: "center", flexWrap: "wrap" }}>
+                {cur.partOfSpeech && <span>🏷️ Часть речи: <strong>{getPosLabel(cur.partOfSpeech)}</strong></span>}
+                {cur.topic && <span>📌 Тема: <strong>{getTopicLabel(cur.topic)}</strong></span>}
+              </div>
               <button className="btn btn-ghost" style={{ marginTop: 8 }} onClick={() => speak(cur.en)}>🔊 Послушать еще раз</button>
             </div>
           )}

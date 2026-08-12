@@ -38,6 +38,21 @@ export default function SettingsScreen({
   const [isPersistent, setIsPersistent] = useState(false);
   const [loading, setLoading] = useState(false);
 
+  const [userApiKey, setUserApiKey] = useState<string>(
+    typeof window !== "undefined" ? (localStorage.getItem("user_gemini_api_key") || "") : ""
+  );
+
+  const handleSaveApiKey = () => {
+    const trimmed = userApiKey.trim();
+    if (trimmed) {
+      localStorage.setItem("user_gemini_api_key", trimmed);
+      notify("🔑 Ваш API ключ Gemini успешно сохранён!");
+    } else {
+      localStorage.removeItem("user_gemini_api_key");
+      notify("🧹 API ключ Gemini сброшен.");
+    }
+  };
+
   const [notifPermission, setNotifPermission] = useState<string>(
     typeof window !== "undefined" && "Notification" in window ? Notification.permission : "unsupported"
   );
@@ -338,6 +353,45 @@ export default function SettingsScreen({
             </p>
             <button className="btn btn-outline btn-sm" style={{ width: "100%", color: "var(--rose)", borderColor: "rgba(212,165,165,.25)" }} onClick={handleLogout}>
               Выйти из аккаунта
+            </button>
+          </div>
+        )}
+      </div>
+
+      {/* Custom Gemini API Key */}
+      <div className="card" style={{ marginBottom: 12 }}>
+        <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8, display: "flex", alignItems: "center", gap: 6 }}>
+          🔑 Gemini API Ключ
+        </h3>
+        <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 10 }}>
+          Если стандартный ключ заблокирован или исчерпал лимит, укажите здесь ваш личный API ключ от Google AI Studio (начинается с AIzaSy...) для распознавания фото, озвучки и чата.
+        </p>
+        <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
+          <input
+            type="password"
+            className="input"
+            style={{ flex: 1, fontSize: 13, padding: "8px 12px" }}
+            placeholder="AIzaSy..."
+            value={userApiKey}
+            onChange={e => setUserApiKey(e.target.value)}
+          />
+          <button className="btn btn-primary btn-sm" onClick={handleSaveApiKey} style={{ whiteSpace: "nowrap" }}>
+            Сохранить
+          </button>
+        </div>
+        {userApiKey && (
+          <div style={{ marginTop: 8, display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+            <span style={{ fontSize: 11, color: "var(--sage)" }}>✓ Индивидуальный ключ активен</span>
+            <button 
+              className="btn btn-ghost btn-sm" 
+              style={{ fontSize: 11, color: "var(--rose)", padding: 0 }}
+              onClick={() => {
+                setUserApiKey("");
+                localStorage.removeItem("user_gemini_api_key");
+                notify("🧹 Ключ сброшен.");
+              }}
+            >
+              Сбросить ключ
             </button>
           </div>
         )}

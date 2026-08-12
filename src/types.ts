@@ -1,3 +1,15 @@
+export interface Category {
+  id: string;
+  userId: string;
+  name: string;
+  parentId: string | null; // null for top-level folder, or category ID of parent folder
+  icon?: string; // emoji icon e.g. "🎬", "📁", "👨‍🏫"
+  description?: string;
+  archived?: boolean;
+  paused?: boolean; // If true, repetition reminders and SRS due count are disabled for this category
+  created: string;
+}
+
 export interface Word {
   id: string;
   userId: string;
@@ -13,6 +25,7 @@ export interface Word {
   wrong: number;
   streak: number;
   created: string;
+  categoryId?: string; // Belongs to a specific category or subcategory
   // Spaced repetition fields
   intervalMinutes?: number; // 15, 60, 240, 1440, 4320, 10080
   consecutiveErrors?: number; // consecutive errors within a single day
@@ -42,6 +55,8 @@ export interface UserProgress {
   booksRead: number;
   wordsFromBooks: number;
   bestStreak: number;
+  categories?: Category[]; // Stored user categories
+  activeCategoryId?: string | null; // Currently selected active category on HomePage
   daily: {
     [date: string]: {
       date: string;

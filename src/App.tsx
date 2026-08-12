@@ -8,13 +8,15 @@ import {
   saveWords,
   deleteWord, 
   saveIrregularVerb, 
+  deleteIrregularVerb,
   saveUserProgress,
   batchResetUserData,
   wipeUserAccountData
 } from "./firebaseSync";
 import { Word, IrregularVerb, UserProgress } from "./types";
 import { checkAchievements, ACHIEVEMENTS_DEF, SEED_WORDS, SEED_IRREGULAR } from "./data";
-import { getLocalDateString, sendWebNotification } from "./utils";
+import { getLocalDateString, sendWebNotification, cleanUpWordsAndEp1, findDuplicateWord } from "./utils";
+import { getDefaultCategories, ensureBookCategories } from "./categories";
 
 // Sub-screens imports
 import AuthScreen from "./components/AuthScreen";
@@ -28,13 +30,16 @@ import AddScreen from "./components/AddScreen";
 import StatsScreen from "./components/StatsScreen";
 import AchievementsScreen from "./components/AchievementsScreen";
 import AiHubScreen from "./components/AiHubScreen";
+import CategoriesScreen from "./components/CategoriesScreen";
 
 export default function App() {
   const [user, setUser] = useState<any>(null); // "guest" or Firebase User object
   const [authLoading, setAuthLoading] = useState(true);
   const [dbLoading, setDbLoading] = useState(false);
-  const [view, setView] = useState<"home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai">("home");
+  const [view, setView] = useState<"home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai" | "categories">("home");
   const [sessionType, setSessionType] = useState<"learn" | "review" | "mandatory">("learn");
+  const [studyCategoryId, setStudyCategoryId] = useState<string | null>(null);
+  const [isGlobalReview, setIsGlobalReview] = useState<boolean>(false);
 
   const [theme, setTheme] = useState<"light" | "dark">(() => {
     return (localStorage.getItem("my-eng-theme") as "light" | "dark") || "light";
@@ -44,6 +49,11 @@ export default function App() {
     document.documentElement.setAttribute("data-theme", theme);
     localStorage.setItem("my-eng-theme", theme);
   }, [theme]);
+
+  // Always scroll to top when changing views/screens
+  useEffect(() => {
+    window.scrollTo({ top: 0, behavior: "instant" as ScrollBehavior });
+  }, [view]);
 
   // System Notification Scheduler & Check
   useEffect(() => {
@@ -113,7 +123,7 @@ export default function App() {
   // Core app data (local state sync)
   const [words, setWords] = useState<Word[]>([]);
   const [irregular, setIrregular] = useState<IrregularVerb[]>([]);
-  const [progress, setProgress] = useState<UserProgress>({
+  const [progress, setProgress] = useState<UserProgress>(() => ({
     userId: "guest",
     streak: 1,
     best: 1,
@@ -123,8 +133,9 @@ export default function App() {
     wordsFromBooks: 0,
     bestStreak: 0,
     daily: {},
-    dailyBooksRead: {}
-  });
+    dailyBooksRead: {},
+    categories: ensureBookCategories(getDefaultCategories("guest"), "guest")
+  }));
 
   const [welcome, setWelcome] = useState(false);
   const [newAchs, setNewAchs] = useState<any[]>([]);
@@ -136,20 +147,21 @@ export default function App() {
       const cached = localStorage.getItem("my-eng-v3-guest");
       if (cached) {
         const parsed = JSON.parse(cached);
-        setWords(parsed.words || []);
+        const cleanedWords = cleanUpWordsAndEp1(parsed.words || [], "guest");
+        setWords(cleanedWords);
         setIrregular(parsed.irregular || []);
-        setProgress(parsed.stats || {
+        const pStats = parsed.stats || {};
+        const catList = ensureBookCategories(
+          pStats.categories && pStats.categories.length > 0 ? pStats.categories : getDefaultCategories("guest"),
+          "guest"
+        );
+        const updatedProg = {
+          ...pStats,
           userId: "guest",
-          streak: 1,
-          best: 1,
-          lastVisit: null,
-          achievements: [],
-          booksRead: 0,
-          wordsFromBooks: 0,
-          bestStreak: 0,
-          daily: {},
-          dailyBooksRead: {}
-        });
+          categories: catList
+        };
+        setProgress(updatedProg);
+        saveGuestData(cleanedWords, parsed.irregular || [], updatedProg);
       } else {
         // First-time guest initialization
         localStorage.setItem("my-eng-v3-guest", JSON.stringify({ words: [], irregular: [], stats: progress }));
@@ -176,20 +188,21 @@ export default function App() {
       const cached = localStorage.getItem(`my-eng-v3-user-${userId}`);
       if (cached) {
         const parsed = JSON.parse(cached);
-        setWords(parsed.words || []);
+        const cleanedWords = cleanUpWordsAndEp1(parsed.words || [], userId);
+        setWords(cleanedWords);
         setIrregular(parsed.irregular || []);
-        setProgress(parsed.stats || {
+        const pStats = parsed.stats || {};
+        const catList = ensureBookCategories(
+          pStats.categories && pStats.categories.length > 0 ? pStats.categories : getDefaultCategories(userId),
+          userId
+        );
+        const updatedProg = {
+          ...pStats,
           userId,
-          streak: 1,
-          best: 1,
-          lastVisit: null,
-          achievements: [],
-          booksRead: 0,
-          wordsFromBooks: 0,
-          bestStreak: 0,
-          daily: {},
-          dailyBooksRead: {}
-        });
+          categories: catList
+        };
+        setProgress(updatedProg);
+        saveUserData(userId, cleanedWords, parsed.irregular || [], updatedProg);
         return true;
       }
     } catch (e) {
@@ -284,10 +297,11 @@ export default function App() {
               }
             }
 
-            setWords(mergedWords);
+            const cleanedMergedWords = cleanUpWordsAndEp1(mergedWords, firebaseUser.uid);
+            setWords(cleanedMergedWords);
             setIrregular(mergedIrregular);
             setProgress(pStats);
-            saveUserData(firebaseUser.uid, mergedWords, mergedIrregular, pStats);
+            saveUserData(firebaseUser.uid, cleanedMergedWords, mergedIrregular, pStats);
 
             // Optional: clear migrated local guest cache to prevent duplicate merges in the future
             localStorage.removeItem("my-eng-v3-guest");
@@ -423,10 +437,10 @@ export default function App() {
               saveUserData(firebaseUser.uid, seededWords, seededIrregular, defaultProgress);
             }
             setWelcome(true);
-            setSyncError("⚠️ Автономный режим работы: прогресс сохраняется локально.");
+            setSyncError(null);
           } else {
             console.error("Database loading error:", e);
-            setSyncError("⚠️ Ошибка соединения с облаком. Переключение в локальный режим...");
+            setSyncError(null);
             loadGuestData();
           }
         } finally {
@@ -485,10 +499,20 @@ export default function App() {
 
   // Main Save functions (unified sync with local offline fallback)
   const handleSaveWord = async (updatedWord: Word) => {
-    const list = words.map(w => w.id === updatedWord.id ? updatedWord : w);
-    if (!words.some(w => w.id === updatedWord.id)) {
-      list.push(updatedWord);
+    const isEditing = words.some(w => w.id === updatedWord.id);
+    if (!isEditing) {
+      // Prevent adding duplicate word if word with same EN and same partOfSpeech exists
+      const dup = findDuplicateWord(updatedWord.en, updatedWord.partOfSpeech, words);
+      if (dup) {
+        console.warn(`Word "${updatedWord.en}" [${updatedWord.partOfSpeech || "noun"}] already exists. Skipping duplicate.`);
+        return;
+      }
     }
+
+    const list = isEditing
+      ? words.map(w => w.id === updatedWord.id ? updatedWord : w)
+      : [...words, updatedWord];
+
     setWords(list);
 
     if (user && user !== "guest") {
@@ -503,7 +527,7 @@ export default function App() {
         } else {
           console.error("Cloud save failed:", e);
         }
-        setSyncError("⚠️ Автономный режим: изменения сохранены на устройстве.");
+        setSyncError(null);
       }
     } else {
       saveGuestData(list, irregular, progress);
@@ -514,22 +538,32 @@ export default function App() {
 
   const handleSaveWords = async (updatedWordsList: Word[]) => {
     if (updatedWordsList.length === 0) return;
-    const updatedMap = new Map(updatedWordsList.map(w => [w.id, w]));
-    const list = words.map(w => updatedMap.has(w.id) ? updatedMap.get(w.id)! : w);
     
     const existingIds = new Set(words.map(w => w.id));
+    const updatedMap = new Map(updatedWordsList.map(w => [w.id, w]));
+    
+    // 1. Update existing modified words
+    const list = words.map(w => updatedMap.has(w.id) ? updatedMap.get(w.id)! : w);
+    
+    // 2. Filter truly new words to exclude duplicates
+    const addedNewWords: Word[] = [];
     updatedWordsList.forEach(w => {
       if (!existingIds.has(w.id)) {
-        list.push(w);
+        const isDupInList = findDuplicateWord(w.en, w.partOfSpeech, list);
+        const isDupInBatch = findDuplicateWord(w.en, w.partOfSpeech, addedNewWords);
+        if (!isDupInList && !isDupInBatch) {
+          addedNewWords.push(w);
+        }
       }
     });
 
-    setWords(list);
+    const finalList = [...list, ...addedNewWords];
+    setWords(finalList);
 
     if (user && user !== "guest") {
-      saveUserData(user.uid, list, irregular, progress);
+      saveUserData(user.uid, finalList, irregular, progress);
       try {
-        await saveWords(updatedWordsList);
+        await saveWords(addedNewWords.length > 0 ? addedNewWords : updatedWordsList);
         setSyncError(null);
       } catch (e: any) {
         const errStr = e instanceof Error ? e.message : String(e);
@@ -538,13 +572,13 @@ export default function App() {
         } else {
           console.error("Cloud save words failed:", e);
         }
-        setSyncError("⚠️ Автономный режим: изменения сохранены на устройстве.");
+        setSyncError(null);
       }
     } else {
-      saveGuestData(list, irregular, progress);
+      saveGuestData(finalList, irregular, progress);
     }
 
-    triggerAchievementsCheck(list, irregular, progress);
+    triggerAchievementsCheck(finalList, irregular, progress);
   };
 
   const handleSaveVerb = async (updatedVerb: IrregularVerb) => {
@@ -566,7 +600,7 @@ export default function App() {
         } else {
           console.error("Cloud save failed:", e);
         }
-        setSyncError("⚠️ Автономный режим: изменения сохранены на устройстве.");
+        setSyncError(null);
       }
     } else {
       saveGuestData(words, list, progress);
@@ -575,13 +609,42 @@ export default function App() {
     triggerAchievementsCheck(words, list, progress);
   };
 
-  const handleSaveProgress = async (updatedProgress: UserProgress) => {
-    setProgress(updatedProgress);
+  const handleDeleteVerb = async (verbId: string) => {
+    const list = irregular.filter(v => v.id !== verbId);
+    setIrregular(list);
 
     if (user && user !== "guest") {
-      saveUserData(user.uid, words, irregular, updatedProgress);
+      saveUserData(user.uid, words, list, progress);
       try {
-        await saveUserProgress(updatedProgress);
+        await deleteIrregularVerb(verbId);
+        setSyncError(null);
+      } catch (e: any) {
+        console.warn("Cloud delete irregular pending/restricted: saved locally.");
+        setSyncError(null);
+      }
+    } else {
+      saveGuestData(words, list, progress);
+    }
+  };
+
+  const handleSaveProgress = async (updatedProgress: UserProgress) => {
+    const currentUid = (user && user !== "guest") ? user.uid : (updatedProgress.userId || "guest");
+    const currentCats = progress.categories && progress.categories.length > 0 ? progress.categories : getDefaultCategories(currentUid);
+    const nextCats = updatedProgress.categories && updatedProgress.categories.length > 0 ? updatedProgress.categories : currentCats;
+    const finalCats = ensureBookCategories(nextCats, currentUid);
+
+    const finalProgress: UserProgress = {
+      ...updatedProgress,
+      userId: currentUid,
+      categories: finalCats
+    };
+
+    setProgress(finalProgress);
+
+    if (user && user !== "guest") {
+      saveUserData(user.uid, words, irregular, finalProgress);
+      try {
+        await saveUserProgress(finalProgress);
         setSyncError(null);
       } catch (e: any) {
         const errStr = e instanceof Error ? e.message : String(e);
@@ -590,13 +653,13 @@ export default function App() {
         } else {
           console.error("Cloud save failed:", e);
         }
-        setSyncError("⚠️ Автономный режим: прогресс сохранен на устройстве.");
+        setSyncError(null);
       }
     } else {
-      saveGuestData(words, irregular, updatedProgress);
+      saveGuestData(words, irregular, finalProgress);
     }
 
-    triggerAchievementsCheck(words, irregular, updatedProgress);
+    triggerAchievementsCheck(words, irregular, finalProgress);
   };
 
   const handleDeleteWord = async (wordId: string) => {
@@ -615,7 +678,27 @@ export default function App() {
         } else {
           console.error("Cloud delete failed:", e);
         }
-        setSyncError("⚠️ Автономный режим: изменения применены локально.");
+        setSyncError(null);
+      }
+    } else {
+      saveGuestData(list, irregular, progress);
+    }
+  };
+
+  const handleDeleteWords = async (wordIds: string[]) => {
+    if (!wordIds || wordIds.length === 0) return;
+    const idSet = new Set(wordIds);
+    const list = words.filter(w => !idSet.has(w.id));
+    setWords(list);
+
+    if (user && user !== "guest") {
+      saveUserData(user.uid, list, irregular, progress);
+      try {
+        await Promise.all(wordIds.map(id => deleteWord(id)));
+        setSyncError(null);
+      } catch (e: any) {
+        console.warn("Cloud bulk delete executed locally:", e);
+        setSyncError(null);
       }
     } else {
       saveGuestData(list, irregular, progress);
@@ -920,8 +1003,10 @@ export default function App() {
           theme={theme}
           onToggleTheme={() => setTheme(t => t === "light" ? "dark" : "light")}
           onNavigate={setView} 
-          onStartStudy={(type) => {
+          onStartStudy={(type, isGlobal) => {
             setSessionType(type);
+            setStudyCategoryId(progress.activeCategoryId || "cat_base");
+            setIsGlobalReview(!!isGlobal);
             setView("study");
           }} 
           onSaveWord={handleSaveWord}
@@ -935,10 +1020,36 @@ export default function App() {
           words={words} 
           stats={progress} 
           sessionType={sessionType}
+          categoryId={studyCategoryId || progress.activeCategoryId || "cat_base"}
+          isGlobalReview={isGlobalReview}
           onSaveWord={handleSaveWord}
           onSaveWords={handleSaveWords}
           onSaveProgress={handleSaveProgress}
           onExit={() => setView("home")}
+        />
+      )}
+
+      {view === "categories" && (
+        <CategoriesScreen 
+          words={words}
+          stats={progress}
+          onSaveProgress={handleSaveProgress}
+          onSaveWord={handleSaveWord}
+          onSaveWords={handleSaveWords}
+          onDeleteWord={handleDeleteWord}
+          onDeleteWords={handleDeleteWords}
+          onNavigateHomeWithCategory={(catId) => {
+            handleSaveProgress({ ...progress, activeCategoryId: catId });
+            setView("home");
+          }}
+          onStartStudyCategory={(catId, type) => {
+            handleSaveProgress({ ...progress, activeCategoryId: catId });
+            setStudyCategoryId(catId);
+            setIsGlobalReview(false);
+            setSessionType(type);
+            setView("study");
+          }}
+          onBack={() => setView("home")}
         />
       )}
 
@@ -948,6 +1059,7 @@ export default function App() {
           stats={progress}
           onSaveWord={handleSaveWord}
           onDeleteWord={handleDeleteWord}
+          onDeleteWords={handleDeleteWords}
           onBack={() => setView("home")}
         />
       )}
@@ -967,6 +1079,7 @@ export default function App() {
           irregular={irregular} 
           stats={progress}
           onSaveVerb={handleSaveVerb}
+          onDeleteVerb={handleDeleteVerb}
           onSaveProgress={handleSaveProgress}
           onBack={() => setView("home")}
         />

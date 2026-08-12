@@ -13,6 +13,7 @@ import {
 import { db, auth } from "./firebase";
 import { Word, IrregularVerb, UserProgress } from "./types";
 import { SEED_WORDS, SEED_IRREGULAR } from "./data";
+import { getDefaultCategories, ensureBookCategories } from "./categories";
 
 export enum OperationType {
   CREATE = 'create',
@@ -147,7 +148,8 @@ export async function seedUserData(userId: string): Promise<{ words: Word[]; irr
       customTopics: {},
       customPos: {},
       deletedTopics: [],
-      deletedPos: []
+      deletedPos: [],
+      categories: getDefaultCategories(userId)
     };
     batch.set(doc(usersCollection, userId), progress);
 
@@ -182,9 +184,13 @@ export async function fetchUserData(userId: string): Promise<{ words: Word[]; ir
     const progressDoc = await getDoc(doc(usersCollection, userId));
     const progress = progressDoc.exists() ? (progressDoc.data() as UserProgress) : null;
 
-    // Guarantee that progress has userId
+    // Guarantee that progress has userId and valid categories array
     if (progress) {
       progress.userId = userId;
+      progress.categories = ensureBookCategories(
+        progress.categories && progress.categories.length > 0 ? progress.categories : getDefaultCategories(userId),
+        userId
+      );
     }
 
     return { words, irregular, progress };
@@ -222,14 +228,19 @@ export async function saveWord(word: Word): Promise<void> {
   }
 }
 
-// Save multiple words in a batch
+// Save multiple words in a batch (chunked to fit Firestore 500-op limit)
 export async function saveWords(wordsList: Word[]): Promise<void> {
+  if (!wordsList || wordsList.length === 0) return;
   try {
-    const batch = writeBatch(db);
-    wordsList.forEach(word => {
-      batch.set(doc(wordsCollection, word.id), cleanForFirestore(word));
-    });
-    await batch.commit();
+    const BATCH_SIZE = 400;
+    for (let i = 0; i < wordsList.length; i += BATCH_SIZE) {
+      const chunk = wordsList.slice(i, i + BATCH_SIZE);
+      const batch = writeBatch(db);
+      chunk.forEach(word => {
+        batch.set(doc(wordsCollection, word.id), cleanForFirestore(word));
+      });
+      await batch.commit();
+    }
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `words/batch-save`);
   }
@@ -250,6 +261,15 @@ export async function saveIrregularVerb(verb: IrregularVerb): Promise<void> {
     await setDoc(doc(irregularCollection, verb.id), cleanForFirestore(verb));
   } catch (error) {
     handleFirestoreError(error, OperationType.WRITE, `irregular/${verb.id}`);
+  }
+}
+
+// Delete an irregular verb
+export async function deleteIrregularVerb(verbId: string): Promise<void> {
+  try {
+    await deleteDoc(doc(irregularCollection, verbId));
+  } catch (error) {
+    handleFirestoreError(error, OperationType.DELETE, `irregular/${verbId}`);
   }
 }
 

@@ -1468,7 +1468,7 @@ CRITICAL RULES:
         parts: [{ text: m.text }]
       }));
 
-      const modelsToTry = ["gemini-2.5-flash", "gemini-3.6-flash", "gemini-3.1-flash-lite"];
+      const modelsToTry = ["gemini-3.6-flash", "gemini-3.1-flash-lite"];
       for (const modelName of modelsToTry) {
         try {
           const url = `https://generativelanguage.googleapis.com/v1beta/models/${modelName}:generateContent?key=${apiKey}`;
@@ -2345,28 +2345,28 @@ CRITICAL RULES:
             zIndex: 9990,
             overflowY: "auto",
             padding: "24px 16px",
-            color: "#1f1e1a", // Strict high contrast text
+            color: "var(--warm)", // Strict high contrast text
             fontFamily: "Inter, sans-serif"
           }} className="fade-in">
             <div style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 60 }}>
               
               {/* Header: Timer and Type */}
-              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, borderBottom: "1.5px solid #e5dfd3", paddingBottom: 14 }}>
+              <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 20, borderBottom: "1.5px solid var(--border)", paddingBottom: 14 }}>
                 <div>
                   <span style={{ fontSize: 11, background: "#f0f4ed", color: "#8fa080", padding: "6px 12px", borderRadius: 99, fontWeight: 700, textTransform: "uppercase" }}>
                     {levelTest.type === "fast" ? "⚡ Быстрый тест (Слух + Чтение)" : "📊 Полный CEFR Тест"}
                   </span>
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: levelTest.timer < 60 ? "#df6c6c" : "#1f1e1a", display: "flex", alignItems: "center", gap: 6 }}>
+                <div style={{ fontSize: 14, fontWeight: 700, color: levelTest.timer < 60 ? "#df6c6c" : "var(--warm)", display: "flex", alignItems: "center", gap: 6 }}>
                   <span>⏳ Осталось время:</span>
                   <span>{Math.floor(levelTest.timer / 60)}м {levelTest.timer % 60}с</span>
                 </div>
               </div>
 
               {/* Section Progress Tracker */}
-              <div style={{ marginBottom: 24, padding: "12px 16px", background: "#f4f0e6", borderRadius: "12px", border: "1px solid #e5dfd3" }}>
+              <div style={{ marginBottom: 24, padding: "12px 16px", background: "var(--sand-light)", borderRadius: "12px", border: "1px solid var(--border)" }}>
                 <span style={{ fontSize: 11, fontWeight: "700", textTransform: "uppercase", letterSpacing: 0.8, color: "#6b6861" }}>Текущий этап:</span>
-                <div style={{ fontSize: 15, fontWeight: "800", color: "#1f1e1a", marginTop: 4 }}>
+                <div style={{ fontSize: 15, fontWeight: "800", color: "var(--warm)", marginTop: 4 }}>
                   {step < totalMC ? (
                     `Раздел 1: Грамматика и Чтение (Вопрос ${step + 1} из ${totalMC})`
                   ) : step < totalMC + totalWriting ? (
@@ -2383,20 +2383,20 @@ CRITICAL RULES:
                   <span>Задание {step + 1} из {totalSteps}</span>
                   <span>Общий прогресс: {Math.round(((step + 1) / totalSteps) * 100)}%</span>
                 </div>
-                <div style={{ width: "100%", height: 8, background: "#e5dfd3", borderRadius: 4, overflow: "hidden" }}>
+                <div style={{ width: "100%", height: 8, background: "var(--border)", borderRadius: 4, overflow: "hidden" }}>
                   <div style={{ width: `${((step + 1) / totalSteps) * 100}%`, height: "100%", background: "#8fa080", transition: "width 0.3s ease" }}></div>
                 </div>
               </div>
 
               {/* Question Card */}
-              <div style={{ background: "#ffffff", border: "1.5px solid #e5dfd3", borderRadius: "16px", padding: "28px", marginBottom: "24px", boxShadow: "0 6px 20px rgba(0,0,0,0.03)" }}>
+              <div style={{ background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: "16px", padding: "28px", marginBottom: "24px", boxShadow: "0 6px 20px rgba(0,0,0,0.03)" }}>
                 {step < totalMC ? (() => {
                   const q = levelTest.questions[step];
                   if (!q) return null;
                   return (
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
-                        <span style={{ fontSize: 10, color: "#6b6861", fontWeight: 700, background: "#f4f0e6", padding: "3px 8px", borderRadius: 6, textTransform: "uppercase" }}>
+                        <span style={{ fontSize: 10, color: "#6b6861", fontWeight: 700, background: "var(--sand-light)", padding: "3px 8px", borderRadius: 6, textTransform: "uppercase" }}>
                           CEFR сложность: {q.level}
                         </span>
                         {q.type === "listening" && (
@@ -2410,15 +2410,15 @@ CRITICAL RULES:
                       {/* Reading Passage container if reading type */}
                       {q.type === "reading" && q.readingPassage && (
                         <div style={{
-                          background: "#fdfbf7",
-                          border: "1px solid #e5dfd3",
+                          background: "var(--sand-light)",
+                          border: "1px solid var(--border)",
                           borderLeft: "4px solid #df7a5e",
                           borderRadius: "10px",
                           padding: "16px",
                           marginBottom: "20px",
                           fontSize: "14px",
                           lineHeight: "1.6",
-                          color: "#1f1e1a"
+                          color: "var(--warm)"
                         }}>
                           <strong>Текст для чтения:</strong>
                           <p style={{ marginTop: 6, marginBottom: 0 }}>{q.readingPassage}</p>
@@ -2463,7 +2463,7 @@ CRITICAL RULES:
                       )}
 
                       {/* Question Text */}
-                      <h3 style={{ fontSize: "17px", fontWeight: "800", color: "#1f1e1a", marginBottom: "24px", lineHeight: "1.5" }}>
+                      <h3 style={{ fontSize: "17px", fontWeight: "800", color: "var(--warm)", marginBottom: "24px", lineHeight: "1.5" }}>
                         {q.text}
                       </h3>
 
@@ -2478,9 +2478,9 @@ CRITICAL RULES:
                                 textAlign: "left",
                                 padding: "16px 20px",
                                 borderRadius: "14px",
-                                border: isSelected ? "2.5px solid #8fa080" : "1.5px solid #e5dfd3",
+                                border: isSelected ? "2.5px solid #8fa080" : "1.5px solid var(--border)",
                                 background: isSelected ? "#f0f4ed" : "#ffffff",
-                                color: "#1f1e1a",
+                                color: "var(--warm)",
                                 fontSize: "14px",
                                 fontWeight: isSelected ? "600" : "500",
                                 cursor: "pointer",
@@ -2497,7 +2497,7 @@ CRITICAL RULES:
                             >
                               <span style={{
                                 marginRight: 12,
-                                background: isSelected ? "#8fa080" : "#f4f0e6",
+                                background: isSelected ? "#8fa080" : "var(--sand-light)",
                                 color: isSelected ? "#ffffff" : "#6b6861",
                                 width: "26px",
                                 height: "26px",
@@ -2524,14 +2524,14 @@ CRITICAL RULES:
                   return (
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <span style={{ fontSize: 10, color: "#6b6861", fontWeight: 700, background: "#f4f0e6", padding: "3px 8px", borderRadius: 6, textTransform: "uppercase" }}>
+                        <span style={{ fontSize: 10, color: "#6b6861", fontWeight: 700, background: "var(--sand-light)", padding: "3px 8px", borderRadius: 6, textTransform: "uppercase" }}>
                           Раздел: Письмо (Writing)
                         </span>
                         <span style={{ fontSize: 11, color: "#8fa080", fontWeight: "700" }}>Сложность: {q.level}</span>
                       </div>
 
-                      <div style={{ background: "#f4f0e6", padding: "18px", borderRadius: "12px", marginBottom: 20, border: "1px solid #e5dfd3" }}>
-                        <p style={{ fontWeight: "700", color: "#1f1e1a", fontSize: "15px", marginBottom: 8, lineHeight: 1.4 }}>{q.prompt}</p>
+                      <div style={{ background: "var(--sand-light)", padding: "18px", borderRadius: "12px", marginBottom: 20, border: "1px solid var(--border)" }}>
+                        <p style={{ fontWeight: "700", color: "var(--warm)", fontSize: "15px", marginBottom: 8, lineHeight: 1.4 }}>{q.prompt}</p>
                         <p style={{ color: "#6b6861", fontSize: "13px", fontStyle: "italic", margin: 0 }}>{q.description}</p>
                       </div>
 
@@ -2539,12 +2539,12 @@ CRITICAL RULES:
                         style={{
                           width: "100%",
                           height: "200px",
-                          background: "#ffffff",
-                          border: "1.5px solid #e5dfd3",
+                          background: "var(--card)",
+                          border: "1.5px solid var(--border)",
                           borderRadius: "14px",
                           padding: "16px",
                           fontSize: "14px",
-                          color: "#1f1e1a",
+                          color: "var(--warm)",
                           lineHeight: "1.6",
                           outline: "none",
                           fontFamily: "Inter, sans-serif",
@@ -2576,21 +2576,21 @@ CRITICAL RULES:
                   return (
                     <div>
                       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
-                        <span style={{ fontSize: 10, color: "#6b6861", fontWeight: 700, background: "#f4f0e6", padding: "3px 8px", borderRadius: 6, textTransform: "uppercase" }}>
+                        <span style={{ fontSize: 10, color: "#6b6861", fontWeight: 700, background: "var(--sand-light)", padding: "3px 8px", borderRadius: 6, textTransform: "uppercase" }}>
                           Раздел: Говорение (Speaking)
                         </span>
                         <span style={{ fontSize: 11, color: "#8fa080", fontWeight: "700" }}>Сложность: {q.level}</span>
                       </div>
 
-                      <div style={{ background: "#f4f0e6", padding: "18px", borderRadius: "12px", marginBottom: 20, border: "1px solid #e5dfd3" }}>
-                        <p style={{ fontWeight: "700", color: "#1f1e1a", fontSize: "15px", marginBottom: 8, lineHeight: 1.4 }}>{q.prompt}</p>
+                      <div style={{ background: "var(--sand-light)", padding: "18px", borderRadius: "12px", marginBottom: 20, border: "1px solid var(--border)" }}>
+                        <p style={{ fontWeight: "700", color: "var(--warm)", fontSize: "15px", marginBottom: 8, lineHeight: 1.4 }}>{q.prompt}</p>
                         <p style={{ color: "#6b6861", fontSize: "13px", fontStyle: "italic", margin: 0 }}>{q.description}</p>
                       </div>
 
                       {/* Live voice recorder widget */}
                       <div style={{
                         background: "#fbfaf7",
-                        border: "1.5px solid #e5dfd3",
+                        border: "1.5px solid var(--border)",
                         borderRadius: "16px",
                         padding: "24px",
                         textAlign: "center",
@@ -2643,9 +2643,9 @@ CRITICAL RULES:
                                 <button
                                   onClick={() => startTestRecording(sIdx)}
                                   style={{
-                                    background: "#ffffff",
+                                    background: "var(--card)",
                                     color: "#6b6861",
-                                    border: "1.5px solid #e5dfd3",
+                                    border: "1.5px solid var(--border)",
                                     borderRadius: "12px",
                                     padding: "10px 20px",
                                     fontSize: "13px",
@@ -2696,12 +2696,12 @@ CRITICAL RULES:
                             style={{
                               width: "100%",
                               height: "100px",
-                              background: "#ffffff",
-                              border: "1.5px solid #e5dfd3",
+                              background: "var(--card)",
+                              border: "1.5px solid var(--border)",
                               borderRadius: "14px",
                               padding: "12px",
                               fontSize: "14px",
-                              color: "#1f1e1a",
+                              color: "var(--warm)",
                               outline: "none",
                               resize: "none"
                             }}
@@ -2729,9 +2729,9 @@ CRITICAL RULES:
                     fontSize: "14px",
                     fontWeight: "700",
                     borderRadius: "14px",
-                    background: "#ffffff",
-                    border: "2px solid #1f1e1a",
-                    color: "#1f1e1a",
+                    background: "var(--card)",
+                    border: "2px solid var(--warm)",
+                    color: "var(--warm)",
                     cursor: step === 0 ? "not-allowed" : "pointer",
                     opacity: step === 0 ? 0.3 : 1,
                     transition: "all 0.1s"
@@ -2749,7 +2749,7 @@ CRITICAL RULES:
                     fontSize: "14px",
                     fontWeight: "700",
                     borderRadius: "14px",
-                    background: isStepComplete() ? "#8fa080" : "#e5dfd3",
+                    background: isStepComplete() ? "#8fa080" : "var(--border)",
                     color: "#ffffff",
                     border: "none",
                     cursor: isStepComplete() ? "pointer" : "not-allowed",
@@ -2904,7 +2904,7 @@ CRITICAL RULES:
           zIndex: 9980,
           overflowY: "auto",
           padding: "32px 16px",
-          color: "#1f1e1a",
+          color: "var(--warm)",
           fontFamily: "Inter, sans-serif"
         }} className="fade-in">
           <div style={{ maxWidth: 640, margin: "0 auto", paddingBottom: 80 }}>
@@ -2915,7 +2915,7 @@ CRITICAL RULES:
                 width: 120,
                 height: 120,
                 borderRadius: "50%",
-                background: "#ffffff",
+                background: "var(--card)",
                 border: "4px solid #8fa080",
                 display: "flex",
                 flexDirection: "column",
@@ -2927,7 +2927,7 @@ CRITICAL RULES:
                 <span style={{ fontSize: 11, color: "#6b6861", textTransform: "uppercase", fontWeight: 800, letterSpacing: 0.5 }}>УРОВЕНЬ</span>
                 <span style={{ fontSize: 36, fontWeight: "900", color: "#8fa080", lineHeight: 1 }}>{testGradeReport.level}</span>
               </div>
-              <h2 style={{ fontFamily: "Inter, sans-serif", fontSize: 24, fontWeight: "800", color: "#1f1e1a" }}>
+              <h2 style={{ fontFamily: "Inter, sans-serif", fontSize: 24, fontWeight: "800", color: "var(--warm)" }}>
                 Результаты вашего CEFR теста
               </h2>
               <p style={{ fontSize: 14, color: "#6b6861", marginTop: 6 }}>
@@ -2936,18 +2936,18 @@ CRITICAL RULES:
             </div>
 
             {/* Detailed feedback text */}
-            <div style={{ background: "#ffffff", border: "1.5px solid #e5dfd3", borderRadius: "16px", padding: "24px", marginBottom: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.01)" }}>
+            <div style={{ background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: "16px", padding: "24px", marginBottom: "20px", boxShadow: "0 4px 12px rgba(0,0,0,0.01)" }}>
               <h3 style={{ margin: "0 0 12px 0", fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, color: "#df7a5e" }}>
                 📋 Заключение преподавателя:
               </h3>
-              <p style={{ fontSize: 14.5, color: "#1f1e1a", lineHeight: "1.6", margin: 0, whiteSpace: "pre-wrap" }}>
+              <p style={{ fontSize: 14.5, color: "var(--warm)", lineHeight: "1.6", margin: 0, whiteSpace: "pre-wrap" }}>
                 {testGradeReport.detailedFeedback}
               </p>
             </div>
 
             {/* 🎯 Sub-skill detailed analysis */}
             {testGradeReport.skillsBreakdown && (
-              <div style={{ background: "#ffffff", border: "1.5px solid #e5dfd3", borderRadius: "16px", padding: "24px", marginBottom: "20px" }}>
+              <div style={{ background: "var(--card)", border: "1.5px solid var(--border)", borderRadius: "16px", padding: "24px", marginBottom: "20px" }}>
                 <h3 style={{ margin: "0 0 16px 0", fontSize: 13, fontWeight: "800", textTransform: "uppercase", letterSpacing: 0.8, color: "#8fa080" }}>
                   📊 Анализ языковых навыков (CEFR):
                 </h3>
@@ -2981,13 +2981,13 @@ CRITICAL RULES:
                         padding: "14px",
                         borderRadius: "12px",
                         background: "#fbfaf7",
-                        border: "1px solid #e5dfd3",
+                        border: "1px solid var(--border)",
                         display: "flex",
                         flexDirection: "column",
                         gap: 8
                       }}>
                         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", flexWrap: "wrap", gap: 8 }}>
-                          <span style={{ fontWeight: "700", fontSize: 14, color: "#1f1e1a" }}>{skill.name}</span>
+                          <span style={{ fontWeight: "700", fontSize: 14, color: "var(--warm)" }}>{skill.name}</span>
                           <span style={{
                             fontSize: 14,
                             fontWeight: "900",
@@ -3022,13 +3022,13 @@ CRITICAL RULES:
             {/* Strengths & Gaps */}
             <div style={{ display: "grid", gridTemplateColumns: "1fr", gap: 16, marginBottom: 24 }}>
               {/* Strengths */}
-              <div style={{ background: "#ffffff", padding: "20px", borderRadius: "16px", border: "1.5px solid #e5dfd3" }}>
+              <div style={{ background: "var(--card)", padding: "20px", borderRadius: "16px", border: "1.5px solid var(--border)" }}>
                 <h4 style={{ margin: "0 0 12px 0", fontSize: 13, fontWeight: "800", color: "#8fa080", textTransform: "uppercase", letterSpacing: 0.8 }}>
                   💪 Ваши сильные стороны:
                 </h4>
                 <ul style={{ padding: 0, margin: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 10 }}>
                   {testGradeReport.strengths?.map((str, i) => (
-                    <li key={i} style={{ fontSize: 13.5, color: "#1f1e1a", display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
+                    <li key={i} style={{ fontSize: 13.5, color: "var(--warm)", display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
                       <span style={{ color: "#8fa080", fontWeight: "bold" }}>✓</span>
                       <span>{str}</span>
                     </li>
@@ -3037,13 +3037,13 @@ CRITICAL RULES:
               </div>
 
               {/* Weaknesses */}
-              <div style={{ background: "#ffffff", padding: "20px", borderRadius: "16px", border: "1.5px solid #e5dfd3" }}>
+              <div style={{ background: "var(--card)", padding: "20px", borderRadius: "16px", border: "1.5px solid var(--border)" }}>
                 <h4 style={{ margin: "0 0 12px 0", fontSize: 13, fontWeight: "800", color: "#df6c6c", textTransform: "uppercase", letterSpacing: 0.8 }}>
                   🎯 Зоны для развития:
                 </h4>
                 <ul style={{ padding: 0, margin: 0, listStyle: "none", display: "flex", flexDirection: "column", gap: 10 }}>
                   {testGradeReport.weaknesses?.map((weak, i) => (
-                    <li key={i} style={{ fontSize: 13.5, color: "#1f1e1a", display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
+                    <li key={i} style={{ fontSize: 13.5, color: "var(--warm)", display: "flex", alignItems: "flex-start", gap: 8, lineHeight: 1.4 }}>
                       <span style={{ color: "#df6c6c", fontWeight: "bold" }}>•</span>
                       <span>{weak}</span>
                     </li>
@@ -3053,7 +3053,7 @@ CRITICAL RULES:
             </div>
 
             {/* Detailed Question review expansion list */}
-            <h3 style={{ fontSize: 14, fontWeight: "800", color: "#1f1e1a", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14, paddingLeft: 4 }}>
+            <h3 style={{ fontSize: 14, fontWeight: "800", color: "var(--warm)", textTransform: "uppercase", letterSpacing: 0.8, marginBottom: 14, paddingLeft: 4 }}>
               🔍 Подробный разбор вопросов:
             </h3>
             <div style={{ display: "flex", flexDirection: "column", gap: 12, marginBottom: 32 }}>
@@ -3061,7 +3061,7 @@ CRITICAL RULES:
                 <div key={idx} style={{
                   padding: 20,
                   borderRadius: "14px",
-                  border: "1.5px solid #e5dfd3",
+                  border: "1.5px solid var(--border)",
                   background: rep.isCorrect ? "#f0f4ed" : "#fdf4f2"
                 }}>
                   <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 10 }}>
@@ -3070,7 +3070,7 @@ CRITICAL RULES:
                       fontSize: 11,
                       fontWeight: "800",
                       color: rep.isCorrect ? "#8fa080" : "#df6c6c",
-                      background: "#ffffff",
+                      background: "var(--card)",
                       padding: "3px 10px",
                       borderRadius: 6,
                       border: `1px solid ${rep.isCorrect ? "#8fa080" : "#df6c6c"}`
@@ -3078,15 +3078,15 @@ CRITICAL RULES:
                       {rep.isCorrect ? "ВЕРНО" : "НЕВЕРНО"}
                     </span>
                   </div>
-                  <p style={{ fontSize: 14, fontWeight: "700", color: "#1f1e1a", marginBottom: 12, lineHeight: 1.4 }}>{rep.text}</p>
+                  <p style={{ fontSize: 14, fontWeight: "700", color: "var(--warm)", marginBottom: 12, lineHeight: 1.4 }}>{rep.text}</p>
                   
-                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "#1f1e1a", marginBottom: 12 }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, fontSize: 13, color: "var(--warm)", marginBottom: 12 }}>
                     <div><span style={{ color: "#8fa080", fontWeight: "700" }}>✓ Верный ответ:</span> {rep.correctOption}</div>
                     {!rep.isCorrect && (
                       <div><span style={{ color: "#df6c6c", fontWeight: "700" }}>✗ Ваш выбор:</span> {rep.studentAnswer}</div>
                     )}
                   </div>
-                  <div style={{ background: "#ffffff", padding: 12, borderRadius: 8, fontSize: 12.5, color: "#6b6861", borderLeft: "4px solid #e5dfd3", lineHeight: 1.5 }}>
+                  <div style={{ background: "var(--card)", padding: 12, borderRadius: 8, fontSize: 12.5, color: "#6b6861", borderLeft: "4px solid var(--border)", lineHeight: 1.5 }}>
                     <strong>Пояснение:</strong> {rep.explanation}
                   </div>
                 </div>
@@ -3123,9 +3123,9 @@ CRITICAL RULES:
                   padding: 14,
                   fontSize: 13,
                   fontWeight: "700",
-                  background: "#ffffff",
-                  border: "2px solid #1f1e1a",
-                  color: "#1f1e1a",
+                  background: "var(--card)",
+                  border: "2px solid var(--warm)",
+                  color: "var(--warm)",
                   borderRadius: "14px",
                   cursor: "pointer"
                 }}
@@ -5119,8 +5119,8 @@ CRITICAL RULES:
             maxWidth: 400,
             width: "100%",
             padding: "28px",
-            border: "1.5px solid #e5dfd3",
-            background: "#ffffff",
+            border: "1.5px solid var(--border)",
+            background: "var(--card)",
             borderRadius: "24px",
             boxShadow: "0 12px 36px rgba(143,160,128,0.12)",
             textAlign: "center"
@@ -5160,8 +5160,8 @@ CRITICAL RULES:
                   padding: "12px 18px",
                   fontSize: 13,
                   fontWeight: "600",
-                  background: "#ffffff",
-                  border: "1.5px solid #e5dfd3",
+                  background: "var(--card)",
+                  border: "1.5px solid var(--border)",
                   color: "#4a4943",
                   borderRadius: "14px",
                   cursor: "pointer"
@@ -5200,9 +5200,9 @@ CRITICAL RULES:
             background: "#fbfaf7",
             borderRadius: 20,
             padding: 24,
-            color: "#1f1e1a",
+            color: "var(--warm)",
             boxShadow: "0 20px 40px rgba(0,0,0,0.3)",
-            border: "1.5px solid #e5dfd3"
+            border: "1.5px solid var(--border)"
           }}>
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
               <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
@@ -5218,7 +5218,7 @@ CRITICAL RULES:
             </div>
 
             {/* Health status section */}
-            <div style={{ background: "#f4f0e6", padding: 14, borderRadius: 12, marginBottom: 18, border: "1px solid #e5dfd3" }}>
+            <div style={{ background: "var(--sand-light)", padding: 14, borderRadius: 12, marginBottom: 18, border: "1px solid var(--border)" }}>
               <div style={{ fontSize: 12, fontWeight: 700, textTransform: "uppercase", color: "#6b6861", marginBottom: 6 }}>
                 Статус сервера и ключа GEMINI_API_KEY:
               </div>
@@ -5266,7 +5266,7 @@ CRITICAL RULES:
             </div>
 
             <div style={{ marginBottom: 18 }}>
-              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "#1f1e1a", marginBottom: 6 }}>
+              <label style={{ display: "block", fontSize: 12, fontWeight: 700, color: "var(--warm)", marginBottom: 6 }}>
                 Ваш персональный Gemini API Key (если не задан на Vercel):
               </label>
               <input
@@ -5281,7 +5281,7 @@ CRITICAL RULES:
                   border: "1.5px solid #dcd5c7",
                   fontSize: 13,
                   outline: "none",
-                  background: "#ffffff"
+                  background: "var(--card)"
                 }}
               />
             </div>

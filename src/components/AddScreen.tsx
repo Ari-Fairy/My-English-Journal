@@ -1,7 +1,9 @@
 import React, { useState, useRef } from "react";
+import { createWorker } from "tesseract.js";
 import { Word, UserProgress } from "../types";
 import { POS_DEFAULT, TOPICS_DEFAULT } from "../data";
-import { getApiUrl, getApiHeaders } from "../utils";
+import { getApiUrl, getApiHeaders, findDuplicateWord } from "../utils";
+import { getDefaultCategories, ensureBookCategories, renderCategoryOptions, getValidCategoryId } from "../categories";
 
 interface AddScreenProps {
   words: Word[];
@@ -18,11 +20,25 @@ export default function AddScreen({
   onSaveProgress,
   onBack
 }: AddScreenProps) {
+  const userId = stats.userId || "guest";
+  const rawCategories = stats.categories && stats.categories.length > 0
+    ? stats.categories
+    : getDefaultCategories(userId);
+  const categories = ensureBookCategories(rawCategories, userId);
+
+  const getCatName = (catId?: string) => {
+    if (!catId) return "Базовые слова";
+    const found = categories.find(c => c.id === catId);
+    return found ? `${found.icon || "📁"} ${found.name}` : "Базовые слова";
+  };
+
   const [tab, setTab] = useState<"one" | "photo" | "bulk" | "manage">("one");
   const [en, setEn] = useState("");
   const [ru, setRu] = useState("");
   const [pos, setPos] = useState("noun");
   const [topic, setTopic] = useState("general");
+  const initialCat = stats.activeCategoryId && stats.activeCategoryId !== "cat_main" ? stats.activeCategoryId : "cat_base";
+  const [addCatId, setAddCatId] = useState<string>(initialCat);
   const [note, setNote] = useState("");
   const [msg, setMsg] = useState("");
   const [loading, setLoading] = useState(false);
@@ -32,6 +48,7 @@ export default function AddScreen({
   const [bulkText, setBulkText] = useState("");
   const [bPos, setBPos] = useState("noun");
   const [bTopic, setBTopic] = useState("general");
+  const [bCatId, setBCatId] = useState<string>(initialCat);
 
   // Photo state
   const [img, setImg] = useState<string | null>(null);
@@ -47,6 +64,12 @@ export default function AddScreen({
   const [newPosKey, setNewPosKey] = useState("");
   const [showTopicForm, setShowTopicForm] = useState(false);
   const [showPosForm, setShowPosForm] = useState(false);
+
+  // Edit topic / POS state
+  const [editingTopicKey, setEditingTopicKey] = useState<string | null>(null);
+  const [editingTopicValue, setEditingTopicValue] = useState("");
+  const [editingPosKey, setEditingPosKey] = useState<string | null>(null);
+  const [editingPosValue, setEditingPosValue] = useState("");
 
   const deletedTopics = stats.deletedTopics || [];
   const deletedPos = stats.deletedPos || [];
@@ -73,12 +96,11 @@ export default function AddScreen({
 
   const trimmedEn = en.trim().toLowerCase();
   const duplicateWord = trimmedEn
-    ? (words || []).find(w => w.en.trim().toLowerCase() === trimmedEn && w.partOfSpeech === pos)
+    ? findDuplicateWord(en, pos, words || [])
     : undefined;
 
   const photoDuplicates = parsed.filter(p => {
-    const trimmed = p.en.trim().toLowerCase();
-    return trimmed && (words || []).some(w => w.en.trim().toLowerCase() === trimmed);
+    return p.en && findDuplicateWord(p.en, bPos, words || []);
   });
 
   const bulkLinesParsed = bulkText.split("\n").map(l => l.trim()).filter(Boolean).map(l => {
@@ -87,46 +109,127 @@ export default function AddScreen({
   }).filter(Boolean) as { en: string; ru: string }[];
 
   const bulkDuplicates = bulkLinesParsed.filter(b => {
-    const trimmed = b.en.toLowerCase();
-    return trimmed && (words || []).some(w => w.en.trim().toLowerCase() === trimmed);
+    return b.en && findDuplicateWord(b.en, bPos, words || []);
   });
+
+  const compressImageForOcr = (dataUrl: string, maxDim = 1600): Promise<string> => {
+    return new Promise((resolve) => {
+      const imgObj = new Image();
+      imgObj.onload = () => {
+        let { width, height } = imgObj;
+        if (width <= maxDim && height <= maxDim) {
+          resolve(dataUrl);
+          return;
+        }
+        if (width > height) {
+          height = Math.round((height * maxDim) / width);
+          width = maxDim;
+        } else {
+          width = Math.round((width * maxDim) / height);
+          height = maxDim;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = width;
+        canvas.height = height;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(dataUrl);
+          return;
+        }
+        ctx.drawImage(imgObj, 0, 0, width, height);
+        resolve(canvas.toDataURL("image/jpeg", 0.85));
+      };
+      imgObj.onerror = () => resolve(dataUrl);
+      imgObj.src = dataUrl;
+    });
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const f = e.target.files?.[0];
     if (!f) return;
     const reader = new FileReader();
-    reader.onload = () => setImg(reader.result as string);
+    reader.onload = async () => {
+      const compressed = await compressImageForOcr(reader.result as string);
+      setImg(compressed);
+    };
     reader.readAsDataURL(f);
   };
 
-  // Perform Gemini OCR using our server API
+  // Perform OCR using server Gemini API with fallback to client Tesseract
   const handleOCR = async () => {
     if (!img) return;
     setParsing(true);
-    setMsg("");
+    setMsg("⏳ Анализ и распознавание текста с изображения...");
     setParsed([]);
     setReview(false);
 
+    let success = false;
+
+    // Try server API first
     try {
+      const compressed = await compressImageForOcr(img);
       const res = await fetch(getApiUrl("/api/ocr"), {
         method: "POST",
         headers: getApiHeaders(),
-        body: JSON.stringify({ image: img })
+        body: JSON.stringify({ image: compressed })
       });
       const resText = await res.text();
       const data = resText ? JSON.parse(resText) : {};
-      if (data.pairs && Array.isArray(data.pairs)) {
+      if (data.pairs && Array.isArray(data.pairs) && data.pairs.length > 0) {
         setParsed(data.pairs);
         setReview(true);
-      } else {
-        setMsg("❌ Не удалось распознать слова. Попробуйте вкладку Список.");
+        setMsg("✅ Слова успешно распознаны!");
+        success = true;
       }
     } catch (err) {
-      console.error(err);
-      setMsg("❌ Ошибка при отправке изображения.");
-    } finally {
-      setParsing(false);
+      console.info("Server OCR unavailable, trying client fallback...", err);
     }
+
+    if (!success) {
+      // Fallback to client-side Tesseract.js OCR engine
+      try {
+        setMsg("⏳ Запуск оффлайн-сканера Tesseract OCR...");
+        const worker = await createWorker("eng+rus");
+        const ret = await worker.recognize(img);
+        await worker.terminate();
+
+        const rawText = ret.data.text || "";
+        const lines = rawText.split("\n").map(l => l.trim()).filter(Boolean);
+        const extracted: { en: string; ru: string; pos: string; topic: string }[] = [];
+
+        for (const line of lines) {
+          const match = line.match(/^([a-zA-Z\s'-]{2,40})[—–:\-=\t]+([\u0400-\u04FF\s,;'-]{2,50})$/);
+          if (match) {
+            const en = match[1].trim();
+            const ru = match[2].trim();
+            if (en && ru) {
+              extracted.push({ en, ru, pos: "noun", topic: "general" });
+              continue;
+            }
+          }
+          const engMatch = line.match(/^[a-zA-Z\s'-]{2,30}$/);
+          if (engMatch) {
+            const en = engMatch[0].trim();
+            if (en.length >= 2) {
+              extracted.push({ en, ru: "перевод...", pos: "noun", topic: "general" });
+            }
+          }
+        }
+
+        if (extracted.length > 0) {
+          setParsed(extracted);
+          setReview(true);
+          setMsg("✅ Слова распознаны с помощью оффлайн-сканера!");
+        } else {
+          setMsg("❌ Не удалось найти разборчивые слова на фото. Попробуйте сделать более чёткий снимок или указать ваш API ключ Gemini в Меню -> Настройки.");
+        }
+      } catch (tessErr) {
+        console.warn("Client Tesseract failed:", tessErr);
+        setMsg("❌ Не удалось распознать фото. Укажите ваш персональный API ключ Gemini в Меню -> Настройки.");
+      }
+    }
+
+    setParsing(false);
   };
 
   const handleAddPhotoWords = () => {
@@ -136,14 +239,25 @@ export default function AddScreen({
       return;
     }
 
+    let count = 0;
+    let skipped = 0;
+    const addedBatch: Word[] = [];
+
     valid.forEach(p => {
+      const enText = p.en.trim();
+      if (findDuplicateWord(enText, bPos, words || []) || findDuplicateWord(enText, bPos, addedBatch)) {
+        skipped++;
+        return;
+      }
+
       const w: Word = {
         id: Math.random().toString(36).slice(2),
         userId: stats.userId,
-        en: p.en.trim(),
+        en: enText,
         ru: (p.ru || "—").trim(),
         partOfSpeech: bPos,
         topic: bTopic,
+        categoryId: bCatId,
         note: "Из фото",
         learned: false,
         learnedDate: null,
@@ -153,14 +267,20 @@ export default function AddScreen({
         streak: 0,
         created: new Date().toISOString()
       };
+      addedBatch.push(w);
       onSaveWord(w);
+      count++;
     });
 
     setImg(null);
     setParsed([]);
     setReview(false);
-    setMsg(`✅ Успешно добавлено ${valid.length} слов!`);
-    setTimeout(() => setMsg(""), 3000);
+    if (count === 0 && skipped > 0) {
+      setMsg(`⚠️ Все ${skipped} слов уже присутствуют в словаре.`);
+    } else {
+      setMsg(`✅ Успешно добавлено ${count} слов! ${skipped > 0 ? `(Пропущено дубликатов: ${skipped})` : ""}`);
+    }
+    setTimeout(() => setMsg(""), 4000);
   };
 
   // Local heuristic offline classifier for common grammatical words to avoid network hits or API errors
@@ -782,6 +902,7 @@ export default function AddScreen({
         ru: ru.trim(),
         partOfSpeech: pos,
         topic: topic,
+        categoryId: getValidCategoryId(addCatId, categories),
         note: note.trim(),
         learned: false,
         learnedDate: null,
@@ -809,17 +930,29 @@ export default function AddScreen({
   const handleAddBulk = () => {
     const lines = bulkText.split("\n").map(l => l.trim()).filter(Boolean);
     let count = 0;
+    let skipped = 0;
+    const addedBatch: Word[] = [];
+
     lines.forEach(l => {
       const match = l.match(/^(.+?)\s*[\u2014\u2013\-:]\s*(.+)$/);
       if (!match) return;
 
+      const enText = match[1]!.trim();
+      const ruText = (match[2] || "—").trim();
+
+      if (findDuplicateWord(enText, bPos, words || []) || findDuplicateWord(enText, bPos, addedBatch)) {
+        skipped++;
+        return;
+      }
+
       const w: Word = {
         id: Math.random().toString(36).slice(2),
         userId: stats.userId,
-        en: match[1]!.trim(),
-        ru: (match[2] || "—").trim(),
+        en: enText,
+        ru: ruText,
         partOfSpeech: bPos,
         topic: bTopic,
+        categoryId: getValidCategoryId(addCatId, categories),
         note: "",
         learned: false,
         learnedDate: null,
@@ -829,13 +962,18 @@ export default function AddScreen({
         streak: 0,
         created: new Date().toISOString()
       };
+      addedBatch.push(w);
       onSaveWord(w);
       count++;
     });
 
     setBulkText("");
-    setMsg(`✅ Успешно добавлено ${count} слов!`);
-    setTimeout(() => setMsg(""), 3000);
+    if (count === 0 && skipped > 0) {
+      setMsg(`⚠️ Все ${skipped} слов уже есть в словаре (пропущены дубликаты).`);
+    } else {
+      setMsg(`✅ Успешно добавлено ${count} слов! ${skipped > 0 ? `(Пропущено дубликатов: ${skipped})` : ""}`);
+    }
+    setTimeout(() => setMsg(""), 4000);
   };
 
   const handleAddCustomTopic = () => {
@@ -911,8 +1049,14 @@ export default function AddScreen({
           />
           
           {duplicateWord && (
-            <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "13px", marginTop: "-4px", marginBottom: "8px", fontWeight: "500", padding: "6px 10px", background: "rgba(255, 77, 77, 0.1)", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)" }}>
-              ⚠️ Слово "{duplicateWord.en}" ({allPos[duplicateWord.partOfSpeech] || duplicateWord.partOfSpeech}) уже есть в словаре с переводом "{duplicateWord.ru}"! (Тема: {allTopics[duplicateWord.topic] || duplicateWord.topic})
+            <div style={{ padding: "10px 12px", background: "#fef3c7", border: "1px solid #f59e0b", borderRadius: 12, fontSize: 12, color: "#92400e", marginBottom: 10 }}>
+              ⚠️ <strong>Внимание:</strong> Слово «{duplicateWord.en}» уже есть в вашем словаре!
+              <div style={{ marginTop: 4, display: "flex", flexDirection: "column", gap: 2 }}>
+                <div>• Перевод: <strong>{duplicateWord.ru}</strong></div>
+                <div>• Часть речи: <strong>{allPos[duplicateWord.partOfSpeech] || duplicateWord.partOfSpeech}</strong></div>
+                <div>• Тема: <strong>{allTopics[duplicateWord.topic] || duplicateWord.topic}</strong></div>
+                <div>• Категория: <strong>{getCatName(duplicateWord.categoryId)}</strong></div>
+              </div>
             </div>
           )}
 
@@ -940,13 +1084,25 @@ export default function AddScreen({
             )}
           </div>
 
-          <div style={{ display: "flex", gap: 8, marginBottom: 8 }}>
-            <select className="select" style={{ flex: 1, minWidth: 0 }} value={pos} onChange={e => setPos(e.target.value)}>
-              {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+          <div style={{ marginBottom: 8 }}>
+            <label style={{ fontSize: 12, color: "#aaa", display: "block", marginBottom: 4 }}>Категория сохранения:</label>
+            <select className="select" style={{ width: "100%" }} value={addCatId} onChange={e => setAddCatId(e.target.value)}>
+              {renderCategoryOptions(categories)}
             </select>
-            <select className="select" style={{ flex: 1, minWidth: 0 }} value={topic} onChange={e => setTopic(e.target.value)}>
-              {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
-            </select>
+          </div>
+
+          <div style={{ display: "flex", gap: 8, marginBottom: 8, alignItems: "center" }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <select className="select" style={{ width: "100%" }} value={pos} onChange={e => setPos(e.target.value)}>
+                {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
+
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <select className="select" style={{ width: "100%" }} value={topic} onChange={e => setTopic(e.target.value)}>
+                {Object.entries(allTopics).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
+              </select>
+            </div>
           </div>
           
           {isClassifying && (
@@ -1018,6 +1174,9 @@ export default function AddScreen({
             <button className="btn btn-ghost" onClick={() => setReview(false)}>← Сбросить</button>
           </div>
           <div style={{ display: "flex", gap: 8, marginBottom: 10 }}>
+            <select className="select" style={{ flex: 1, minWidth: 0 }} value={bCatId} onChange={e => setBCatId(e.target.value)}>
+              {renderCategoryOptions(categories)}
+            </select>
             <select className="select" style={{ flex: 1 }} value={bPos} onChange={e => setBPos(e.target.value)}>
               {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
@@ -1074,6 +1233,9 @@ export default function AddScreen({
           )}
 
           <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
+            <select className="select" style={{ flex: 1, minWidth: 0 }} value={bCatId} onChange={e => setBCatId(e.target.value)}>
+              {renderCategoryOptions(categories)}
+            </select>
             <select className="select" style={{ flex: 1, minWidth: 0 }} value={bPos} onChange={e => setBPos(e.target.value)}>
               {Object.entries(allPos).map(([k, v]) => <option key={k} value={k}>{v}</option>)}
             </select>
@@ -1090,7 +1252,7 @@ export default function AddScreen({
         <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
           <div className="card">
             <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Пользовательские Темы</h3>
+              <h3 style={{ fontSize: 14, fontWeight: 600 }}>Пользовательские и стандартные темы</h3>
               <button className="btn btn-ghost" style={{ fontSize: 13 }} onClick={() => setShowTopicForm(!showTopicForm)}>
                 {showTopicForm ? "Скрыть" : "+ Новая"}
               </button>
@@ -1106,20 +1268,38 @@ export default function AddScreen({
               </div>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {Object.entries(allTopics).map(([k, v]) => (
                 <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,230,211,.3)", borderRadius: 999, padding: "4px 10px", fontSize: 12 }}>
-                  {v}
-                  <button style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 4 }} onClick={() => {
-                    if (stats.customTopics?.[k]) {
-                      const ct = { ...stats.customTopics };
-                      delete ct[k];
-                      onSaveProgress({ ...stats, customTopics: ct });
-                    } else {
-                      const dt = [...(stats.deletedTopics || []), k];
-                      onSaveProgress({ ...stats, deletedTopics: dt });
-                    }
-                  }}>✕</button>
+                  <span>{v}</span>
+                  <button 
+                    type="button"
+                    style={{ border: "none", background: "none", cursor: "pointer", color: "var(--terracotta, #c86d51)", marginLeft: 4, fontSize: 13, padding: 0 }} 
+                    title="Изменить название темы"
+                    onClick={() => {
+                      setEditingTopicKey(k);
+                      setEditingTopicValue(v);
+                    }}
+                  >
+                    ✏️
+                  </button>
+                  <button 
+                    type="button"
+                    style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 2, fontSize: 13, padding: 0 }} 
+                    title="Удалить тему"
+                    onClick={() => {
+                      if (stats.customTopics?.[k]) {
+                        const ct = { ...stats.customTopics };
+                        delete ct[k];
+                        onSaveProgress({ ...stats, customTopics: ct });
+                      } else {
+                        const dt = [...(stats.deletedTopics || []), k];
+                        onSaveProgress({ ...stats, deletedTopics: dt });
+                      }
+                    }}
+                  >
+                    ✕
+                  </button>
                 </span>
               ))}
             </div>
@@ -1141,22 +1321,132 @@ export default function AddScreen({
               </div>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 4 }}>
+            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
               {Object.entries(allPos).map(([k, v]) => (
                 <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,230,211,.3)", borderRadius: 999, padding: "4px 10px", fontSize: 12 }}>
-                  {v}
-                  <button style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 4 }} onClick={() => {
-                    if (stats.customPos?.[k]) {
-                      const cp = { ...stats.customPos };
-                      delete cp[k];
-                      onSaveProgress({ ...stats, customPos: cp });
-                    } else {
-                      const dp = [...(stats.deletedPos || []), k];
-                      onSaveProgress({ ...stats, deletedPos: dp });
-                    }
-                  }}>✕</button>
+                  <span>{v}</span>
+                  <button 
+                    type="button"
+                    style={{ border: "none", background: "none", cursor: "pointer", color: "var(--terracotta, #c86d51)", marginLeft: 4, fontSize: 13, padding: 0 }} 
+                    title="Изменить название части речи"
+                    onClick={() => {
+                      setEditingPosKey(k);
+                      setEditingPosValue(v);
+                    }}
+                  >
+                    ✏️
+                  </button>
+                  <button 
+                    type="button"
+                    style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 2, fontSize: 13, padding: 0 }} 
+                    title="Удалить часть речи"
+                    onClick={() => {
+                      if (stats.customPos?.[k]) {
+                        const cp = { ...stats.customPos };
+                        delete cp[k];
+                        onSaveProgress({ ...stats, customPos: cp });
+                      } else {
+                        const dp = [...(stats.deletedPos || []), k];
+                        onSaveProgress({ ...stats, deletedPos: dp });
+                      }
+                    }}
+                  >
+                    ✕
+                  </button>
                 </span>
               ))}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Topic */}
+      {editingTopicKey && (
+        <div className="overlay" onClick={() => setEditingTopicKey(null)}>
+          <div className="card overlay-card" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h3 className="section-title" style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700 }}>✏️ Изменить тему</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>
+                  Название темы (с эмодзи или без):
+                </label>
+                <input 
+                  className="input" 
+                  value={editingTopicValue} 
+                  onChange={e => setEditingTopicValue(e.target.value)} 
+                  placeholder="Например: 🎨 Хобби"
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setEditingTopicKey(null)}
+                >
+                  Отмена
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={() => {
+                    if (!editingTopicValue.trim()) return;
+                    const ct = { ...(stats.customTopics || {}), [editingTopicKey]: editingTopicValue.trim() };
+                    onSaveProgress({ ...stats, customTopics: ct });
+                    setEditingTopicKey(null);
+                    setMsg(`✅ Тема обновлена: «${editingTopicValue.trim()}»`);
+                    setTimeout(() => setMsg(""), 3000);
+                  }}
+                >
+                  Сохранить
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Modal: Edit Part of Speech */}
+      {editingPosKey && (
+        <div className="overlay" onClick={() => setEditingPosKey(null)}>
+          <div className="card overlay-card" onClick={e => e.stopPropagation()} style={{ maxWidth: 400 }}>
+            <h3 className="section-title" style={{ margin: "0 0 12px 0", fontSize: 16, fontWeight: 700 }}>✏️ Изменить часть речи</h3>
+            <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+              <div>
+                <label style={{ fontSize: 12, color: "var(--muted)", display: "block", marginBottom: 6 }}>
+                  Название части речи:
+                </label>
+                <input 
+                  className="input" 
+                  value={editingPosValue} 
+                  onChange={e => setEditingPosValue(e.target.value)} 
+                  placeholder="Например: Междометие"
+                  autoFocus
+                />
+              </div>
+              <div style={{ display: "flex", gap: 8, justifyContent: "flex-end", marginTop: 8 }}>
+                <button 
+                  type="button" 
+                  className="btn btn-secondary" 
+                  onClick={() => setEditingPosKey(null)}
+                >
+                  Отмена
+                </button>
+                <button 
+                  type="button" 
+                  className="btn btn-primary" 
+                  onClick={() => {
+                    if (!editingPosValue.trim()) return;
+                    const cp = { ...(stats.customPos || {}), [editingPosKey]: editingPosValue.trim() };
+                    onSaveProgress({ ...stats, customPos: cp });
+                    setEditingPosKey(null);
+                    setMsg(`✅ Часть речи обновлена: «${editingPosValue.trim()}»`);
+                    setTimeout(() => setMsg(""), 3000);
+                  }}
+                >
+                  Сохранить
+                </button>
+              </div>
             </div>
           </div>
         </div>

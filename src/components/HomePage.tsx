@@ -1,39 +1,40 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useMemo } from "react";
 import { Word, UserProgress } from "../types";
 import { getLocalDateString, getReviewCooldownStatus, getEffectiveDueWords, getWordNextReviewTimeMs } from "../utils";
+import { getDefaultCategories, getCategoryStats, getCategoryPath, getWordsForCategory, isCategoryPaused } from "../categories";
 
 const getWeeklyPreset = (index: number) => {
   const presets = [
     {
-      title: "🌱 Лёгкий старт",
+      title: "🌱 Активный старт",
       goals: [
-        { id: "words", text: "📚 Выучить 15 слов за неделю", target: 15, type: "words" },
-        { id: "books", text: "📖 Прочитать 1 главу за неделю", target: 1, type: "books" },
-        { id: "streak", text: "🔥 Заниматься 2 дня подряд", target: 2, type: "streak" }
+        { id: "words", text: "📚 Выучить 50 слов за неделю", target: 50, type: "words" },
+        { id: "books", text: "📖 Прочитать 3 книги/главы за неделю", target: 3, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 4 дня на этой неделе", target: 4, type: "streak" }
       ]
     },
     {
-      title: "📖 Комфортный темп",
+      title: "📖 Интенсивный темп",
       goals: [
-        { id: "words", text: "📚 Выучить 25 слов за неделю", target: 25, type: "words" },
-        { id: "books", text: "📖 Прочитать 2 главы за неделю", target: 2, type: "books" },
-        { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
+        { id: "words", text: "📚 Выучить 75 слов за неделю", target: 75, type: "words" },
+        { id: "books", text: "📖 Прочитать 5 книг/глав за неделю", target: 5, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 5 дней на этой неделе", target: 5, type: "streak" }
       ]
     },
     {
-      title: "📚 Спокойный баланс",
+      title: "📚 Максимальный вызов",
       goals: [
-        { id: "words", text: "📚 Выучить 35 слов за неделю", target: 35, type: "words" },
-        { id: "books", text: "📖 Прочитать 3 главы за неделю", target: 3, type: "books" },
-        { id: "streak", text: "🔥 Заниматься 4 дня подряд", target: 4, type: "streak" }
+        { id: "words", text: "📚 Выучить 100 слов за неделю", target: 100, type: "words" },
+        { id: "books", text: "📖 Прочитать 7 книг/глав за неделю", target: 7, type: "books" },
+        { id: "streak", text: "🔥 Заниматься каждый день (7 дней)", target: 7, type: "streak" }
       ]
     },
     {
-      title: "🧘🏽 Регулярная привычка",
+      title: "🧘🏽 Стабильная привычка",
       goals: [
-        { id: "words", text: "📚 Выучить 20 слов за неделю", target: 20, type: "words" },
-        { id: "books", text: "📖 Прочитать 2 главы за неделю", target: 2, type: "books" },
-        { id: "streak", text: "🔥 Заниматься 3 дня подряд", target: 3, type: "streak" }
+        { id: "words", text: "📚 Выучить 50 слов за неделю", target: 50, type: "words" },
+        { id: "books", text: "📖 Прочитать 4 книги/главы за неделю", target: 4, type: "books" },
+        { id: "streak", text: "🔥 Заниматься 5 дней на этой неделе", target: 5, type: "streak" }
       ]
     }
   ];
@@ -46,8 +47,8 @@ interface HomePageProps {
   stats: UserProgress;
   theme?: "light" | "dark";
   onToggleTheme?: () => void;
-  onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai") => void;
-  onStartStudy: (sessionType: "learn" | "review" | "mandatory") => void;
+  onNavigate: (view: "home" | "study" | "words" | "add" | "irregular" | "reader" | "stats" | "achievements" | "settings" | "ai" | "categories") => void;
+  onStartStudy: (sessionType: "learn" | "review" | "mandatory", isGlobal?: boolean) => void;
   onSaveWord: (word: Word) => void;
   onSaveWords: (words: Word[]) => void;
   onSaveProgress: (stats: UserProgress) => void;
@@ -60,10 +61,51 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
   const [spreadSuccess, setSpreadSuccess] = useState<string | null>(null);
   const [, setTick] = useState(0);
 
+  const categories = stats.categories && stats.categories.length > 0
+    ? stats.categories
+    : getDefaultCategories(stats.userId || "guest");
+
+  const activeCategoryId = stats.activeCategoryId || "cat_base";
+  const activeCategoryPath = getCategoryPath(activeCategoryId, categories);
+  const activeCategory = categories.find(c => c.id === activeCategoryId) || categories[0];
+  const isCurrentActivePaused = isCategoryPaused(activeCategoryId, categories);
+
+  // Filter words belonging to active category
+  const activeCatWords = useMemo(() => {
+    return getWordsForCategory(words, activeCategoryId, categories);
+  }, [words, activeCategoryId, categories]);
+
+  const activeCatStats = useMemo(() => {
+    return getCategoryStats(words, activeCategoryId, categories);
+  }, [words, activeCategoryId, categories]);
+
+  const activeNewWords = useMemo(() => activeCatWords.filter(w => !w.learned), [activeCatWords]);
+  const activeEffectiveDue = useMemo(() => getEffectiveDueWords(activeCatWords, stats), [activeCatWords, stats]);
+  const activeReviewWords = isCurrentActivePaused ? [] : activeEffectiveDue.dueWords;
+
+  // Global overdue count for comparison
+  const globalEffectiveDue = useMemo(() => getEffectiveDueWords(words, stats), [words, stats]);
+  const globalReviewWords = globalEffectiveDue.dueWords;
+
+  // Categories (excluding active) that have words ready for review
+  const otherCategoriesWithDue = useMemo(() => {
+    const cats = stats.categories && stats.categories.length > 0 ? stats.categories : getDefaultCategories(stats.userId || "guest");
+    const now = Date.now();
+
+    return cats
+      .filter(c => c.id !== activeCategoryId && !c.archived && !isCategoryPaused(c.id, cats))
+      .map(c => {
+        const catWords = getWordsForCategory(words, c.id, cats);
+        const dueCount = catWords.filter(w => w.learned && (w.streak || 0) < 10 && getWordNextReviewTimeMs(w) <= now).length;
+        return { category: c, dueCount, totalWords: catWords.length };
+      })
+      .filter(item => item.dueCount > 0);
+  }, [words, stats.categories, stats.userId, activeCategoryId]);
+
   useEffect(() => {
     const timer = setInterval(() => {
       setTick(t => t + 1);
-    }, 5000); // Update timer display every 5 seconds for great real-time precision!
+    }, 30000);
     return () => clearInterval(timer);
   }, []);
 
@@ -120,9 +162,25 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
     return t >= weekStartMs && t < weekEndMs;
   }).length;
 
-  const newWords = words.filter(w => !w.learned);
-
   const activePreset = getWeeklyPreset(currentWeekIndex);
+
+  const activeDaysThisWeek = useMemo(() => {
+    let count = 0;
+    const dailyMap = stats.daily || {};
+    Object.entries(dailyMap).forEach(([dateStr, record]) => {
+      try {
+        const t = new Date(dateStr).getTime();
+        if (t >= weekStartMs && t < weekEndMs) {
+          if ((record.learned || 0) > 0 || (record.reviewed || 0) > 0) {
+            count++;
+          }
+        }
+      } catch (e) {
+        console.error(e);
+      }
+    });
+    return count;
+  }, [stats.daily, weekStartMs, weekEndMs]);
 
   const booksThisWeek = Object.entries(stats.dailyBooksRead || {}).reduce((count, [dateStr, levels]) => {
     try {
@@ -168,22 +226,20 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
     return `через ${hrs} ч ${mins} мин`;
   };
 
-  const cooldownStatus = getReviewCooldownStatus(stats);
-  const { dueWords: reviewWords, totalOverdueCount, allDueWordsSorted } = getEffectiveDueWords(words, stats);
+  const totalOverdueCount = globalEffectiveDue.totalOverdueCount;
   
   // Find any urgent 15-minute words that are waiting for their cooldown to expire
-  const urgentWaiting = words.filter(w => w.learned && w.intervalMinutes === 15 && getNextReviewTimeMs(w) > 0);
+  const urgentWaiting = activeCatWords.filter(w => w.learned && w.intervalMinutes === 15 && getNextReviewTimeMs(w) > 0);
   const earliestUrgent = urgentWaiting.sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b))[0];
 
   // Find mandatory end-of-day repetitions
-  const mandatoryEndOfDayWords = words.filter(w => w.learned && w.isMandatoryEndOfDay);
+  const mandatoryEndOfDayWords = activeCatWords.filter(w => w.learned && w.isMandatoryEndOfDay);
 
   const executeSpreadSurplus = () => {
     if (totalOverdueCount <= 30 || isSpreading) return;
     setIsSpreading(true);
     try {
-      // Оставляем топ-30 слов, остальные распределяем на 1-3 дня вперед в одном батче
-      const surplus = allDueWordsSorted.slice(30);
+      const surplus = globalEffectiveDue.allDueWordsSorted.slice(30);
       const updatedWords: Word[] = surplus.map(w => {
         const pushDays = Math.floor(Math.random() * 3) + 1;
         const newReviewTime = Date.now() + pushDays * 24 * 3600 * 1000;
@@ -207,34 +263,48 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
     }
   };
 
-  const upcoming = learnedCount > 0 && reviewWords.length === 0 
-    ? words.filter(w => w.learned && getNextReviewTimeMs(w) > 0).sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b))[0] 
-    : null;
+  const handleToggleActiveCategoryPause = () => {
+    const updatedCats = categories.map(c => {
+      if (c.id === activeCategoryId) {
+        return { ...c, paused: !c.paused };
+      }
+      return c;
+    });
+    onSaveProgress({
+      ...stats,
+      categories: updatedCats
+    });
+  };
 
   const getUnifiedNextReviewTimeMs = () => {
-    // Find standard next review time for any uncompleted learned words
-    const uncompletedWords = words.filter(w => w.learned && (w.streak || 0) < 10);
+    const uncompletedWords = activeCatWords.filter(w => w.learned && (w.streak || 0) < 10);
     if (uncompletedWords.length === 0) return null;
     
-    const standardNextReviewTimes = uncompletedWords.map(w => getNextReviewTimeMs(w));
-    const minStandardMs = Math.min(...standardNextReviewTimes);
+    const now = Date.now();
+    const futureReviewTimes = uncompletedWords
+      .map(w => {
+        const dueMs = getWordNextReviewTimeMs(w);
+        return dueMs === Infinity ? Infinity : dueMs - now;
+      })
+      .filter(ms => ms > 0 && ms !== Infinity && !isNaN(ms));
+
+    if (futureReviewTimes.length === 0) return null;
+    const minStandardMs = Math.min(...futureReviewTimes);
     
     if (minStandardMs === Infinity || isNaN(minStandardMs)) return null;
     return minStandardMs;
   };
   
   const unifiedNextMs = getUnifiedNextReviewTimeMs();
-
-  const recallActive = reviewWords.length > 0;
   const unlockedAchievementsCount = (stats.achievements || []).length;
 
   const menuItems = [
+    { icon: "📁", title: "Categories", sub: "Категории", v: "categories" as const },
     { icon: "📖", title: "Dictionary", sub: "Словарь", v: "words" as const },
     { icon: "✨", title: "Add Word", sub: "Добавить", v: "add" as const },
     { icon: "📝", title: "Verbs", sub: "Глаголы", v: "irregular" as const },
     { icon: "📚", title: "Reading", sub: "Чтение книг", v: "reader" as const },
     { icon: "📈", title: "Insights", sub: "Статистика", v: "stats" as const },
-    { icon: "🏅", title: "Achievements", sub: `${unlockedAchievementsCount} разблок.`, v: "achievements" as const },
   ];
 
   return (
@@ -312,139 +382,252 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
         </div>
       </div>
 
-      <div style={{ marginBottom: 20 }}>
-        <button 
-          className="btn btn-primary" 
-          style={{ 
-            width: "100%", 
-            padding: "16px 20px", 
-            textAlign: "left", 
-            display: "flex", 
-            justifyContent: "space-between", 
-            alignItems: "center", 
-            borderRadius: "1.5rem", 
-            fontSize: 15, 
-            marginBottom: 10, 
-            cursor: "pointer" 
-          }}
-          onClick={() => onStartStudy("learn")} 
-        >
+      {/* ACTIVE CATEGORY CARD */}
+      <div 
+        className="card" 
+        style={{ 
+          marginBottom: 20, 
+          padding: "18px 20px", 
+          background: "var(--card)",
+          border: "2px solid var(--sage)",
+          borderRadius: "1.5rem",
+          boxShadow: "0 6px 18px rgba(143,160,128,0.12)"
+        }}
+      >
+        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
           <div>
-            <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>Study ✨</div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>Новые слова для изучения — {newWords.length}</div>
-          </div>
-          <span style={{ fontSize: 22, opacity: .8 }}>→</span>
-        </button>
-
-        {reviewWords.length > 0 ? (
-          <button 
-            className="btn" 
-            style={{ 
-              width: "100%", 
-              padding: "16px 20px", 
-              textAlign: "left", 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "center", 
-              borderRadius: "1.5rem", 
-              fontSize: 15,
-              background: "var(--sage)",
-              color: "#fff",
-              boxShadow: "0 4px 12px rgba(148,161,135,.2)",
-              border: "none",
-              cursor: "pointer"
-            }}
-            onClick={() => onStartStudy("review")}
-          >
-            <div>
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
-                Recall ✨
-              </div>
-              <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
-                {totalOverdueCount > reviewWords.length
-                  ? `${reviewWords.length} слов доступны (всего ${totalOverdueCount}) ⚡`
-                  : `${reviewWords.length} слов ждут повторения` 
-                }
-              </div>
+            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.8px", color: "var(--sage)", fontWeight: 700 }}>
+              📌 Активная категория
             </div>
-            <span style={{ fontSize: 22, opacity: .9, color: "#fff" }}>
-              ↺
-            </span>
-          </button>
-        ) : (
-          <button 
-            className="btn" 
-            style={{ 
-              width: "100%", 
-              padding: "16px 20px", 
-              textAlign: "left", 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "center", 
-              borderRadius: "1.5rem", 
-              fontSize: 15,
-              background: "rgba(255,255,255,0.03)",
-              color: "var(--text-muted)",
-              border: "1px dashed var(--border)",
-              boxShadow: "none",
-              cursor: "pointer"
-            }}
-            onClick={() => setRecallInfo(r => !r)}
-          >
-            <div>
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "var(--muted)", fontWeight: 600, display: "flex", alignItems: "center", gap: 6 }}>
-                Recall 🔒
-              </div>
-              <div style={{ fontSize: 12, marginTop: 2, color: "var(--muted)" }}>
-                {learnedCount === 0 
-                  ? "Сначала выучи слова в разделе Study 📚" 
-                  : unifiedNextMs !== null
-                    ? `Все повторено! Приходи через ${formatTimeLeftPrecise(unifiedNextMs)} 🕒`
-                    : "Все слова выучены навсегда! 🎉"
-                }
-              </div>
-            </div>
-            <span style={{ fontSize: 22, opacity: .5, color: "var(--muted)" }}>
-              🕒
-            </span>
-          </button>
-        )}
-
-        {recallInfo && (
-          <div className="card fade-in" style={{ marginTop: 8, padding: 14, fontSize: 13 }}>
-            <div style={{ fontWeight: 600, marginBottom: 8, color: "var(--sage)" }}>
-              {learnedCount === 0 ? "📝 Как начать повторение" : "📅 Расписание повторений"}
-            </div>
-            {learnedCount === 0 ? (
-              <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: 0 }}>
-                У вас пока нет выученных слов. Нажмите на кнопку <strong>Study</strong> выше или добавьте слова в разделе <strong>Dictionary</strong>, чтобы начать обучение! 🚀
-              </p>
-            ) : reviewWords.length > 0 ? (
-              <div>
-                <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0 0 10px 0" }}>
-                  Слова готовы к повторению! Нажмите на кнопку <strong>Recall</strong> выше, чтобы начать сессию.
-                </p>
-                {totalOverdueCount > reviewWords.length && (
-                  <p style={{ color: "var(--muted)", lineHeight: 1.4, margin: 0, fontSize: 12 }}>
-                    💡 Всего слов на повторение в очереди: {totalOverdueCount}. Текущая порция ограничена до {reviewWords.length} слов, чтобы избежать переутомления.
-                  </p>
-                )}
-              </div>
-            ) : (
-              <div>
-                <p style={{ color: "var(--warm)", lineHeight: 1.4, margin: "0 0 12px 0" }}>
-                  Отличная работа! Все доступные слова уже повторены.
-                </p>
-                {unifiedNextMs !== null && (
-                  <div style={{ padding: 12, borderRadius: 8, background: "rgba(255,255,255,0.02)", border: "1px solid var(--border)", textAlign: "center" }}>
-                    <div style={{ fontSize: 11, color: "var(--muted)", textTransform: "uppercase", letterSpacing: 0.5 }}>Единое время возвращения</div>
-                    <div style={{ fontSize: 20, fontWeight: 700, color: "var(--sage)", marginTop: 4 }}>
-                      🕒 {formatTimeLeftPrecise(unifiedNextMs)}
-                    </div>
-                  </div>
-                )}
+            {activeCategoryPath.length > 1 && (
+              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
+                {activeCategoryPath.map(c => c.name).join(" ➔ ")}
               </div>
             )}
+            <h2 style={{ margin: "4px 0 0 0", fontSize: 20, fontWeight: 700, color: "var(--charcoal)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+              <span>{activeCategory?.icon || "📁"}</span>
+              <span>{activeCategory?.name || "Основная категория"}</span>
+              {isCurrentActivePaused && (
+                <span className="badge badge-gray" style={{ fontSize: 10, background: "rgba(0,0,0,0.08)" }}>
+                  ⏸️ Повторения на паузе
+                </span>
+              )}
+            </h2>
+          </div>
+
+          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 20, whiteSpace: "nowrap" }}
+              onClick={handleToggleActiveCategoryPause}
+              title={isCurrentActivePaused ? "Включить повторения для этой категории" : "Отключить повторения (поставить на паузу)"}
+            >
+              {isCurrentActivePaused ? "▶️ Включить" : "⏸️ Выключить"}
+            </button>
+            <button 
+              className="btn btn-secondary" 
+              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 20, whiteSpace: "nowrap" }}
+              onClick={() => onNavigate("categories")}
+            >
+              📁 Сменить
+            </button>
+          </div>
+        </div>
+
+        {/* Category Stats */}
+        <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
+          Выучено: <strong>{activeCatStats.learned}</strong> из <strong>{activeCatStats.total}</strong> слов ({activeCatStats.percent}%)
+          {activeCatStats.dueForReview > 0 && (
+            <span style={{ color: "var(--terracotta)", fontWeight: 600, marginLeft: 8 }}>
+              • {activeCatStats.dueForReview} на повторение
+            </span>
+          )}
+        </div>
+
+        {/* Progress Bar */}
+        <div className="progress-bar" style={{ height: 8, background: "rgba(0,0,0,0.06)", borderRadius: 4, overflow: "hidden", marginBottom: 16 }}>
+          <div 
+            style={{ 
+              height: "100%", 
+              width: `${activeCatStats.percent}%`, 
+              background: "var(--sage)", 
+              borderRadius: 4,
+              transition: "width 0.3s ease"
+            }} 
+          />
+        </div>
+
+        {/* Study buttons for active category */}
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          <button 
+            className="btn btn-primary" 
+            style={{ 
+              width: "100%", 
+              padding: "14px 18px", 
+              textAlign: "left", 
+              display: "flex", 
+              justifyContent: "space-between", 
+              alignItems: "center", 
+              borderRadius: "1.2rem", 
+              fontSize: 15,
+              cursor: "pointer" 
+            }}
+            onClick={() => onStartStudy("learn", false)} 
+          >
+            <div>
+              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, color: "#fff", fontWeight: 600 }}>
+                Учить категорию ✨
+              </div>
+              <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
+                Новые слова — {activeNewWords.length}
+              </div>
+            </div>
+            <span style={{ fontSize: 20, opacity: .9 }}>→</span>
+          </button>
+
+          {activeReviewWords.length > 0 ? (
+            <button 
+              className="btn" 
+              style={{ 
+                width: "100%", 
+                padding: "14px 18px", 
+                textAlign: "left", 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center", 
+                borderRadius: "1.2rem", 
+                fontSize: 15,
+                background: "var(--sage)",
+                color: "#fff",
+                boxShadow: "0 4px 12px rgba(148,161,135,.2)",
+                border: "none",
+                cursor: "pointer"
+              }}
+              onClick={() => onStartStudy("review", false)}
+            >
+              <div>
+                <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, color: "#fff", fontWeight: 600 }}>
+                  Повторить категорию ↺
+                </div>
+                <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
+                  {activeCatStats.dueForReview} {activeCatStats.dueForReview === 1 ? "слово ждёт" : activeCatStats.dueForReview < 5 ? "слова ждут" : "слов ждут"} повторения
+                </div>
+              </div>
+              <span style={{ fontSize: 20, opacity: .9 }}>↺</span>
+            </button>
+          ) : (
+            <button 
+              className="btn" 
+              style={{ 
+                width: "100%", 
+                padding: "12px 18px", 
+                textAlign: "left", 
+                display: "flex", 
+                justifyContent: "space-between", 
+                alignItems: "center", 
+                borderRadius: "1.2rem", 
+                fontSize: 14,
+                background: "rgba(0,0,0,0.02)",
+                color: "var(--text-muted)",
+                border: "1px dashed var(--border)",
+                cursor: "pointer"
+              }}
+              onClick={() => setRecallInfo(r => !r)}
+            >
+              <div>
+                <div style={{ fontSize: 14, color: "var(--muted)", fontWeight: 600 }}>
+                  {isCurrentActivePaused ? "Повторения на паузе ⏸️" : "Recall категории 🔒"}
+                </div>
+                <div style={{ fontSize: 11, marginTop: 2, color: "var(--muted)" }}>
+                  {isCurrentActivePaused
+                    ? "Повторения выключены. Нажмите «Включить», чтобы возобновить."
+                    : activeCatStats.learned === 0 
+                      ? "Выучите новые слова этой категории" 
+                      : unifiedNextMs !== null
+                        ? `Все повторено! Приходите через ${formatTimeLeftPrecise(unifiedNextMs)}`
+                        : "Все слова выучены! 🎉"
+                  }
+                </div>
+              </div>
+              <span style={{ fontSize: 18, opacity: .5 }}>🕒</span>
+            </button>
+          )}
+        </div>
+
+        {/* Notification for other categories that have due words for SRS repetition */}
+        {otherCategoriesWithDue.length > 0 && (
+          <div style={{ marginTop: 14, paddingTop: 14, borderTop: "1px dashed rgba(0,0,0,0.12)" }}>
+            <div style={{ display: "flex", alignItems: "center", gap: 8, marginBottom: 10 }}>
+              <span style={{ fontSize: 18 }}>🔔</span>
+              <div>
+                <div style={{ fontSize: 13, fontWeight: 700, color: "var(--charcoal)" }}>
+                  Пора повторить слова в других категориях:
+                </div>
+                <div style={{ fontSize: 11, color: "var(--muted)" }}>
+                  Подошёл срок интервального повторения
+                </div>
+              </div>
+            </div>
+
+            <div style={{ display: "flex", flexDirection: "column", gap: 8 }}>
+              {otherCategoriesWithDue.map(item => (
+                <div 
+                  key={item.category.id} 
+                  style={{ 
+                    display: "flex", 
+                    justifyContent: "space-between", 
+                    alignItems: "center", 
+                    padding: "10px 12px", 
+                    background: "rgba(143,160,128,0.12)", 
+                    border: "1px solid var(--sage)", 
+                    borderRadius: 12 
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0, paddingRight: 8 }}>
+                    <div style={{ fontWeight: 700, fontSize: 13, color: "var(--charcoal)", whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                      {item.category.icon || "📁"} {item.category.name}
+                    </div>
+                    <div style={{ fontSize: 11, color: "var(--sage)", fontWeight: 600 }}>
+                      ⏰ {item.dueCount} {item.dueCount === 1 ? "слово ждёт" : item.dueCount < 5 ? "слова ждут" : "слов ждут"} повторения
+                    </div>
+                  </div>
+
+                  <button 
+                    className="btn btn-primary"
+                    style={{ padding: "6px 12px", fontSize: 12, fontWeight: 700, whiteSpace: "nowrap" }}
+                    onClick={() => {
+                      onSaveProgress({ ...stats, activeCategoryId: item.category.id });
+                      onStartStudy("review", false);
+                    }}
+                  >
+                    ↺ Повторить
+                  </button>
+                </div>
+              ))}
+            </div>
+          </div>
+        )}
+
+        {/* Global review fallback button if other categories have overdue words */}
+        {globalReviewWords.length > activeReviewWords.length && otherCategoriesWithDue.length === 0 && (
+          <div style={{ marginTop: 14, paddingTop: 12, borderTop: "1px dashed rgba(0,0,0,0.08)" }}>
+            <button 
+              className="btn btn-secondary" 
+              style={{ 
+                width: "100%", 
+                padding: "10px 14px", 
+                fontSize: 13, 
+                color: "var(--terracotta)", 
+                borderColor: "rgba(214,128,96,0.3)",
+                display: "flex",
+                justifyContent: "center",
+                alignItems: "center",
+                gap: 8
+              }}
+              onClick={() => onStartStudy("review", true)}
+            >
+              🚨 Срочно повторить из всех категорий ({globalReviewWords.length} слов) →
+            </button>
           </div>
         )}
       </div>
@@ -506,7 +689,7 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
       )}
 
       {/* ⏳ Срочное повторение (15-минутный интервал) */}
-      {earliestUrgent && reviewWords.length === 0 && (
+      {earliestUrgent && activeReviewWords.length === 0 && (
         <div className="card fade-in" style={{ 
           marginBottom: 20, 
           padding: "12px 14px", 
@@ -561,14 +744,14 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
           </span>
         </div>
         <div style={{ fontSize: 11, color: "var(--text-muted)", fontStyle: "italic", marginBottom: 14 }}>
-          Текущая неделя: с {new Date(weekStartMs).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} по {new Date(weekEndMs).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} (расчёт с вашего первого дня занятий)
+          Текущая неделя: с {new Date(weekStartMs).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })} по {new Date(weekEndMs).toLocaleDateString("ru-RU", { day: "numeric", month: "short" })}
         </div>
         <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
           {activePreset.goals.map(goal => {
             let currentVal = 0;
             if (goal.type === "words") currentVal = wordsThisWeek;
             if (goal.type === "books") currentVal = booksThisWeek;
-            if (goal.type === "streak") currentVal = stats.streak || 0;
+            if (goal.type === "streak") currentVal = activeDaysThisWeek;
 
             const percent = Math.min(Math.round((currentVal / goal.target) * 100), 100);
             const isCompleted = currentVal >= goal.target;
@@ -601,7 +784,7 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
         </div>
       </div>
 
-      {/* 🔮 Gemini AI Hub Prominent Practice Banner */}
+      {/* 🔮 Gemini AI Hub Banner */}
       <div 
         className="card fade-in animate-pulse-subtle" 
         style={{ 

@@ -6,6 +6,7 @@ interface IrregularVerbsScreenProps {
   irregular: IrregularVerb[];
   stats: UserProgress;
   onSaveVerb: (verb: IrregularVerb) => void;
+  onDeleteVerb?: (verbId: string) => void;
   onSaveProgress: (stats: UserProgress) => void;
   onBack: () => void;
 }
@@ -14,6 +15,7 @@ export default function IrregularVerbsScreen({
   irregular,
   stats,
   onSaveVerb,
+  onDeleteVerb,
   onSaveProgress,
   onBack
 }: IrregularVerbsScreenProps) {
@@ -219,68 +221,30 @@ export default function IrregularVerbsScreen({
         <button 
           className="back-btn" 
           onClick={() => { setSessionFlow("none"); }} 
-          style={{ marginBottom: 16 }}
         >
-          ← Назад
+          ← НАЗАД
         </button>
         
-        <div className="card" style={{ textAlign: "center", padding: "24px 16px" }}>
-          <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 24, marginBottom: 8, color: "var(--warm)" }}>
-            {isLearn ? "Изучение: Направление" : "Повторение: Направление"}
-          </h3>
-          <p style={{ fontSize: 13, color: "#aaa", marginBottom: 20 }}>
-            Выберите, в какую сторону вы хотите тренировать глаголы
-          </p>
+        <h2 className="section-title" style={{ textAlign: "center", marginTop: 16 }}>Направление</h2>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+          {([
+            { v: "en-ru", l: "English → Русский" },
+            { v: "ru-en", l: "Русский → English" },
+            { v: "mixed", l: "Смешанный режим" }
+          ] as const).map(d => (
             <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "16px 20px", textAlign: "left", borderRadius: "1.25rem" }}
+              key={d.v} 
+              className="card btn" 
+              style={{ textAlign: "left", padding: 18 }} 
               onClick={() => {
-                if (isLearn) startLearningFlow("mixed");
-                else startReviewFlow("mixed");
+                if (isLearn) startLearningFlow(d.v);
+                else startReviewFlow(d.v);
               }}
             >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17, color: "var(--warm)", fontWeight: 600 }}>
-                🔀 Смешанный
-              </div>
-              <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
-                Случайные подсказки на русском или английском
-              </div>
+              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18 }}>{d.l}</div>
             </button>
-
-            <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "16px 20px", textAlign: "left", borderRadius: "1.25rem" }}
-              onClick={() => {
-                if (isLearn) startLearningFlow("ru-en");
-                else startReviewFlow("ru-en");
-              }}
-            >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17, color: "var(--warm)", fontWeight: 600 }}>
-                🇷🇺 ➔ 🇬🇧 Русско-английский
-              </div>
-              <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
-                Подсказка на русском, пишите или выбирайте формы на английском
-              </div>
-            </button>
-
-            <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "16px 20px", textAlign: "left", borderRadius: "1.25rem" }}
-              onClick={() => {
-                if (isLearn) startLearningFlow("en-ru");
-                else startReviewFlow("en-ru");
-              }}
-            >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 17, color: "var(--warm)", fontWeight: 600 }}>
-                🇬🇧 ➔ 🇷🇺 Англо-русский
-              </div>
-              <div style={{ fontSize: 12, color: "#999", marginTop: 2 }}>
-                Подсказка на английском, пишите или выбирайте формы
-              </div>
-            </button>
-          </div>
+          ))}
         </div>
       </div>
     );
@@ -294,72 +258,34 @@ export default function IrregularVerbsScreen({
         <button 
           className="back-btn" 
           onClick={() => { setFlowStep("direction"); }} 
-          style={{ marginBottom: 16 }}
         >
           ← Назад
         </button>
         
-        <div className="card" style={{ textAlign: "center", padding: "24px 16px" }}>
-          <h3 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 24, marginBottom: 8, color: "var(--warm)" }}>
-            Способ повторения
-          </h3>
-          <p style={{ fontSize: 13, color: "#aaa", marginBottom: 20 }}>
-            Выберите, каким способом повторять {poolCount} глаголов
-          </p>
+        <h2 className="section-title" style={{ textAlign: "center", marginTop: 16 }}>
+          Как повторяем?
+        </h2>
+        <p style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", marginTop: 4, marginBottom: 16 }}>
+          Повторение {poolCount} выученных глаголов
+        </p>
 
-          <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+          {([
+            { v: "cards", l: "🃏 Карточки", s: "Повторение с помощью флип-карточек" },
+            { v: "practice", l: "✍️ Письменно", s: "Ввод форм V2 и V3 вручную" },
+            { v: "choice", l: "🎯 Выбор вариантов V2/V3", s: "Выбор вариантов из 4 ответов" },
+            { v: "voice", l: "🎤 Произношение", s: "Тренировка произношения форм V2 и V3 вслух" }
+          ] as const).map(m => (
             <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "14px 18px", textAlign: "left", borderRadius: "1.25rem" }}
-              onClick={() => selectReviewMethod("cards")}
+              key={m.v} 
+              className="card btn" 
+              style={{ textAlign: "left", padding: 18 }} 
+              onClick={() => selectReviewMethod(m.v)}
             >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, color: "var(--warm)", fontWeight: 600 }}>
-                🃏 Карточки
-              </div>
-              <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
-                Повторение с помощью переворачивающихся флэш-карточек
-              </div>
+              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18 }}>{m.l}</div>
+              <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{m.s}</div>
             </button>
-
-            <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "14px 18px", textAlign: "left", borderRadius: "1.25rem" }}
-              onClick={() => selectReviewMethod("practice")}
-            >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, color: "var(--warm)", fontWeight: 600 }}>
-                ✏️ Письменно
-              </div>
-              <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
-                Ввод форм V2 и V3 вручную с клавиатуры
-              </div>
-            </button>
-
-            <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "14px 18px", textAlign: "left", borderRadius: "1.25rem" }}
-              onClick={() => selectReviewMethod("choice")}
-            >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, color: "var(--warm)", fontWeight: 600 }}>
-                🎯 Выбор V2/V3
-              </div>
-              <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
-                Выбор правильных форм из 4 вариантов ответов
-              </div>
-            </button>
-
-            <button 
-              className="btn btn-outline" 
-              style={{ width: "100%", padding: "14px 18px", textAlign: "left", borderRadius: "1.25rem" }}
-              onClick={() => selectReviewMethod("voice")}
-            >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 16, color: "var(--warm)", fontWeight: 600 }}>
-                🎙️ Произношение
-              </div>
-              <div style={{ fontSize: 11, color: "#999", marginTop: 2 }}>
-                Тренировка произношения форм V2 и V3 вслух
-              </div>
-            </button>
-          </div>
+          ))}
         </div>
       </div>
     );
@@ -1609,6 +1535,20 @@ export default function IrregularVerbsScreen({
                             {v.learned ? "↩️ Изучать" : "✓ Знаю"}
                           </button>
                           <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => startEdit(v)}>✏️</button>
+                          <button 
+                            className="btn btn-ghost" 
+                            style={{ fontSize: 11, color: "var(--rose)" }} 
+                            onClick={() => {
+                              if (window.confirm(`Вы уверены, что хотите удалить глагол «${v.base}»?`)) {
+                                if (onDeleteVerb) {
+                                  onDeleteVerb(v.id);
+                                }
+                              }
+                            }}
+                            title="Удалить глагол"
+                          >
+                            🗑️
+                          </button>
                         </div>
                       </td>
                     </>

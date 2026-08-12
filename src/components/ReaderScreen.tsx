@@ -1,5 +1,6 @@
 import React, { useState, useRef, useEffect } from "react";
 import { Word, UserProgress } from "../types";
+import { getDefaultCategories, ensureBookCategories, renderCategoryOptions } from "../categories";
 import { BOOK_STORIES, SEED_WORDS, SEED_IRREGULAR, STATIC_QUIZZES, POS_DEFAULT, TOPICS_DEFAULT } from "../data";
 import { speak, getLocalDateString, getApiUrl, getApiHeaders } from "../utils";
 
@@ -30,7 +31,13 @@ export default function ReaderScreen({
   const [editModalPos, setEditModalPos] = useState("noun");
   const [editModalTopic, setEditModalTopic] = useState("general");
   const [editModalNote, setEditModalNote] = useState("");
+  const [editModalCatId, setEditModalCatId] = useState("cat_books_a1");
   const [isClassifying, setIsClassifying] = useState(false);
+
+  const rawCategories = stats.categories && stats.categories.length > 0 
+    ? stats.categories 
+    : getDefaultCategories(stats.userId || "guest");
+  const categories = ensureBookCategories(rawCategories, stats.userId || "guest");
 
   const deletedTopics = stats.deletedTopics || [];
   const deletedPos = stats.deletedPos || [];
@@ -213,6 +220,11 @@ export default function ReaderScreen({
     setEditModalPos("noun");
     setEditModalTopic("general");
     setEditModalNote(`Из книги: ${selectedLevel || "Уровень A1"}`);
+
+    const levelKey = (selectedLevel || "A1").toLowerCase();
+    const defaultCatId = categories.find(c => c.parentId === "cat_books" && (c.id === `cat_books_${levelKey}` || c.name.toLowerCase().includes(levelKey)))?.id || "cat_books_a1";
+    setEditModalCatId(defaultCatId);
+
     setIsClassifying(true);
 
     try {
@@ -270,11 +282,15 @@ export default function ReaderScreen({
     if (!editModalWord) return;
     const { en: wordEn, ru: wordRu } = editModalWord;
 
+    const trimmedEn = wordEn.trim().toLowerCase();
+    const isDup = words.some(w => w.en.trim().toLowerCase() === trimmedEn && w.partOfSpeech === editModalPos);
+    if (isDup) return;
+
     const newWord: Word = {
       id: Math.random().toString(36).slice(2),
       userId: stats.userId,
-      en: wordEn,
-      ru: wordRu || "—",
+      en: wordEn.trim(),
+      ru: wordRu.trim() || "—",
       partOfSpeech: editModalPos,
       topic: editModalTopic,
       note: editModalNote.trim(),
@@ -284,7 +300,8 @@ export default function ReaderScreen({
       correct: 0,
       wrong: 0,
       streak: 0,
-      created: new Date().toISOString()
+      created: new Date().toISOString(),
+      categoryId: editModalCatId
     };
 
     onSaveWord(newWord);
@@ -744,11 +761,18 @@ export default function ReaderScreen({
                 />
               </div>
 
-              {words.some(w => w.en.toLowerCase() === editModalWord.en.toLowerCase() && w.partOfSpeech === editModalPos) && (
+              {words.some(w => w.en.trim().toLowerCase() === editModalWord.en.trim().toLowerCase() && w.partOfSpeech === editModalPos) && (
                 <div style={{ color: "var(--rose, #ff4d4d)", fontSize: "12px", fontWeight: "500", padding: "6px 10px", background: "rgba(255, 77, 77, 0.1)", borderRadius: "8px", border: "1px solid rgba(255, 77, 77, 0.2)", lineHeight: "1.4" }}>
-                  ⚠️ Слово "{editModalWord.en}" ({allPos[editModalPos] || editModalPos}) уже есть в словаре!
+                  ⚠️ Слово "{editModalWord.en}" ({allPos[editModalPos] || editModalPos}) уже есть в словаре! Чтобы добавить его, выберите другую часть речи.
                 </div>
               )}
+
+              <div>
+                <label style={{ fontSize: "11px", color: "#aaa", display: "block", marginBottom: "4px" }}>Категория сохранения:</label>
+                <select className="select" style={{ width: "100%", marginBottom: 0 }} value={editModalCatId} onChange={e => setEditModalCatId(e.target.value)}>
+                  {renderCategoryOptions(categories)}
+                </select>
+              </div>
 
               <div>
                 <label style={{ fontSize: "11px", color: "#aaa", display: "block", marginBottom: "4px" }}>Перевод на русский:</label>
@@ -794,7 +818,7 @@ export default function ReaderScreen({
               className="btn btn-primary" 
               style={{ width: "100%", padding: "12px", marginTop: "12px" }} 
               onClick={handleSaveModalWord}
-              disabled={!editModalWord.en.trim() || !editModalWord.ru.trim()}
+              disabled={!editModalWord.en.trim() || !editModalWord.ru.trim() || words.some(w => w.en.trim().toLowerCase() === editModalWord.en.trim().toLowerCase() && w.partOfSpeech === editModalPos)}
             >
               Добавить в журнал
             </button>

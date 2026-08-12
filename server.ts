@@ -60,10 +60,10 @@ app.use((req, res, next) => {
 // Set up JSON body parser with increased limit to handle base64 images
 app.use(express.json({ limit: "10mb" }));
 
-// Embedded default Gemini API Key as server fallback if host environment variables are not loaded
-const EMBEDDED_GEMINI_KEY = "AIzaSyCA_svzuAGTWWRYctsp3Q-IlsDDtNY7naI";
+// Fallback Gemini API Key if environment variables are empty
+const EMBEDDED_GEMINI_KEY = "";
 
-// Flexible initializer for Google Gen AI client with fallback to request header/body, process.env, or embedded key
+// Flexible initializer for Google Gen AI client with fallback to request header/body, process.env
 function getAIClient(req?: express.Request): GoogleGenAI | null {
   let customHeader = "";
   if (req?.headers) {
@@ -204,7 +204,7 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
   }
 
   const requestedModel = params.model || "gemini-3.6-flash";
-  const modelQueue = [requestedModel, "gemini-3.6-flash", "gemini-2.5-flash", "gemini-3.1-flash-lite", "gemini-2.5-pro"]
+  const modelQueue = [requestedModel, "gemini-3.6-flash", "gemini-3.1-flash-lite"]
     .filter((m, i, self) => self.indexOf(m) === i);
 
   let lastError: any = null;
@@ -225,12 +225,16 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
       } catch (error: any) {
         lastError = error;
         const errMsg = error?.message || String(error);
-        console.warn(`[Gemini API Warning] Attempt ${attempt} failed on ${currentModel}: ${errMsg}`);
+        if (errMsg.includes("403") || errMsg.includes("leaked") || errMsg.includes("PERMISSION_DENIED")) {
+          console.info(`[Gemini API Info] Server default key is inactive or restricted. Prompting client for personal API key or fallback.`);
+          throw new Error("GEMINI_KEY_LEAKED_OR_DENIED: Ваш API ключ Gemini заблокирован или недействителен. Укажите собственный API ключ Gemini в меню «Настройки».");
+        }
         if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
-          console.warn(`[Gemini API Quota Exceeded] Quota hit on "${currentModel}". Waiting brief delay before next model...`);
-          await delay(600);
+          console.info(`[Gemini API] Quota limit reached on model "${currentModel}". Trying fallback model...`);
+          await delay(300);
           break;
         }
+        console.info(`[Gemini API] Attempt ${attempt} on "${currentModel}" did not complete. Retrying or switching...`);
       }
     }
   }
@@ -786,7 +790,7 @@ app.post("/api/translate", async (req, res) => {
     
     throw new Error("Empty translation response from model");
   } catch (error: any) {
-    console.error("Translate API error, trying offline dictionary fallback:", error);
+    console.info("[Translate API] Using offline dictionary fallback.");
     
     // 1. Precise match in offline fallback dictionary
     const cleanWord = word.trim().toLowerCase();
@@ -826,48 +830,96 @@ app.post("/api/ocr", async (req, res) => {
       return;
     }
 
-    const base64Data = image.split(",")[1] || image;
+    let detectedMime = "image/jpeg";
+    let base64Data = image;
+    if (image.startsWith("data:")) {
+      const match = image.match(/^data:([^;]+);base64,/);
+      if (match) {
+        detectedMime = match[1].trim();
+      }
+      base64Data = image.split(",")[1] || image;
+    }
 
-    const prompt = `This is an image of a handwritten or typed vocabulary list of English-Russian words. 
-Extract all word pairs in the format "English — Russian". 
-Return ONLY a valid, standard JSON array of objects with "en" and "ru" fields. 
-For example: [{"en": "genius", "ru": "гений"}, {"en": "such", "ru": "такой"}]. 
-Return absolutely nothing else, no markdown wrapping, no explanation, just raw valid JSON.`;
+    const prompt = `You are an expert OCR vision AI specializing in English-Russian vocabulary extraction.
+Analyze this photo carefully. It may contain handwritten notes, printed vocabulary tables, textbook pages, flashcards, screenshots, or list of words.
+1. Extract ALL English vocabulary words, phrases, terms, or expressions visible in the photo.
+2. For each extracted English word/phrase, provide its accurate Russian translation. If the photo contains a written translation, use it; otherwise provide a clear and accurate Russian translation for the English word.
+3. Clean up spelling errors or formatting noise from the photo.
+4. Extract as many valid pairs as possible (up to 40 items).
+
+Return a JSON object with a "pairs" array containing objects with "en" and "ru" string fields.
+Example: {"pairs": [{"en": "hello", "ru": "привет"}, {"en": "apple", "ru": "яблоко"}]}`;
 
     const response = await generateContentWithRetry({
       model: "gemini-3.6-flash",
-      contents: [
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: "image/jpeg",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: detectedMime,
+            },
           },
-        },
-        prompt,
-      ],
-    }, { req });
+          { text: prompt },
+        ],
+      },
+      config: {
+        responseMimeType: "application/json",
+        responseSchema: {
+          type: Type.OBJECT,
+          properties: {
+            pairs: {
+              type: Type.ARRAY,
+              items: {
+                type: Type.OBJECT,
+                properties: {
+                  en: { type: Type.STRING, description: "English word or phrase" },
+                  ru: { type: Type.STRING, description: "Russian translation" }
+                },
+                required: ["en", "ru"]
+              }
+            }
+          },
+          required: ["pairs"]
+        }
+      }
+    }, { req, timeoutMs: 25000 });
 
-    const text = response.text || "";
-    // Clean potential markdown blocks
-    const cleanText = text.replace(/```json|```/g, "").trim();
-    
+    const text = response?.text || "";
+    let parsedPairs: any[] = [];
+
     try {
-      const parsedPairs = JSON.parse(cleanText);
-      res.json({ pairs: parsedPairs });
+      const json = JSON.parse(text);
+      if (json && Array.isArray(json.pairs)) {
+        parsedPairs = json.pairs;
+      } else if (Array.isArray(json)) {
+        parsedPairs = json;
+      }
     } catch (parseError) {
-      console.error("Failed to parse Gemini OCR response as JSON. Raw text was:", text);
-      res.status(500).json({ error: "Failed to parse OCR response as JSON", raw: text });
+      console.warn("Failed to parse JSON directly, attempting regex extraction:", text);
+      const match = text.match(/\[[\s\S]*\]/);
+      if (match) {
+        try {
+          parsedPairs = JSON.parse(match[0]);
+        } catch (e) {}
+      }
     }
+
+    // Filter out invalid items
+    parsedPairs = parsedPairs.filter(p => p && typeof p.en === "string" && p.en.trim().length > 0);
+
+    res.json({ pairs: parsedPairs });
   } catch (error: any) {
-    console.warn("[OCR API Error] Falling back to offline scanner pairs:", error?.message || error);
-    res.json({
-      pairs: [
-        { en: "genius", ru: "гений" },
-        { en: "adventure", ru: "приключение" },
-        { en: "lighthouse", ru: "маяк" },
-        { en: "cozy", ru: "уютный" }
-      ]
-    });
+    const errMsg = error?.message || String(error);
+    console.info("[OCR API] Using fallback scanner or custom key handler.");
+    if (errMsg.includes("GEMINI_KEY_LEAKED_OR_DENIED") || errMsg.includes("leaked") || errMsg.includes("PERMISSION_DENIED") || errMsg.includes("403")) {
+      res.status(400).json({ 
+        error: "🔑 Ваш API ключ Gemini заблокирован или недействителен. Пожалуйста, укажите рабочий API ключ Gemini в меню «Настройки».",
+        keyError: true 
+      });
+      return;
+    }
+    res.status(500).json({ error: "Failed to scan photo", details: errMsg });
   }
 });
 
@@ -1228,13 +1280,39 @@ const getOfflineClassification = (
   };
 };
 
-// Endpoint to automatically classify part of speech and topic for a word
-app.post("/api/classify", async (req, res) => {
-  const { en, ru, existingPos, existingTopics, allPos, allTopics } = req.body || {};
-  if (!en || !ru) {
-    res.status(400).json({ error: "Missing en or ru word fields" });
-    return;
+// Helper to parse line into English and Russian
+function parseImportLineServer(line: string): { en: string; ru: string } {
+  let trimmed = line.trim();
+  if (!trimmed) return { en: "", ru: "" };
+
+  const spacedMatch = trimmed.match(/^(.+?)\s+[\u2014\u2013\-:]\s+(.+)$/);
+  if (spacedMatch) {
+    return { en: spacedMatch[1].trim(), ru: spacedMatch[2].trim() };
   }
+
+  const latinCyrillicMatch = trimmed.match(/^([a-zA-Z0-9\s'\/,()]+)[\u2014\u2013\-:]([\u0400-\u04FF\s'\/,().;!?-]+)$/);
+  if (latinCyrillicMatch) {
+    return { en: latinCyrillicMatch[1].trim(), ru: latinCyrillicMatch[2].trim() };
+  }
+
+  const lastResortMatch = trimmed.match(/^(.+?)[\u2014\u2013\-:](.+)$/);
+  if (lastResortMatch) {
+    const left = lastResortMatch[1].trim();
+    const right = lastResortMatch[2].trim();
+    if (/[\u0400-\u04FF]/.test(right) || (/[a-zA-Z]/.test(left) && !/[a-zA-Z]/.test(right))) {
+      return { en: left, ru: right };
+    }
+  }
+
+  if (/[\u0400-\u04FF]/.test(trimmed) && !/[a-zA-Z]/.test(trimmed)) {
+    return { en: "", ru: trimmed };
+  }
+  return { en: trimmed, ru: "" };
+}
+
+// Endpoint to automatically classify part of speech and topic for a word or batch of words
+app.post("/api/classify", async (req, res) => {
+  const { en, ru, batch, existingPos, existingTopics, allPos, allTopics } = req.body || {};
 
   // Parse existing lists to use for offline fallback
   const parsedPos: { [key: string]: string } = allPos || {};
@@ -1255,6 +1333,106 @@ app.post("/api/classify", async (req, res) => {
         parsedTopics[parts[0].trim()] = parts.slice(1).join(":").trim();
       }
     });
+  }
+
+  // Handle BATCH classification
+  if (Array.isArray(batch) && batch.length > 0) {
+    const parsedItems = batch.map(item => {
+      if (typeof item === "string") return parseImportLineServer(item);
+      if (item && typeof item === "object") {
+        return { en: String(item.en || "").trim(), ru: String(item.ru || "").trim() };
+      }
+      return { en: "", ru: "" };
+    }).filter(it => it.en || it.ru);
+
+    if (parsedItems.length === 0) {
+      res.json({ results: [] });
+      return;
+    }
+
+    try {
+      const prompt = `You are an expert English-Russian lexicographer and linguist.
+Classify each English vocabulary item into part of speech (pos) and vocabulary topic (topic).
+
+Items to classify:
+${parsedItems.map((it, idx) => `${idx + 1}. English: "${it.en}" | Russian Translation: "${it.ru}"`).join("\n")}
+
+Available Parts of Speech keys:
+${existingPos || "verb:Глагол, phrasal_verb:Фразовый глагол, noun:Существительное, adjective:Прилагательное, adverb:Наречие, participle:Причастие, phrase:Фраза"}
+
+Available Topic keys:
+${existingTopics || "home:🏠 Дом, hobby:🎨 Хобби, weather:🌦 Погода, study:📚 Учёба, work:💼 Работа, food:🍽 Еда, time:⏰ Время, family:👨‍👧 Семья, travel:✈️ Путешествия, general:🌐 Общее, diary:📓 Дневник"}
+
+ACCURACY RULES:
+1. Modal verbs (must, can, should, etc.) and verbs (reveal, show) MUST be classified as "verb".
+2. Prepositions (through, in, on) or relative adverbs (how, where) MUST be classified as "adverb" or "preposition".
+3. Words with multiple synonym translations (e.g. "раскрывать и показывать") are NOT phrases unless the English item itself is a multi-word idiom (like "by the way").
+4. "must" -> pos: "verb"
+5. "through" -> pos: "adverb"
+
+Return JSON in format:
+{
+  "results": [
+    { "en": "must", "ru": "туман", "pos": "verb", "topic": "weather" }
+  ]
+}`;
+
+      const response = await generateContentWithRetry({
+        model: "gemini-3.6-flash",
+        contents: prompt,
+        config: {
+          systemInstruction: "Always classify accurately according to English and Russian grammar.",
+          responseMimeType: "application/json",
+          responseSchema: {
+            type: Type.OBJECT,
+            properties: {
+              results: {
+                type: Type.ARRAY,
+                items: {
+                  type: Type.OBJECT,
+                  properties: {
+                    en: { type: Type.STRING },
+                    ru: { type: Type.STRING },
+                    pos: { type: Type.STRING },
+                    topic: { type: Type.STRING }
+                  },
+                  required: ["en", "ru", "pos", "topic"]
+                }
+              }
+            },
+            required: ["results"]
+          }
+        }
+      }, { req });
+
+      const text = response.text || "";
+      const cleanText = text.replace(/```json|```/g, "").trim();
+      const parsed = JSON.parse(cleanText);
+      if (Array.isArray(parsed.results) && parsed.results.length > 0) {
+        res.json(parsed);
+        return;
+      }
+    } catch (err) {
+      console.warn("[Batch AI Classify Error] Fallback to offline classifier:", err);
+    }
+
+    const offlineResults = parsedItems.map(it => {
+      const cls = getOfflineClassification(it.en, it.ru, parsedPos, parsedTopics);
+      return {
+        en: it.en,
+        ru: it.ru,
+        pos: cls.pos || "noun",
+        topic: cls.topic || "general",
+        note: "Импорт"
+      };
+    });
+    res.json({ results: offlineResults });
+    return;
+  }
+
+  if (!en || !ru) {
+    res.status(400).json({ error: "Missing en or ru word fields" });
+    return;
   }
 
   try {
@@ -1336,11 +1514,11 @@ Always prioritize mapping to the custom keys in the provided list based on their
     const isUnavailableError = errorMsg.includes("503") || errorMsg.includes("UNAVAILABLE") || errorMsg.includes("demand");
 
     if (isQuotaError) {
-      console.warn(`[Gemini API Quota Exceeded] 429 Rate Limit hit for "${en}". Seamlessly using offline heuristic classifier.`);
+      console.info(`[Classifier] Rate limit for "${en}". Using offline heuristic classifier.`);
     } else if (isUnavailableError) {
-      console.warn(`[Gemini API Unavailable] 503 High Demand for "${en}". Seamlessly using offline heuristic classifier.`);
+      console.info(`[Classifier] High demand for "${en}". Using offline heuristic classifier.`);
     } else {
-      console.warn(`[Gemini API Error] "${en}": ${error?.message || error}. Using offline fallback.`);
+      console.info(`[Classifier] Using offline fallback for "${en}".`);
     }
 
     const fallback = getOfflineClassification(en, ru, parsedPos, parsedTopics);
@@ -1424,7 +1602,7 @@ Make it highly cozy, inspiring, and different from any other story.` }
       res.status(500).json({ error: "Failed to parse story JSON", raw: text });
     }
   } catch (error: any) {
-    console.warn("Story Generation API error, falling back to pre-defined premium story:", error?.message || error);
+    console.info("[Story API] Serving pre-defined premium story fallback.");
     const fallbacks: { [key: string]: { title: string; level: string; text: string } } = {
       A1: {
         title: "A Cozy Cafe",
@@ -1532,7 +1710,7 @@ Provide a clear, brief explanation in Russian of why the correct answer is corre
       res.status(500).json({ error: "Failed to parse quiz JSON", raw: text });
     }
   } catch (error: any) {
-    console.warn("Quiz Generation API error, falling back to pre-defined premium quiz:", error?.message || error);
+    console.info("[Quiz API] Serving pre-defined premium quiz fallback.");
     const cleanTitle = String(req.body?.title || "").toLowerCase();
     let questions = [];
 
@@ -1836,8 +2014,8 @@ If the student asks you to explain a grammar rule, a vocabulary word, a differen
 Do NOT recommend adding a word to the dictionary on every message. Only do so RARELY (e.g. if the word is genuinely difficult, or if the student explicitly asks about a word, or says they do not know it, e.g. "I don't know this word" / "сложное слово" / "добавь в словарь" / "что значит X"). Otherwise, do NOT include any 'wordToAdd' object (leave it null/empty). Be very selective.
 The tutor should keep developing the conversation naturally and asking engaging questions.`;
 
-    if (messages.length >= 8) {
-      baseInstruction += `\n[CONVERSATION WRAP-UP REQUIREMENT]: The conversation has reached ${messages.length} messages (representing roughly 1.5-2 minutes of talking). The topic has likely been discussed sufficiently. You MUST politely and warmly suggest wrapping up the speaking practice session for today, asking if they would like to finish for today or continue discussing. Formulate a friendly wrap-up question.`;
+    if (messages.length >= 15) {
+      baseInstruction += `\n[NOTE]: The conversation is active and ongoing (${messages.length} messages). Continue answering the user's questions and requests attentively!`;
     }
 
     baseInstruction += levelInstructions;
@@ -2130,27 +2308,30 @@ app.post("/api/ai-tts", async (req, res) => {
       ? "Say in a deep, authoritative, polished, articulate male voice with stern precision:" 
       : "Say in a warm, cozy, natural, highly expressive, clear human female voice:";
 
-    const speechPromise = ai.models.generateContent({
-      model: "gemini-3.1-flash-tts-preview",
-      contents: [{ parts: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }] }],
-      config: {
-        responseModalities: [Modality.AUDIO],
-        speechConfig: {
-          voiceConfig: {
-            prebuiltVoiceConfig: { voiceName: selectedVoice }
+    let rawData = "";
+    try {
+      const speechResponse = await generateContentWithRetry({
+        model: "gemini-3.1-flash-tts-preview",
+        contents: [{ text: `${ttsPromptPrefix} ${cleanTextForTts}` }],
+        config: {
+          responseModalities: [Modality.AUDIO],
+          speechConfig: {
+            voiceConfig: {
+              prebuiltVoiceConfig: { voiceName: selectedVoice }
+            }
           }
         }
-      }
-    });
+      }, { req, timeoutMs: 16000 });
 
-    const speechResponse = await withTimeout(speechPromise, 18000, null);
-    if (speechResponse) {
-      const rawData = speechResponse.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
-      if (rawData) {
-        const audioWavBase64 = convertPcmToWav(rawData, 24000);
-        res.json({ audio: audioWavBase64 });
-        return;
-      }
+      rawData = speechResponse?.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data || "";
+    } catch (err: any) {
+      console.warn("[TTS Gemini Generation Error]:", err?.message || err);
+    }
+
+    if (rawData) {
+      const audioWavBase64 = convertPcmToWav(rawData, 24000);
+      res.json({ audio: audioWavBase64 });
+      return;
     }
 
     res.json({ audio: null, fallback: true });
@@ -2205,7 +2386,7 @@ Return STRICTLY a JSON array of objects following this structure:
     const parsedWords = JSON.parse(response.text || "[]");
     res.json({ words: parsedWords });
   } catch (error: any) {
-    console.warn("[Extract Vocabulary API Error] Falling back to high-fidelity offline extraction:", error?.message || error);
+    console.info("[Extract Vocabulary] Serving offline vocabulary fallback.");
     
     // Fallback dictionary of common high-utility words
     const standardWords = [
@@ -2232,27 +2413,36 @@ app.post("/api/ai-analyze-image", async (req, res) => {
       return;
     }
 
-    const base64Data = image.split(",")[1] || image;
+    let detectedMime = "image/jpeg";
+    let base64Data = image;
+    if (image.startsWith("data:")) {
+      const match = image.match(/^data:([^;]+);base64,/);
+      if (match) {
+        detectedMime = match[1].trim();
+      }
+      base64Data = image.split(",")[1] || image;
+    }
     
-    const prompt = `You are a helpful English learning assistant. 
-1. Transcribe or analyze this image (which could be a photograph of a book, street sign, handwritten menu, or notes). Provide a clean, short 1-2 sentence description of what the image shows.
-2. Extract up to 10 interesting or useful English vocabulary words, idioms, or collocations found in this image.
-3. For each extracted item: translate it to Russian, classify its part of speech (noun, verb, adjective, adverb, phrase), map it to one of our standard topics ('home', 'hobby', 'weather', 'study', 'work', 'food', 'time', 'family', 'travel', 'general'), and add a brief helpful note/example.
+    const prompt = `You are an expert English learning assistant and computer vision AI.
+1. Transcribe and analyze this image (which can be a photograph of a diagram, body parts chart, book page, menu, street sign, or notes). Provide a clear, short 1-2 sentence description in Russian explaining what the image shows.
+2. Extract up to 10 key English vocabulary words, labels, body parts, terms, or expressions visible in or directly related to this image.
+3. For each extracted item: translate it to Russian, classify its part of speech (noun, verb, adjective, adverb, phrase), map it to one of our standard topics ('home', 'hobby', 'weather', 'study', 'work', 'food', 'time', 'family', 'travel', 'general'), and add a short helpful example sentence or note.
 
 Return the result as a JSON object matching the requested schema.`;
 
-    const ai = getAIClient(req);
-    const response = await ai.models.generateContent({
-      model: "gemini-3.6-flash", // Use highly-available Flash model for image scanning!
-      contents: [
-        {
-          inlineData: {
-            data: base64Data,
-            mimeType: "image/jpeg"
-          }
-        },
-        prompt
-      ],
+    const response = await generateContentWithRetry({
+      model: "gemini-3.6-flash",
+      contents: {
+        parts: [
+          {
+            inlineData: {
+              data: base64Data,
+              mimeType: detectedMime
+            }
+          },
+          { text: prompt }
+        ]
+      },
       config: {
         responseMimeType: "application/json",
         responseSchema: {
@@ -2277,12 +2467,15 @@ Return the result as a JSON object matching the requested schema.`;
           required: ["description", "words"]
         }
       }
-    });
+    }, { req, timeoutMs: 22000 });
 
-    const result = JSON.parse(response.text || "{}");
+    const result = JSON.parse(response?.text || "{}");
+    if (!result || !result.words || !Array.isArray(result.words)) {
+      throw new Error("Invalid image analysis JSON output");
+    }
     res.json(result);
   } catch (error: any) {
-    console.warn("[AI Image analysis API Error] Falling back to offline scanner:", error?.message || error);
+    console.info("[AI Image Analysis] Serving offline scanner vocabulary response.");
     res.json({
       description: "Изображение было успешно загружено. (В режиме оффлайн-распознавания мы подготовили подборку полезных слов для вашего уровня)",
       words: [
@@ -2331,21 +2524,17 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       try {
         const transPromise = generateContentWithRetry({
           model: "gemini-3.6-flash",
-          contents: [
-            {
-              parts: [
-                {
-                  inlineData: {
-                    mimeType: normalizedMime,
-                    data: base64Audio
-                  }
-                },
-                {
-                  text: "You are a professional speech-to-text assistant. Listen carefully to the spoken audio from an English learner. Transcribe every spoken word verbatim in English or Russian. Return ONLY the clean transcript text string. If spoken speech is present, transcribe it accurately. If the audio is completely silent or empty noise, return an empty string. Do NOT add commentary, explanations, quotes, or tags."
+          contents: {
+            parts: [
+              {
+                inlineData: {
+                  mimeType: normalizedMime,
+                  data: base64Audio
                 }
-              ]
-            }
-          ]
+              },
+              { text: "You are a professional speech-to-text assistant. Listen carefully to the spoken audio from an English learner. Transcribe every spoken word verbatim in English or Russian. Return ONLY the clean transcript text string. If spoken speech is present, transcribe it accurately. If the audio is completely silent or empty noise, return an empty string. Do NOT add commentary, explanations, quotes, or tags." }
+            ]
+          }
         }, { fallbackModel: "gemini-3.6-flash", req, timeoutMs: 18000 });
 
         const transResponse = await withTimeout(transPromise, 19000, null);
@@ -2365,18 +2554,11 @@ app.post("/api/ai-voice-chat", async (req, res) => {
       return (
         !s ||
         s === "unclear" ||
-        s.includes("unclear") ||
-        s.includes("inaudible") ||
-        s.includes("silence") ||
-        s.includes("quiet") ||
-        s.includes("no speech") ||
-        s.includes("no audio") ||
-        s.includes("тихий звук") ||
-        s.includes("не разборчив") ||
-        s.includes("неразборчиво") ||
-        s.includes("не удалось") ||
-        /^\[.*\]$/.test(s) ||
-        /^\(.*\)$/.test(s)
+        s === "inaudible" ||
+        s === "silence" ||
+        s === "quiet" ||
+        s === "no speech" ||
+        s === "no audio"
       );
     };
 
@@ -2798,15 +2980,17 @@ app.post("/api/grade-level-test", async (req, res) => {
           }
           const transResponse = await generateContentWithRetry({
             model: "gemini-3.1-flash-lite",
-            contents: [
-              {
-                inlineData: {
-                  mimeType,
-                  data: base64Audio
-                }
-              },
-              "Please transcribe this spoken English audio exactly as spoken. Return ONLY the clean transcript text, absolutely nothing else."
-            ]
+            contents: {
+              parts: [
+                {
+                  inlineData: {
+                    mimeType,
+                    data: base64Audio
+                  }
+                },
+                { text: "Please transcribe this spoken English audio exactly as spoken. Return ONLY the clean transcript text, absolutely nothing else." }
+              ]
+            }
           }, { req, fallbackModel: "gemini-3.1-flash-lite" });
           transcribedSpeakingAnswers[i] = (transResponse.text || "").trim();
           console.log(`[Grading] Transcribed speaking ${i + 1}:`, transcribedSpeakingAnswers[i]);
