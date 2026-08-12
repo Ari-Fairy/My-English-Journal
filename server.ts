@@ -227,7 +227,7 @@ async function generateContentWithRetry(params: any, options: { maxRetries?: num
         const errMsg = error?.message || String(error);
         if (errMsg.includes("403") || errMsg.includes("leaked") || errMsg.includes("PERMISSION_DENIED")) {
           console.info(`[Gemini API Info] Server default key is inactive or restricted. Prompting client for personal API key or fallback.`);
-          throw new Error("GEMINI_KEY_LEAKED_OR_DENIED: Ваш API ключ Gemini заблокирован или недействителен. Укажите собственный API ключ Gemini в меню «Настройки».");
+          throw new Error("GEMINI_KEY_LEAKED_OR_DENIED: ИИ-сервис временно недоступен, активирован оффлайн-режим.");
         }
         if (errMsg.includes("429") || errMsg.includes("RESOURCE_EXHAUSTED") || errMsg.includes("quota")) {
           console.info(`[Gemini API] Quota limit reached on model "${currentModel}". Trying fallback model...`);
@@ -914,7 +914,7 @@ Example: {"pairs": [{"en": "hello", "ru": "привет"}, {"en": "apple", "ru":
     console.info("[OCR API] Using fallback scanner or custom key handler.");
     if (errMsg.includes("GEMINI_KEY_LEAKED_OR_DENIED") || errMsg.includes("leaked") || errMsg.includes("PERMISSION_DENIED") || errMsg.includes("403")) {
       res.status(400).json({ 
-        error: "🔑 Ваш API ключ Gemini заблокирован или недействителен. Пожалуйста, укажите рабочий API ключ Gemini в меню «Настройки».",
+        error: "Сканирование временно переключено на оффлайн-режим. Запустите повторное сканирование.",
         keyError: true 
       });
       return;
