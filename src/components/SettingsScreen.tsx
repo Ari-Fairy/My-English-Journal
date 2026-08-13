@@ -461,18 +461,18 @@ export default function SettingsScreen({
       </div>
 
       {/* Danger Zone */}
-      <div style={{ display: "flex", flexDirection: "column", gap: "10px", marginTop: "16px" }}>
+      <div style={{ display: "flex", flexDirection: "column", gap: "12px", marginTop: "20px" }}>
         <button 
           className="btn" 
           style={{ 
             width: "100%", 
-            padding: 13, 
+            padding: "15px 18px", 
             color: "var(--sage)", 
-            border: "1.5px solid rgba(124, 139, 114, 0.35)", 
-            borderRadius: "999px",
-            background: "transparent",
-            fontSize: 14,
-            fontWeight: 500
+            border: "2px solid var(--sage)", 
+            borderRadius: "1.2rem",
+            background: "rgba(143,160,128,0.08)",
+            fontSize: 15,
+            fontWeight: 600
           }} 
           onClick={handleResetProgress}
           disabled={loading}
@@ -482,7 +482,16 @@ export default function SettingsScreen({
 
         <button 
           className="btn" 
-          style={{ width: "100%", padding: 13, color: "var(--rose)", border: "1.5px solid rgba(212,165,165,.25)", borderRadius: "999px" }} 
+          style={{ 
+            width: "100%", 
+            padding: "15px 18px", 
+            color: "var(--rose)", 
+            border: "2px solid var(--rose)", 
+            borderRadius: "1.2rem",
+            background: "rgba(214,128,96,0.08)",
+            fontSize: 15,
+            fontWeight: 600
+          }} 
           onClick={handleWipeData}
           disabled={loading}
         >
@@ -494,12 +503,14 @@ export default function SettingsScreen({
             className="btn" 
             style={{ 
               width: "100%", 
-              padding: 13, 
+              padding: "15px 18px", 
               color: "#fff", 
               background: "var(--rose)", 
-              borderRadius: "999px",
-              fontWeight: 600,
-              boxShadow: "0 4px 14px rgba(181, 93, 76, 0.18)"
+              border: "2px solid var(--rose)",
+              borderRadius: "1.2rem",
+              fontSize: 15,
+              fontWeight: 700,
+              boxShadow: "0 4px 14px rgba(181, 93, 76, 0.2)"
             }} 
             onClick={handleDeleteAccount}
             disabled={loading}

@@ -970,13 +970,43 @@ export default function App() {
       {/* Welcome Streak Overlay */}
       {welcome && progress.streak > 0 && (
         <div className="overlay" onClick={() => setWelcome(false)}>
-          <div className="card overlay-card" style={{ textAlign: "center" }} onClick={e => e.stopPropagation()}>
-            <div style={{ fontSize: 44, marginBottom: 10 }}>✨</div>
-            <h2 className="section-title">С возвращением!</h2>
-            <p className="sub-text">
-              Ваша текущая серия: <span style={{ color: "var(--rose)", fontWeight: 700 }}>{progress.streak} дней</span>
+          <div 
+            className="card overlay-card" 
+            style={{ 
+              textAlign: "center", 
+              padding: "32px 24px", 
+              maxWidth: 360, 
+              width: "88%",
+              borderRadius: "1.75rem",
+              boxShadow: "0 16px 48px rgba(0,0,0,0.14)",
+              background: "var(--card)",
+              border: "1px solid rgba(255,255,255,0.8)",
+              position: "relative"
+            }} 
+            onClick={e => e.stopPropagation()}
+          >
+            <div style={{ fontSize: 42, marginBottom: 10 }}>✨</div>
+            <h2 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 24, fontWeight: 500, color: "var(--charcoal)", margin: "0 0 10px 0" }}>
+              С возвращением!
+            </h2>
+            <p style={{ textTransform: "uppercase", letterSpacing: "0.8px", fontSize: 12.5, color: "var(--muted)", margin: "0 0 22px 0" }}>
+              ВАША ТЕКУЩАЯ СЕРИЯ: <span style={{ color: "var(--rose)", fontWeight: 700 }}>{progress.streak} {progress.streak === 1 ? "ДЕНЬ" : progress.streak < 5 ? "ДНЯ" : "ДНЕЙ"}</span>
             </p>
-            <button className="btn btn-primary" style={{ width: "100%", marginTop: 14, padding: 13 }} onClick={() => setWelcome(false)}>
+            <button 
+              className="btn btn-primary" 
+              style={{ 
+                width: "100%", 
+                padding: "16px 20px", 
+                fontSize: 17, 
+                fontWeight: 700, 
+                borderRadius: "1.25rem", 
+                cursor: "pointer",
+                background: "var(--rose)",
+                color: "#fff",
+                boxShadow: "0 6px 20px rgba(181, 93, 76, 0.22)"
+              }} 
+              onClick={() => setWelcome(false)}
+            >
               Продолжить учебу →
             </button>
           </div>

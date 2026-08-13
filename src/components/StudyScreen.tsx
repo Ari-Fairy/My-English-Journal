@@ -58,6 +58,8 @@ export default function StudyScreen({
   const [ans, setAns] = useState("");
   const [ok, setOk] = useState<boolean | null>(null);
   const okRef = useRef<boolean | null>(null);
+  const touchStartX = useRef<number | null>(null);
+  const touchStartY = useRef<number | null>(null);
   const updateOk = (val: boolean | null) => {
     setOk(val);
     okRef.current = val;
@@ -884,49 +886,96 @@ export default function StudyScreen({
           <div className="progress-fill" style={{ width: `${(idx / queue.length) * 100}%` }} />
         </div>
         <div 
-          className="card" 
+          className="flip-card" 
           style={{ 
             marginTop: 18, 
-            padding: 0, 
-            borderRadius: "1.75rem", 
-            overflow: "hidden",
-            transition: "all 0.25s ease",
-            border: answered 
-              ? (ok ? "2.5px solid var(--sage)" : "2.5px solid var(--rose)") 
-              : "1px solid rgba(180,180,180,.2)",
-            boxShadow: answered
-              ? (ok ? "0 8px 20px rgba(148,161,135,.2)" : "0 8px 20px rgba(220,95,95,.15)")
-              : "none"
+            height: 255, 
+            cursor: "pointer"
+          }}
+          onTouchStart={(e) => {
+            touchStartX.current = e.touches[0].clientX;
+            touchStartY.current = e.touches[0].clientY;
+          }}
+          onTouchEnd={(e) => {
+            if (touchStartX.current === null || touchStartY.current === null) return;
+            const diffX = e.changedTouches[0].clientX - touchStartX.current;
+            const diffY = e.changedTouches[0].clientY - touchStartY.current;
+            if (Math.abs(diffX) > 60 && Math.abs(diffX) > Math.abs(diffY)) {
+              if (diffX < 0) {
+                if (!answered) handleAns("__dont_remember__"); else next();
+              } else {
+                if (!answered) handleAns(expected); else next();
+              }
+            }
+            touchStartX.current = null;
+            touchStartY.current = null;
+          }}
+          onClick={() => {
+            if (!answered) {
+              setAns(cardFlipped ? "" : "flipped");
+            }
           }}
         >
-          <div className="flip-card" onClick={() => { if (!answered) setAns(cardFlipped ? "" : "flipped"); }}>
-            <div className={`flip-inner ${cardFlipped ? "flipped" : ""}`}>
-              <div className="flip-front" style={{ padding: "20px 16px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", boxSizing: "border-box" }}>
-                <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "Русский" : "English"}</div>
-                <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.ru : cur.en}</div>
-                <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
-                  {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
-                  {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
-                </div>
-                <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>Нажми чтобы увидеть перевод →</div>
-                <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.ru : cur.en, pDir === "en-ru" ? "ru-RU" : "en-US"); }}>🔊</button>
+          <div className={`flip-inner ${cardFlipped ? "flipped" : ""}`}>
+            <div 
+              className="flip-front" 
+              style={{ 
+                padding: "20px 16px", 
+                display: "flex", 
+                flexDirection: "column", 
+                justifyContent: "center", 
+                alignItems: "center", 
+                boxSizing: "border-box",
+                borderRadius: "1.75rem",
+                border: answered 
+                  ? (ok ? "2.5px solid var(--sage)" : "2.5px solid var(--rose)") 
+                  : "1.5px solid rgba(181, 93, 76, 0.2)",
+                boxShadow: answered
+                  ? (ok ? "0 8px 24px rgba(148,161,135,.25)" : "0 8px 24px rgba(220,95,95,.2)")
+                  : "0 10px 30px rgba(0,0,0,0.06)"
+              }}
+            >
+              <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "Русский" : "English"}</div>
+              <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.ru : cur.en}</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
+                {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
+                {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
               </div>
-              <div className="flip-back" style={{ padding: "20px 16px", display: "flex", flexDirection: "column", justifyContent: "center", alignItems: "center", boxSizing: "border-box" }}>
-                {cardFlipped ? (
-                  <>
-                    <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
-                    <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.en : cur.ru}</div>
-                    <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
-                      {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
-                      {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
-                    </div>
-                    <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>← Нажми чтобы вернуться</div>
-                    <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
-                  </>
-                ) : (
-                  <div style={{ height: "100%" }} />
-                )}
-              </div>
+              <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>Нажми или смахни карточку →</div>
+              <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.ru : cur.en, pDir === "en-ru" ? "ru-RU" : "en-US"); }}>🔊</button>
+            </div>
+            <div 
+              className="flip-back" 
+              style={{ 
+                padding: "20px 16px", 
+                display: "flex", 
+                flexDirection: "column", 
+                justifyContent: "center", 
+                alignItems: "center", 
+                boxSizing: "border-box",
+                borderRadius: "1.75rem",
+                border: answered 
+                  ? (ok ? "2.5px solid var(--sage)" : "2.5px solid var(--rose)") 
+                  : "1.5px solid rgba(124, 139, 114, 0.25)",
+                boxShadow: answered
+                  ? (ok ? "0 8px 24px rgba(148,161,135,.25)" : "0 8px 24px rgba(220,95,95,.2)")
+                  : "0 10px 30px rgba(0,0,0,0.06)"
+              }}
+            >
+              {cardFlipped ? (
+                <>
+                  <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
+                  <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.en : cur.ru}</div>
+                  <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
+                    {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
+                    {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
+                  </div>
+                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>← Нажми или смахни карточку</div>
+                  <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
+                </>
+              ) : (
+                <div style={{ height: "100%" }} />
+              )}
             </div>
           </div>
         </div>

@@ -162,54 +162,54 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
 
       {/* Tab 1: Categories & Subcategories Progress */}
       {activeTab === "categories" && (
-        <div style={{ display: "flex", flexDirection: "column", gap: 14 }}>
+        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           {topCategories.map(topCat => {
             const topStats = getCategoryStats(words, topCat.id, categories);
             const subCategories = categories.filter(c => c.parentId === topCat.id && !c.archived);
 
             return (
-              <div key={topCat.id} className="card" style={{ padding: "16px 18px", border: "1px solid var(--border)" }}>
+              <div key={topCat.id} className="card" style={{ padding: "12px 14px", border: "1px solid var(--border)", marginBottom: 0 }}>
                 {/* Main Category Header */}
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 8 }}>
-                  <div style={{ display: "flex", alignItems: "center", gap: 8 }}>
-                    <span style={{ fontSize: 20 }}>{topCat.icon || "📁"}</span>
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
+                  <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                    <span style={{ fontSize: 17 }}>{topCat.icon || "📁"}</span>
                     <div>
-                      <h3 style={{ fontSize: 15, fontWeight: 700, margin: 0, color: "var(--charcoal)" }}>
+                      <h3 style={{ fontSize: 14, fontWeight: 700, margin: 0, color: "var(--charcoal)" }}>
                         {topCat.name}
                       </h3>
                       {subCategories.length > 0 && (
-                        <span style={{ fontSize: 11, color: "var(--muted)" }}>
+                        <span style={{ fontSize: 10.5, color: "var(--muted)" }}>
                           {subCategories.length} подкатегорий
                         </span>
                       )}
                     </div>
                   </div>
                   <div style={{ textAlign: "right" }}>
-                    <span style={{ fontSize: 13, fontWeight: 700, color: "var(--sage)" }}>
+                    <span style={{ fontSize: 12, fontWeight: 700, color: "var(--sage)" }}>
                       {topStats.learned} / {topStats.total} слов
                     </span>
-                    <div style={{ fontSize: 11, color: "var(--muted)", fontWeight: 600 }}>
+                    <div style={{ fontSize: 10.5, color: "var(--muted)", fontWeight: 600 }}>
                       {topStats.percent}%
                     </div>
                   </div>
                 </div>
 
                 {/* Main Category Overall Progress Bar */}
-                <div className="progress-bar" style={{ height: 8, marginBottom: subCategories.length > 0 ? 14 : 0 }}>
+                <div className="progress-bar" style={{ height: 6, marginBottom: subCategories.length > 0 ? 10 : 0 }}>
                   <div 
                     className="progress-fill" 
                     style={{ 
                       width: `${topStats.percent}%`, 
                       background: topStats.percent === 100 ? "var(--sage)" : "var(--rose)", 
                       height: "100%",
-                      borderRadius: 4 
+                      borderRadius: 3 
                     }} 
                   />
                 </div>
 
                 {/* Subcategories Breakdown */}
                 {subCategories.length > 0 && (
-                  <div style={{ display: "flex", flexDirection: "column", gap: 10, marginTop: 12, paddingTop: 12, borderTop: "1px dashed var(--border)" }}>
+                  <div style={{ display: "flex", flexDirection: "column", gap: 6, marginTop: 8, paddingTop: 8, borderTop: "1px dashed var(--border)" }}>
                     {subCategories.map(subCat => {
                       const subStats = getCategoryStats(words, subCat.id, categories);
 
@@ -217,35 +217,35 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
                         <div 
                           key={subCat.id} 
                           style={{ 
-                            padding: "10px 12px", 
+                            padding: "6px 8px", 
                             background: "var(--sand-light)", 
-                            borderRadius: 10, 
+                            borderRadius: 8, 
                             border: "1px solid var(--border)" 
                           }}
                         >
-                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: "var(--charcoal)", display: "flex", alignItems: "center", gap: 6 }}>
+                          <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 4 }}>
+                            <span style={{ fontSize: 12, fontWeight: 600, color: "var(--charcoal)", display: "flex", alignItems: "center", gap: 5 }}>
                               <span>{subCat.icon || "📖"}</span>
                               {subCat.name}
                             </span>
-                            <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
+                            <div style={{ display: "flex", alignItems: "center", gap: 5 }}>
                               {subStats.dueForReview > 0 && (
-                                <span style={{ fontSize: 10, padding: "2px 6px", background: "rgba(214,128,96,0.15)", color: "var(--terracotta)", borderRadius: 6, fontWeight: 700 }}>
-                                  ↺ {subStats.dueForReview} на повторение
+                                <span style={{ fontSize: 9.5, padding: "1px 5px", background: "rgba(214,128,96,0.15)", color: "var(--terracotta)", borderRadius: 5, fontWeight: 700 }}>
+                                  ↺ {subStats.dueForReview}
                                 </span>
                               )}
                               {subStats.total > 0 && subStats.percent === 100 && (
-                                <span style={{ fontSize: 10, padding: "2px 6px", background: "rgba(143,160,128,0.18)", color: "var(--sage)", borderRadius: 6, fontWeight: 700 }}>
+                                <span style={{ fontSize: 9.5, padding: "1px 5px", background: "rgba(143,160,128,0.18)", color: "var(--sage)", borderRadius: 5, fontWeight: 700 }}>
                                   ✅ Выучено
                                 </span>
                               )}
-                              <span style={{ fontSize: 12, fontWeight: 600, color: "var(--muted)" }}>
-                                {subStats.learned} / {subStats.total} ({subStats.percent}%)
+                              <span style={{ fontSize: 11, fontWeight: 600, color: "var(--muted)" }}>
+                                {subStats.learned}/{subStats.total} ({subStats.percent}%)
                               </span>
                             </div>
                           </div>
 
-                          <div className="progress-bar" style={{ height: 6, background: "rgba(0,0,0,0.05)" }}>
+                          <div className="progress-bar" style={{ height: 5, background: "rgba(0,0,0,0.05)" }}>
                             <div 
                               className="progress-fill" 
                               style={{ 
@@ -269,22 +269,22 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
 
       {/* Tab 2: Topics Progress */}
       {activeTab === "topics" && (
-        <div className="card">
-          <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 14 }}>🏷️ Прогресс по темам</h3>
+        <div className="card" style={{ padding: "14px 16px" }}>
+          <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>🏷️ Прогресс по темам</h3>
           {Object.keys(byTopic).length === 0 ? (
-            <p style={{ fontSize: 13, color: "var(--muted)", fontStyle: "italic", textAlign: "center", margin: "16px 0" }}>
+            <p style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic", textAlign: "center", margin: "12px 0" }}>
               Слова пока не разделены по темам.
             </p>
           ) : (
             Object.entries(byTopic).map(([t, v]) => {
               const topicPercent = v.total > 0 ? Math.round((v.learned / v.total) * 100) : 0;
               return (
-                <div key={t} style={{ marginBottom: 12 }}>
-                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 13, marginBottom: 4 }}>
+                <div key={t} style={{ marginBottom: 10 }}>
+                  <div style={{ display: "flex", justifyContent: "space-between", fontSize: 12, marginBottom: 3 }}>
                     <span style={{ fontWeight: 600, color: "var(--charcoal)" }}>{allTopics[t] || t}</span>
                     <span style={{ color: "var(--muted)", fontWeight: 600 }}>{v.learned} / {v.total} слов ({topicPercent}%)</span>
                   </div>
-                  <div className="progress-bar" style={{ height: 6 }}>
+                  <div className="progress-bar" style={{ height: 5 }}>
                     <div className="progress-fill" style={{ width: `${topicPercent}%`, background: topicPercent === 100 ? "var(--sage)" : "var(--lavender)", height: "100%" }} />
                   </div>
                 </div>
