@@ -228,8 +228,8 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
 
   const totalOverdueCount = globalEffectiveDue.totalOverdueCount;
   
-  // Find any urgent 15-minute words that are waiting for their cooldown to expire
-  const urgentWaiting = activeCatWords.filter(w => w.learned && w.intervalMinutes === 15 && getNextReviewTimeMs(w) > 0);
+  // Find any problem words with 90-minute cooldown (2+ errors) that are waiting
+  const urgentWaiting = activeCatWords.filter(w => w.learned && (w.intervalMinutes === 90 || w.isProblematic) && getNextReviewTimeMs(w) > 0);
   const earliestUrgent = urgentWaiting.sort((a, b) => getNextReviewTimeMs(a) - getNextReviewTimeMs(b))[0];
 
   // Find mandatory end-of-day repetitions
@@ -308,14 +308,14 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
   ];
 
   return (
-    <div className="fade-in">
+    <div className="fade-in home-container">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", paddingTop: 8, paddingBottom: 16 }}>
         <div>
-          <h1 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 26, color: "var(--warm)", margin: 0, lineHeight: 1.2 }}>
+          <h1 className="home-header-title" style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 24, color: "var(--warm)", margin: 0, lineHeight: 1.2 }}>
             My English Journal
           </h1>
-          <p className="sub-text" style={{ color: "var(--sage)", marginTop: 3, marginBottom: 0, fontSize: 13 }}>
-            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" })}
+          <p className="sub-text" style={{ color: "var(--sage)", marginTop: 4, marginBottom: 0, fontSize: 13.5, fontWeight: 600 }}>
+            {new Date().toLocaleDateString("ru-RU", { weekday: "long", day: "numeric", month: "long" }).replace(/^./, str => str.toUpperCase())}
           </p>
         </div>
         <div style={{ display: "flex", gap: 8, alignItems: "center" }}>
@@ -384,62 +384,64 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
 
       {/* ACTIVE CATEGORY CARD */}
       <div 
-        className="card" 
+        className="card active-cat-card" 
         style={{ 
           marginBottom: 20, 
-          padding: "18px 20px", 
+          padding: "16px 18px", 
           background: "var(--card)",
           border: "2px solid var(--sage)",
           borderRadius: "1.5rem",
           boxShadow: "0 6px 18px rgba(143,160,128,0.12)"
         }}
       >
-        <div style={{ display: "flex", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 12 }}>
-          <div>
-            <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.8px", color: "var(--sage)", fontWeight: 700 }}>
-              📌 Активная категория
-            </div>
-            {activeCategoryPath.length > 1 && (
-              <div style={{ fontSize: 12, color: "var(--muted)", marginTop: 2 }}>
-                {activeCategoryPath.map(c => c.name).join(" ➔ ")}
-              </div>
-            )}
-            <h2 style={{ margin: "4px 0 0 0", fontSize: 20, fontWeight: 700, color: "var(--charcoal)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-              <span>{activeCategory?.icon || "📁"}</span>
-              <span>{activeCategory?.name || "Основная категория"}</span>
-              {isCurrentActivePaused && (
-                <span className="badge badge-gray" style={{ fontSize: 10, background: "rgba(0,0,0,0.08)" }}>
-                  ⏸️ Повторения на паузе
-                </span>
-              )}
-            </h2>
-          </div>
-
-          <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "nowrap", flexShrink: 0 }}>
-            <button 
-              className="btn btn-secondary" 
-              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 20, whiteSpace: "nowrap" }}
-              onClick={handleToggleActiveCategoryPause}
-              title={isCurrentActivePaused ? "Включить повторения для этой категории" : "Отключить повторения (поставить на паузу)"}
-            >
-              {isCurrentActivePaused ? "▶️ Включить" : "⏸️ Выключить"}
-            </button>
-            <button 
-              className="btn btn-secondary" 
-              style={{ fontSize: 12, padding: "6px 12px", borderRadius: 20, whiteSpace: "nowrap" }}
-              onClick={() => onNavigate("categories")}
-            >
-              📁 Сменить
-            </button>
-          </div>
+        <div style={{ fontSize: 11, textTransform: "uppercase", letterSpacing: "0.8px", color: "var(--sage)", fontWeight: 700, marginBottom: 4 }}>
+          📌 Активная категория
         </div>
+
+        {activeCategoryPath.length > 1 && (
+          <div style={{ fontSize: 12, color: "var(--muted)", marginBottom: 4 }}>
+            {activeCategoryPath.map(c => c.name).join(" ➔ ")}
+          </div>
+        )}
+
+        {/* Full-width Category Name Row */}
+        <h2 className="active-cat-title" style={{ margin: "2px 0 10px 0", fontSize: 20, fontWeight: 800, color: "var(--charcoal)", display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
+          <span style={{ fontSize: 22, flexShrink: 0 }}>{activeCategory?.icon || "📁"}</span>
+          <span style={{ fontSize: 20, fontWeight: 800 }}>{activeCategory?.name || "Основной словарь"}</span>
+          {isCurrentActivePaused && (
+            <span className="badge badge-gray" style={{ fontSize: 11, background: "rgba(0,0,0,0.08)" }}>
+              ⏸️ Повторения на паузе
+            </span>
+          )}
+        </h2>
+
+        {/* Action Buttons Row */}
+        <div style={{ display: "flex", gap: 8, alignItems: "center", marginBottom: 12, flexWrap: "wrap" }}>
+          <button 
+            className="btn btn-secondary" 
+            style={{ fontSize: 12.5, padding: "6px 13px", borderRadius: 20 }}
+            onClick={handleToggleActiveCategoryPause}
+            title={isCurrentActivePaused ? "Включить повторения для этой категории" : "Отключить повторения (поставить на паузу)"}
+          >
+            {isCurrentActivePaused ? "▶️ Включить" : "⏸️ Выключить"}
+          </button>
+          <button 
+            className="btn btn-secondary" 
+            style={{ fontSize: 12.5, padding: "6px 13px", borderRadius: 20 }}
+            onClick={() => onNavigate("categories")}
+          >
+            📁 Сменить
+          </button>
+        </div>
+
+        {/* Category Stats */}
 
         {/* Category Stats */}
         <div style={{ fontSize: 13, color: "var(--muted)", marginBottom: 10 }}>
           Выучено: <strong>{activeCatStats.learned}</strong> из <strong>{activeCatStats.total}</strong> слов ({activeCatStats.percent}%)
-          {activeCatStats.dueForReview > 0 && (
+          {activeReviewWords.length > 0 && (
             <span style={{ color: "var(--terracotta)", fontWeight: 600, marginLeft: 8 }}>
-              • {activeCatStats.dueForReview} на повторение
+              • {activeReviewWords.length} на повторение
             </span>
           )}
         </div>
@@ -463,7 +465,7 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
             className="btn btn-primary" 
             style={{ 
               width: "100%", 
-              padding: "14px 18px", 
+              padding: "16px 20px", 
               textAlign: "left", 
               display: "flex", 
               justifyContent: "space-between", 
@@ -475,14 +477,14 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
             onClick={() => onStartStudy("learn", false)} 
           >
             <div>
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, color: "#fff", fontWeight: 600 }}>
+              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
                 Учить категорию ✨
               </div>
-              <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
+              <div style={{ fontSize: 12.5, opacity: .9, marginTop: 2, color: "#eee" }}>
                 Новые слова — {activeNewWords.length}
               </div>
             </div>
-            <span style={{ fontSize: 20, opacity: .9 }}>→</span>
+            <span style={{ fontSize: 22, opacity: .9 }}>→</span>
           </button>
 
           {activeReviewWords.length > 0 ? (
@@ -490,7 +492,7 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
               className="btn" 
               style={{ 
                 width: "100%", 
-                padding: "14px 18px", 
+                padding: "16px 20px", 
                 textAlign: "left", 
                 display: "flex", 
                 justifyContent: "space-between", 
@@ -506,14 +508,14 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
               onClick={() => onStartStudy("review", false)}
             >
               <div>
-                <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18, color: "#fff", fontWeight: 600 }}>
+                <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
                   Повторить категорию ↺
                 </div>
-                <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
-                  {activeCatStats.dueForReview} {activeCatStats.dueForReview === 1 ? "слово ждёт" : activeCatStats.dueForReview < 5 ? "слова ждут" : "слов ждут"} повторения
+                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 2, color: "#eee" }}>
+                  {activeReviewWords.length} {activeReviewWords.length === 1 ? "слово ждёт" : activeReviewWords.length < 5 ? "слова ждут" : "слов ждут"} повторения
                 </div>
               </div>
-              <span style={{ fontSize: 20, opacity: .9 }}>↺</span>
+              <span style={{ fontSize: 22, opacity: .9 }}>↺</span>
             </button>
           ) : (
             <button 
@@ -688,7 +690,7 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
         </div>
       )}
 
-      {/* ⏳ Срочное повторение (15-минутный интервал) */}
+      {/* ⏳ Срочное повторение сложных слов (1.5 часа) */}
       {earliestUrgent && activeReviewWords.length === 0 && (
         <div className="card fade-in" style={{ 
           marginBottom: 20, 

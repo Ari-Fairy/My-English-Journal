@@ -1294,7 +1294,7 @@ export default function CategoriesScreen({
   };
 
   return (
-    <div className="fade-in" style={{ maxWidth: "100%", overflowX: "hidden", boxSizing: "border-box" }}>
+    <div className="fade-in categories-container" style={{ maxWidth: "100%", overflowX: "hidden", boxSizing: "border-box" }}>
       {/* Toast Notification */}
       {toastMsg && (
         <div className="card" style={{ textAlign: "center", marginBottom: 14, padding: "10px 16px", fontSize: 14, color: "var(--sage)", background: "rgba(143,160,128,0.12)", border: "1px solid var(--sage)", borderRadius: 30 }}>
@@ -1476,8 +1476,8 @@ export default function CategoriesScreen({
                               style={{ width: 18, height: 18, accentColor: "var(--sage)", cursor: "pointer" }}
                             />
                           )}
-                          <span style={{ fontSize: 28 }}>{topCat.icon || "📁"}</span>
-                          <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--charcoal)", wordBreak: "break-word" }}>
+                          <span className="cat-icon-text" style={{ fontSize: 28 }}>{topCat.icon || "📁"}</span>
+                          <h3 className="cat-title-text" style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--charcoal)", wordBreak: "break-word" }}>
                             {topCat.name}
                           </h3>
                           {isActive && (
@@ -1497,7 +1497,7 @@ export default function CategoriesScreen({
                           )}
                         </div>
 
-                        <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
+                        <div className="cat-sub-info" style={{ fontSize: 13, color: "var(--muted)", marginTop: 6, display: "flex", gap: 12, flexWrap: "wrap" }}>
                           {subCats.length > 0 ? (
                             <span>📂 Подкатегорий: <strong>{subCats.length}</strong></span>
                           ) : null}
@@ -1874,8 +1874,8 @@ export default function CategoriesScreen({
                               style={{ width: 18, height: 18, accentColor: "var(--sage)", cursor: "pointer" }}
                             />
                           )}
-                          <span style={{ fontSize: 24 }}>{subCat.icon || "🎞️"}</span>
-                          <h4 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--charcoal)", wordBreak: "break-word" }}>
+                          <span className="subcat-icon-text" style={{ fontSize: 24 }}>{subCat.icon || "🎞️"}</span>
+                          <h4 className="subcat-title-text" style={{ margin: 0, fontSize: 16, fontWeight: 800, color: "var(--charcoal)", wordBreak: "break-word" }}>
                             {subCat.name}
                           </h4>
                         </div>
@@ -1894,7 +1894,7 @@ export default function CategoriesScreen({
                         </div>
                       </div>
 
-                      <div style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
+                      <div className="cat-sub-info" style={{ fontSize: 13, color: "var(--muted)", marginTop: 8 }}>
                         <strong>{subStats.total}</strong> слов • {subStats.learned} выучено ({subStats.percent}%)
                         {subStats.dueForReview > 0 && !isSubPaused && (
                           <span style={{ color: "var(--terracotta)", fontWeight: 600, marginLeft: 6 }}>
@@ -1998,6 +1998,17 @@ export default function CategoriesScreen({
             <div style={{ display: "flex", flexDirection: "column", gap: 12 }}>
               {/* Row 1: Action Buttons */}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
+                {/* Button: Create Subcategory in current category */}
+                {selectedMainCatId && (
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 700 }}
+                    onClick={() => handleOpenCreateModal(selectedMainCatId)}
+                  >
+                    📂<span className="btn-label-desktop"> Добавить подкатегорию</span>
+                  </button>
+                )}
+
                 {/* Button: Add Word */}
                 <button 
                   className="btn btn-secondary" 
@@ -2114,29 +2125,40 @@ export default function CategoriesScreen({
 
           {/* Words Cards List */}
           {wordsForSubCategory.length === 0 ? (
-            <div className="card" style={{ textAlign: "center", padding: "40px 20px", borderRadius: "1.2rem", background: "var(--sand-light)" }}>
-              <div style={{ fontSize: 42, marginBottom: 10 }}>📭</div>
-              <h3 style={{ margin: 0, fontSize: 17, fontWeight: 700, color: "var(--charcoal)" }}>
-                {selectedSubCatId === selectedMainCatId ? "В этой категории пока нет слов" : "В этой подкатегории пока нет слов"}
+            <div className="card" style={{ textAlign: "center", padding: "36px 20px", borderRadius: "1.2rem", background: "var(--sand-light)" }}>
+              <div style={{ fontSize: 42, marginBottom: 10 }}>📂</div>
+              <h3 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: "var(--charcoal)" }}>
+                {selectedSubCatId && selectedSubCatId !== selectedMainCatId ? "В этой подкатегории пока нет слов" : "В этой категории пока ничего нет"}
               </h3>
-              <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 18px 0" }}>
-                {selectedSubCatId === selectedMainCatId 
-                  ? "Нажмите «Добавить слово» или «Импортировать слова», чтобы наполнить данную категорию!" 
-                  : "Нажмите «Добавить слово» или «Импортировать слова», чтобы наполнить данную подкатегорию!"}
+              <p style={{ fontSize: 13, color: "var(--muted)", margin: "8px 0 20px 0", maxWidth: 500, marginLeft: "auto", marginRight: "auto" }}>
+                {selectedSubCatId && selectedSubCatId !== selectedMainCatId 
+                  ? "Нажмите «Добавить слово» или «Импортировать слова», чтобы наполнить данную подкатегорию!" 
+                  : "Выберите, с чего хотите начать: создать структуру из подкатегорий (например, «Урок 1», «Серия 1») или сразу добавить слова напрямую в категорию?"}
               </p>
-              <button 
-                className="btn btn-primary" 
-                style={{ fontSize: 13, padding: "10px 22px", borderRadius: 30, fontWeight: 700 }}
-                onClick={() => {
-                  setAddEn("");
-                  setAddRu("");
-                  setAddNote("");
-                  setAddSelectedSubCatId(selectedSubCatId);
-                  setShowAddWordModal(true);
-                }}
-              >
-                ➕ Добавить первое слово
-              </button>
+              <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
+                {selectedMainCatId && (
+                  <button 
+                    className="btn btn-primary" 
+                    style={{ fontSize: 13, padding: "11px 22px", borderRadius: 30, fontWeight: 700 }}
+                    onClick={() => handleOpenCreateModal(selectedMainCatId)}
+                  >
+                    📂 Создать подкатегорию
+                  </button>
+                )}
+                <button 
+                  className={selectedMainCatId ? "btn btn-secondary" : "btn btn-primary"} 
+                  style={{ fontSize: 13, padding: "11px 22px", borderRadius: 30, fontWeight: 700 }}
+                  onClick={() => {
+                    setAddEn("");
+                    setAddRu("");
+                    setAddNote("");
+                    setAddSelectedSubCatId(selectedSubCatId || selectedMainCatId || "");
+                    setShowAddWordModal(true);
+                  }}
+                >
+                  ➕ Добавить слово
+                </button>
+              </div>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
@@ -2431,6 +2453,16 @@ export default function CategoriesScreen({
                 }}
               >
                 ➕ Новое слово
+              </button>
+
+              <button 
+                className="btn btn-secondary" 
+                style={{ fontSize: 12, padding: "8px 14px", flex: "1 1 auto", background: "rgba(188,71,73,0.12)", color: "var(--terracotta)", fontWeight: 700 }}
+                onClick={() => {
+                  handleOpenCreateModal(currentViewCategory.id);
+                }}
+              >
+                📂 Добавить подкатегорию
               </button>
 
               {viewCatId !== "cat_main" && (

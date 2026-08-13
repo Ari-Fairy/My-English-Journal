@@ -21,8 +21,11 @@ export default function IrregularVerbsScreen({
 }: IrregularVerbsScreenProps) {
   const [search, setSearch] = useState("");
   const [filterLearned, setFilterLearned] = useState<"all" | "new" | "learned">("all");
+  const [sortBy, setSortBy] = useState<"newest" | "oldest" | "alpha-asc" | "alpha-desc">("newest");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [editForm, setEditForm] = useState<Partial<IrregularVerb>>({});
+  const [verbToDelete, setVerbToDelete] = useState<IrregularVerb | null>(null);
+  const newRowRef = useRef<HTMLTableRowElement | null>(null);
 
   // Refs for auto-saving active edit on unmount (navigation or logout)
   const editFormRef = useRef(editForm);
@@ -154,12 +157,54 @@ export default function IrregularVerbsScreen({
     return shuffle([correctOption, ...shuffledIncorrects]);
   }, [pIdx, sessionQueue, irregular]);
 
-  const filtered = irregular.filter(v => {
-    const s = search.toLowerCase();
-    if (filterLearned === "learned" && !v.learned) return false;
-    if (filterLearned === "new" && v.learned) return false;
-    return !s || v.base.toLowerCase().includes(s) || v.past.toLowerCase().includes(s) || v.participle.toLowerCase().includes(s) || v.ru.toLowerCase().includes(s);
-  });
+  const sortedAndFiltered = useMemo(() => {
+    const res = irregular.filter(v => {
+      const s = search.toLowerCase();
+      if (filterLearned === "learned" && !v.learned) return false;
+      if (filterLearned === "new" && v.learned) return false;
+      return !s || v.base.toLowerCase().includes(s) || v.past.toLowerCase().includes(s) || v.participle.toLowerCase().includes(s) || v.ru.toLowerCase().includes(s);
+    });
+
+    return [...res].sort((a, b) => {
+      if (sortBy === "alpha-asc") {
+        return a.base.localeCompare(b.base);
+      }
+      if (sortBy === "alpha-desc") {
+        return b.base.localeCompare(a.base);
+      }
+      if (sortBy === "newest") {
+        const timeA = a.createdAt || 0;
+        const timeB = b.createdAt || 0;
+        if (timeA !== timeB) return timeB - timeA;
+        return irregular.indexOf(b) - irregular.indexOf(a);
+      }
+      if (sortBy === "oldest") {
+        const timeA = a.createdAt || 0;
+        const timeB = b.createdAt || 0;
+        if (timeA !== timeB) return timeA - timeB;
+        return irregular.indexOf(a) - irregular.indexOf(b);
+      }
+      return 0;
+    });
+  }, [irregular, search, filterLearned, sortBy]);
+
+  const filtered = sortedAndFiltered;
+
+  const handleDeleteVerbRow = (verbId: string, skipConfirm = false) => {
+    if (skipConfirm) {
+      if (editingId === verbId) {
+        setEditingId(null);
+      }
+      if (onDeleteVerb) {
+        onDeleteVerb(verbId);
+      }
+      return;
+    }
+    const verb = irregular.find(v => v.id === verbId);
+    if (verb) {
+      setVerbToDelete(verb);
+    }
+  };
 
   const toggleLearnVerb = (id: string) => {
     const verb = irregular.find(v => v.id === id);
@@ -196,7 +241,8 @@ export default function IrregularVerbsScreen({
   };
 
   const addCustomVerb = () => {
-    const id = Math.random().toString(36).slice(2);
+    const now = Date.now();
+    const id = "custom_" + now + "_" + Math.random().toString(36).slice(2);
     const v: IrregularVerb = {
       id,
       userId: stats.userId || "guest",
@@ -206,11 +252,22 @@ export default function IrregularVerbsScreen({
       ru: "",
       learned: false,
       learnedDate: null,
-      streak: 0
+      streak: 0,
+      createdAt: now
     };
     onSaveVerb(v);
     setEditingId(id);
     setEditForm(v);
+
+    setTimeout(() => {
+      if (newRowRef.current) {
+        newRowRef.current.scrollIntoView({ behavior: "smooth", block: "center" });
+        const firstInput = newRowRef.current.querySelector("input");
+        if (firstInput) {
+          firstInput.focus();
+        }
+      }
+    }, 120);
   };
 
   // Unified flow screen routing
@@ -227,7 +284,7 @@ export default function IrregularVerbsScreen({
         
         <h2 className="section-title" style={{ textAlign: "center", marginTop: 16 }}>Направление</h2>
 
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="option-cards-container">
           {([
             { v: "en-ru", l: "English → Русский" },
             { v: "ru-en", l: "Русский → English" },
@@ -235,14 +292,13 @@ export default function IrregularVerbsScreen({
           ] as const).map(d => (
             <button 
               key={d.v} 
-              className="card btn" 
-              style={{ textAlign: "left", padding: 18 }} 
+              className="option-card-btn" 
               onClick={() => {
                 if (isLearn) startLearningFlow(d.v);
                 else startReviewFlow(d.v);
               }}
             >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18 }}>{d.l}</div>
+              <div className="option-card-title">{d.l}</div>
             </button>
           ))}
         </div>
@@ -265,11 +321,11 @@ export default function IrregularVerbsScreen({
         <h2 className="section-title" style={{ textAlign: "center", marginTop: 16 }}>
           Как повторяем?
         </h2>
-        <p style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", marginTop: 4, marginBottom: 16 }}>
+        <p style={{ textAlign: "center", fontSize: 13, color: "var(--muted)", marginTop: 4, marginBottom: 12 }}>
           Повторение {poolCount} выученных глаголов
         </p>
 
-        <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="option-cards-container">
           {([
             { v: "cards", l: "🃏 Карточки", s: "Повторение с помощью флип-карточек" },
             { v: "practice", l: "✍️ Письменно", s: "Ввод форм V2 и V3 вручную" },
@@ -278,12 +334,11 @@ export default function IrregularVerbsScreen({
           ] as const).map(m => (
             <button 
               key={m.v} 
-              className="card btn" 
-              style={{ textAlign: "left", padding: 18 }} 
+              className="option-card-btn" 
               onClick={() => selectReviewMethod(m.v)}
             >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18 }}>{m.l}</div>
-              <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{m.s}</div>
+              <div className="option-card-title">{m.l}</div>
+              <div className="option-card-subtitle">{m.s}</div>
             </button>
           ))}
         </div>
@@ -1390,27 +1445,33 @@ export default function IrregularVerbsScreen({
 
   // Default List View
   return (
-    <div className="fade-in">
+    <div className="fade-in verbs-container">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <button className="back-btn" onClick={handleBack}>← Назад</button>
         <h2 className="section-title" style={{ margin: 0 }}>Глаголы ({irregular.length})</h2>
         <span />
       </div>
 
-      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap" }}>
+      <div style={{ display: "flex", gap: 8, marginBottom: 12, flexWrap: "wrap", alignItems: "center" }}>
         <input 
           className="input" 
           placeholder="Поиск глагола..." 
           value={search} 
           onChange={e => setSearch(e.target.value)} 
-          style={{ flex: 1, minWidth: 120 }}
+          style={{ flex: "1 1 120px", minWidth: 110 }}
         />
-        <select className="select" value={filterLearned} onChange={e => setFilterLearned(e.target.value as any)} style={{ minWidth: 100 }}>
-          <option value="all">Все</option>
+        <select className="select" value={filterLearned} onChange={e => setFilterLearned(e.target.value as any)} style={{ minWidth: 90 }}>
+          <option value="all">Все статус</option>
           <option value="new">Новые</option>
           <option value="learned">Выученные</option>
         </select>
-        <button className="btn btn-outline btn-sm" onClick={addCustomVerb}>+ Добавить</button>
+        <select className="select" value={sortBy} onChange={e => setSortBy(e.target.value as any)} style={{ minWidth: 120 }}>
+          <option value="newest">🕒 Сначала новые</option>
+          <option value="oldest">⏳ Сначала старые</option>
+          <option value="alpha-asc">🔤 Алфавит A-Z</option>
+          <option value="alpha-desc">🔤 Алфавит Z-A</option>
+        </select>
+        <button className="btn btn-primary" style={{ fontSize: 13, padding: "8px 12px", fontWeight: 700 }} onClick={addCustomVerb}>+ Добавить</button>
       </div>
 
       <div style={{ marginBottom: 20 }}>
@@ -1435,7 +1496,7 @@ export default function IrregularVerbsScreen({
         >
           <div>
             <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>Учить глаголы ✨</div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>Новые глаголы для изучения — {irregular.filter(v => !v.learned).length}</div>
+            <div style={{ fontSize: 12.5, opacity: .9, marginTop: 2, color: "#eee" }}>Новые глаголы для изучения — {irregular.filter(v => !v.learned).length}</div>
           </div>
           <span style={{ fontSize: 22, opacity: .8 }}>→</span>
         </button>
@@ -1464,7 +1525,7 @@ export default function IrregularVerbsScreen({
         >
           <div>
             <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>Повторять глаголы ↺</div>
-            <div style={{ fontSize: 12, opacity: .9, marginTop: 2, color: "#eee" }}>
+            <div style={{ fontSize: 12.5, opacity: .9, marginTop: 2, color: "#eee" }}>
               {irregular.filter(v => v.learned).length === 0 
                 ? "Сначала выучите глаголы (или повторите все)" 
                 : `Выучено — ${irregular.filter(v => v.learned).length}`}
@@ -1481,70 +1542,96 @@ export default function IrregularVerbsScreen({
       <div className="card" style={{ padding: 0, overflow: "hidden" }}>
         <div style={{ overflowX: "auto" }}>
           <table className="irregular-table">
+            <colgroup>
+              <col style={{ width: "20%" }} />
+              <col style={{ width: "19%" }} />
+              <col style={{ width: "19%" }} />
+              <col style={{ width: "23%" }} />
+              <col style={{ width: "19%" }} />
+            </colgroup>
             <thead>
               <tr>
                 <th>V1 (Infinitive)</th>
                 <th>V2 (Past)</th>
                 <th>V3 (Participle)</th>
                 <th>Перевод</th>
-                <th>Действия</th>
+                <th style={{ textAlign: "center" }}>Действия</th>
               </tr>
             </thead>
             <tbody>
               {filtered.map(v => (
-                <tr key={v.id} style={{ background: v.learned ? "rgba(148,161,135,0.04)" : "transparent" }}>
+                <tr 
+                  key={v.id} 
+                  ref={editingId === v.id ? newRowRef : null} 
+                  style={{ background: editingId === v.id ? "rgba(188,71,73,0.06)" : v.learned ? "rgba(148,161,135,0.04)" : "transparent" }}
+                >
                   {editingId === v.id ? (
                     <>
-                      <td><input className="input" style={{ fontSize: 13, padding: "6px 8px" }} value={editForm.base || ""} onChange={e => setEditForm({ ...editForm, base: e.target.value })} /></td>
-                      <td><input className="input" style={{ fontSize: 13, padding: "6px 8px" }} value={editForm.past || ""} onChange={e => setEditForm({ ...editForm, past: e.target.value })} /></td>
-                      <td><input className="input" style={{ fontSize: 13, padding: "6px 8px" }} value={editForm.participle || ""} onChange={e => setEditForm({ ...editForm, participle: e.target.value })} /></td>
-                      <td><input className="input" style={{ fontSize: 13, padding: "6px 8px" }} value={editForm.ru || ""} onChange={e => setEditForm({ ...editForm, ru: e.target.value })} /></td>
+                      <td><input className="input table-edit-input" value={editForm.base || ""} onChange={e => setEditForm({ ...editForm, base: e.target.value })} placeholder="Infinitive" /></td>
+                      <td><input className="input table-edit-input" value={editForm.past || ""} onChange={e => setEditForm({ ...editForm, past: e.target.value })} placeholder="Past" /></td>
+                      <td><input className="input table-edit-input" value={editForm.participle || ""} onChange={e => setEditForm({ ...editForm, participle: e.target.value })} placeholder="Participle" /></td>
+                      <td><input className="input table-edit-input" value={editForm.ru || ""} onChange={e => setEditForm({ ...editForm, ru: e.target.value })} placeholder="Перевод" /></td>
                       <td>
-                        <div style={{ display: "flex", gap: 2 }}>
-                          <button className="btn btn-sm" style={{ fontSize: 11 }} onClick={saveEdit}>✓</button>
-                          <button className="btn btn-sm" style={{ fontSize: 11, color: "var(--rose)" }} onClick={() => setEditingId(null)}>✕</button>
+                        <div className="irregular-actions-cell">
+                          <button className="irregular-action-btn irregular-btn-edit" onClick={saveEdit} title="Сохранить">✓</button>
+                          <button 
+                            className="irregular-action-btn" 
+                            onClick={() => {
+                              if (!editForm.base?.trim() && !editForm.past?.trim() && !editForm.participle?.trim() && !editForm.ru?.trim()) {
+                                handleDeleteVerbRow(v.id, true);
+                              } else {
+                                setEditingId(null);
+                              }
+                            }} 
+                            title="Отмена"
+                          >
+                            ✕
+                          </button>
+                          <button 
+                            className="irregular-action-btn irregular-btn-delete" 
+                            onClick={() => handleDeleteVerbRow(v.id)} 
+                            title="Удалить глагол"
+                          >
+                            🗑️
+                          </button>
                         </div>
                       </td>
                     </>
                   ) : (
                     <>
                       <td style={{ fontWeight: 600 }}>
-                        <span style={{ display: "flex", alignItems: "center", gap: 4 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
                           {v.learned && <span style={{ color: "var(--sage)", fontSize: 10 }}>✓</span>}
-                          {v.base}
-                          <button className="speak-btn" onClick={() => speak(v.base)}>🔊</button>
+                          {v.base || <i style={{ color: "#aaa" }}>пусто</i>}
+                          {v.base && <button className="speak-btn" onClick={() => speak(v.base)}>🔊</button>}
                         </span>
                       </td>
-                      <td><span style={{ display: "flex", alignItems: "center", gap: 4 }}>{v.past}<button className="speak-btn" onClick={() => speak(v.past)}>🔊</button></span></td>
-                      <td><span style={{ display: "flex", alignItems: "center", gap: 4 }}>{v.participle}<button className="speak-btn" onClick={() => speak(v.participle)}>🔊</button></span></td>
-                      <td style={{ color: "#888" }}>{v.ru}</td>
                       <td>
-                        <div style={{ display: "flex", gap: 2 }}>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+                          {v.past || "—"}
+                          {v.past && <button className="speak-btn" onClick={() => speak(v.past)}>🔊</button>}
+                        </span>
+                      </td>
+                      <td>
+                        <span style={{ display: "inline-flex", alignItems: "center", gap: 3, flexWrap: "wrap" }}>
+                          {v.participle || "—"}
+                          {v.participle && <button className="speak-btn" onClick={() => speak(v.participle)}>🔊</button>}
+                        </span>
+                      </td>
+                      <td style={{ color: "#444" }}>{v.ru || "—"}</td>
+                      <td>
+                        <div className="irregular-actions-cell">
                           <button 
-                            className="btn btn-sm" 
-                            style={{ 
-                              fontSize: 11, 
-                              padding: "4px 8px",
-                              background: v.learned ? "transparent" : "var(--sage-soft)",
-                              color: v.learned ? "var(--muted)" : "var(--sage)",
-                              border: v.learned ? "1px solid var(--border)" : "none"
-                            }} 
+                            className={`irregular-action-btn irregular-btn-learn ${v.learned ? "is-learned" : ""}`} 
                             onClick={() => toggleLearnVerb(v.id)}
                             title={v.learned ? "Вернуть на изучение" : "Отметить как выученный"}
                           >
-                            {v.learned ? "↩️ Изучать" : "✓ Знаю"}
+                            {v.learned ? "↩️" : "✓"} <span className="irregular-btn-text-desktop">{v.learned ? "Изучать" : "Знаю"}</span>
                           </button>
-                          <button className="btn btn-ghost" style={{ fontSize: 11 }} onClick={() => startEdit(v)}>✏️</button>
+                          <button className="irregular-action-btn irregular-btn-edit" onClick={() => startEdit(v)} title="Редактировать">✏️</button>
                           <button 
-                            className="btn btn-ghost" 
-                            style={{ fontSize: 11, color: "var(--rose)" }} 
-                            onClick={() => {
-                              if (window.confirm(`Вы уверены, что хотите удалить глагол «${v.base}»?`)) {
-                                if (onDeleteVerb) {
-                                  onDeleteVerb(v.id);
-                                }
-                              }
-                            }}
+                            className="irregular-action-btn irregular-btn-delete" 
+                            onClick={() => handleDeleteVerbRow(v.id)}
                             title="Удалить глагол"
                           >
                             🗑️
@@ -1559,6 +1646,81 @@ export default function IrregularVerbsScreen({
           </table>
         </div>
       </div>
+
+      {verbToDelete && (
+        <div 
+          style={{
+            position: "fixed",
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: "rgba(0, 0, 0, 0.45)",
+            zIndex: 9999,
+            display: "flex",
+            alignItems: "center",
+            justifyContent: "center",
+            padding: 16
+          }}
+          onClick={() => setVerbToDelete(null)}
+        >
+          <div 
+            className="card"
+            style={{
+              width: "100%",
+              maxWidth: 380,
+              background: "var(--card)",
+              borderRadius: 16,
+              padding: "20px 24px",
+              boxShadow: "0 12px 32px rgba(0, 0, 0, 0.2)"
+            }}
+            onClick={e => e.stopPropagation()}
+          >
+            <h3 style={{ fontSize: 18, fontWeight: 700, marginBottom: 8, color: "var(--charcoal)" }}>
+              Удалить глагол?
+            </h3>
+            <p style={{ fontSize: 14, color: "var(--muted)", marginBottom: 20, lineHeight: 1.4 }}>
+              Вы уверены, что хотите удалить глагол{" "}
+              <strong style={{ color: "var(--charcoal)" }}>
+                «{verbToDelete.base || verbToDelete.ru || "без названия"}»
+              </strong>
+              {verbToDelete.ru && verbToDelete.base ? ` (${verbToDelete.ru})` : ""}? Это действие нельзя отменить.
+            </p>
+            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+              <button 
+                className="btn btn-outline"
+                style={{ padding: "10px 22px", fontSize: 14, borderRadius: "9999px", fontWeight: 600 }}
+                onClick={() => setVerbToDelete(null)}
+              >
+                Отмена
+              </button>
+              <button 
+                className="btn btn-primary"
+                style={{ 
+                  padding: "10px 22px", 
+                  fontSize: 14, 
+                  background: "var(--rose)", 
+                  color: "#fff",
+                  border: "none",
+                  fontWeight: 600,
+                  borderRadius: "9999px"
+                }}
+                onClick={() => {
+                  if (editingId === verbToDelete.id) {
+                    setEditingId(null);
+                  }
+                  if (onDeleteVerb) {
+                    onDeleteVerb(verbToDelete.id);
+                  }
+                  setVerbToDelete(null);
+                }}
+              >
+                🗑️ Удалить
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

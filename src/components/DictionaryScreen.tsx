@@ -215,7 +215,7 @@ export default function DictionaryScreen({
   });
 
   return (
-    <div className="fade-in">
+    <div className="fade-in dictionary-container">
       {toast && <div className="toast">{toast}</div>}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <button className="back-btn" onClick={onBack}>← Назад</button>
@@ -373,10 +373,8 @@ export default function DictionaryScreen({
             return (
               <div 
                 key={w.id} 
-                className="card" 
+                className="card dict-card" 
                 style={{ 
-                  padding: 11, 
-                  marginBottom: 7,
                   border: isSelected ? "2px solid var(--terracotta)" : undefined,
                   background: isSelected ? "rgba(188, 71, 73, 0.05)" : undefined,
                   transition: "border 0.15s ease, background 0.15s ease",
@@ -430,11 +428,11 @@ export default function DictionaryScreen({
                     </div>
                   </div>
                 ) : (
-                  <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 8 }}>
-                    <div style={{ display: "flex", alignItems: "center", gap: 10, flex: 1 }}>
+                  <div className="dict-card-inner">
+                    <div style={{ display: "flex", alignItems: "center", gap: 8, flex: 1, minWidth: 0 }}>
                       {selectedWordIds.size > 0 && (
                         <button 
-                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 18, padding: "2px", lineHeight: 1 }}
+                          style={{ background: "none", border: "none", cursor: "pointer", fontSize: 16, padding: "0 2px", lineHeight: 1 }}
                           onClick={(e) => {
                             e.stopPropagation();
                             toggleWordSelection(w.id);
@@ -445,16 +443,16 @@ export default function DictionaryScreen({
                         </button>
                       )}
 
-                      <div style={{ flex: 1 }}>
-                        <div style={{ display: "flex", alignItems: "center", gap: 6, flexWrap: "wrap" }}>
-                          <span style={{ fontWeight: 600 }}>{w.en}</span>
-                          <button className="speak-btn" onClick={(e) => { e.stopPropagation(); speak(w.en); }}>🔊</button>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="dict-word-header">
+                          <span className="dict-word-en">{w.en}</span>
+                          <button className="speak-btn" style={{ padding: "0 2px" }} onClick={(e) => { e.stopPropagation(); speak(w.en); }}>🔊</button>
+                          <span className="dict-word-ru">— {w.ru}</span>
+                        </div>
+                        <div className="dict-meta">
                           <span 
+                            className="dict-badge"
                             style={{ 
-                              fontSize: 10, 
-                              padding: "2px 6px", 
-                              borderRadius: "4px",
-                              fontWeight: 600,
                               background: w.streak >= 12 
                                 ? "rgba(90, 155, 212, 0.12)" 
                                 : w.learned 
@@ -467,23 +465,20 @@ export default function DictionaryScreen({
                                   : "var(--rose)"
                             }}
                           >
-                            {w.streak >= 12 ? "🏆 Усвоено навсегда" : w.learned ? "✓ Выучено" : "📖 Изучаю"}
+                            {w.streak >= 12 ? "🏆 Усвоено" : w.learned ? "✓ Выучено" : "📖 Изучаю"}
                           </span>
                           {w.learned && w.streak < 12 && (
-                            <span style={{ fontSize: 10, color: "#888", background: "rgba(180,180,180,0.08)", padding: "2px 5px", borderRadius: "3px" }}>
-                              Этап {w.streak || 1}/11
+                            <span className="dict-badge" style={{ color: "#888", background: "rgba(180,180,180,0.08)" }}>
+                              {w.streak || 1}/11
                             </span>
                           )}
-                        </div>
-                        <div style={{ fontSize: 13, color: "#888" }}>{w.ru}</div>
-                        <div style={{ fontSize: 11, color: "var(--muted)", display: "flex", alignItems: "center", gap: 6, marginTop: 4, flexWrap: "wrap" }}>
                           <span style={{ color: "var(--sage)", fontWeight: 600 }}>
                             {wordCat?.icon || "📁"} {wordCat?.name || "Базовые слова"}
                           </span>
-                          <span className="badge badge-gray" style={{ fontSize: 10, padding: "2px 6px" }}>
+                          <span className="badge badge-gray dict-badge">
                             🏷️ {allPos[w.partOfSpeech] || w.partOfSpeech}
                           </span>
-                          <span className="badge badge-gray" style={{ fontSize: 10, padding: "2px 6px" }}>
+                          <span className="badge badge-gray dict-badge">
                             🌐 {allTopics[w.topic] || w.topic}
                           </span>
                           {w.note && <span style={{ color: "var(--muted)", fontStyle: "italic" }}>📝 {w.note}</span>}
@@ -491,22 +486,23 @@ export default function DictionaryScreen({
                       </div>
                     </div>
 
-                    <div style={{ display: "flex", gap: 3 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 4, alignItems: "center", flexShrink: 0 }} onClick={e => e.stopPropagation()}>
                       <button 
-                        className="btn btn-sm" 
+                        className="btn btn-sm dict-btn-learn" 
                         style={{ 
-                          padding: "4px 8px", 
-                          fontSize: 12,
                           background: w.learned ? "transparent" : "var(--sage-soft)",
                           color: w.learned ? "var(--muted)" : "var(--sage)",
-                          border: w.learned ? "1px solid var(--border)" : "none"
+                          border: w.learned ? "1px solid var(--border)" : "none",
+                          borderRadius: "14px",
+                          fontWeight: 600
                         }} 
                         onClick={() => toggleLearn(w)}
+                        title={w.learned ? "Изучать снова" : "Знаю слово"}
                       >
-                        {w.learned ? "↩️ Изучать снова" : "✓ Знаю слово"}
+                        {w.learned ? "↩️" : "✓"} <span className="dict-btn-text-desktop">{w.learned ? "Изучать снова" : "Знаю слово"}</span>
                       </button>
-                      <button className="btn btn-sm" style={{ padding: "4px 8px", fontSize: 12 }} onClick={() => startEdit(w)}>✏️</button>
-                      <button className="btn btn-sm" style={{ padding: "4px 8px", fontSize: 12, color: "var(--rose)" }} onClick={() => setWordToDeleteConfirm(w)}>🗑</button>
+                      <button className="btn btn-sm dict-btn-action" onClick={() => startEdit(w)} title="Редактировать">✏️</button>
+                      <button className="btn btn-sm dict-btn-action" style={{ color: "var(--rose)" }} onClick={() => setWordToDeleteConfirm(w)} title="Удалить">🗑</button>
                     </div>
                   </div>
                 )}

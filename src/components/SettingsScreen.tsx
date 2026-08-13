@@ -279,7 +279,7 @@ export default function SettingsScreen({
   };
 
   return (
-    <div className="fade-in max-w-md mx-auto">
+    <div className="fade-in settings-container">
       <button className="back-btn" onClick={onBack} style={{ marginBottom: 16 }}>← Назад</button>
       <h2 className="section-title" style={{ marginBottom: 16 }}>Настройки</h2>
 
@@ -370,6 +370,7 @@ export default function SettingsScreen({
           {theme === "dark" ? "☀️ Переключить на светлую тему" : "🌙 Переключить на тёмную тему"}
         </button>
       </div>
+
       <div className="card" style={{ marginBottom: 12 }}>
         <h3 style={{ fontSize: 14, fontWeight: 600, marginBottom: 8 }}>📖 Дневной лимит новых слов</h3>
         <p style={{ fontSize: 12, color: "var(--muted)", lineHeight: 1.4, marginBottom: 12 }}>

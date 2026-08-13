@@ -79,7 +79,7 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
   }, [categories]);
 
   return (
-    <div className="fade-in">
+    <div className="fade-in stats-container max-w-md mx-auto">
       <button className="back-btn" onClick={onBack} style={{ marginBottom: 16 }}>← Назад</button>
       <h2 className="section-title" style={{ marginBottom: 16 }}>📊 Статистика и аналитика</h2>
 

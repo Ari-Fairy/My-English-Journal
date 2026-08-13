@@ -1010,7 +1010,7 @@ export default function AddScreen({
   };
 
   return (
-    <div className="fade-in">
+    <div className="fade-in add-container">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 16 }}>
         <button className="back-btn" onClick={onBack}>← Назад</button>
         <h2 className="section-title" style={{ margin: 0 }}>Добавить</h2>
@@ -1268,13 +1268,14 @@ export default function AddScreen({
               </div>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div className="topic-chip-container">
               {Object.entries(allTopics).map(([k, v]) => (
-                <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,230,211,.3)", borderRadius: 999, padding: "4px 10px", fontSize: 12 }}>
-                  <span>{v}</span>
+                <span key={k} className="topic-chip-item">
+                  <span style={{ fontWeight: 500 }}>{v}</span>
                   <button 
                     type="button"
-                    style={{ border: "none", background: "none", cursor: "pointer", color: "var(--terracotta, #c86d51)", marginLeft: 4, fontSize: 13, padding: 0 }} 
+                    className="topic-chip-btn"
+                    style={{ color: "var(--terracotta, #c86d51)" }} 
                     title="Изменить название темы"
                     onClick={() => {
                       setEditingTopicKey(k);
@@ -1285,7 +1286,8 @@ export default function AddScreen({
                   </button>
                   <button 
                     type="button"
-                    style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 2, fontSize: 13, padding: 0 }} 
+                    className="topic-chip-btn"
+                    style={{ color: "#888" }} 
                     title="Удалить тему"
                     onClick={() => {
                       if (stats.customTopics?.[k]) {
@@ -1321,13 +1323,14 @@ export default function AddScreen({
               </div>
             )}
 
-            <div style={{ display: "flex", flexWrap: "wrap", gap: 6 }}>
+            <div className="topic-chip-container">
               {Object.entries(allPos).map(([k, v]) => (
-                <span key={k} style={{ display: "inline-flex", alignItems: "center", gap: 4, background: "rgba(245,230,211,.3)", borderRadius: 999, padding: "4px 10px", fontSize: 12 }}>
-                  <span>{v}</span>
+                <span key={k} className="topic-chip-item">
+                  <span style={{ fontWeight: 500 }}>{v}</span>
                   <button 
                     type="button"
-                    style={{ border: "none", background: "none", cursor: "pointer", color: "var(--terracotta, #c86d51)", marginLeft: 4, fontSize: 13, padding: 0 }} 
+                    className="topic-chip-btn"
+                    style={{ color: "var(--terracotta, #c86d51)" }} 
                     title="Изменить название части речи"
                     onClick={() => {
                       setEditingPosKey(k);
@@ -1338,7 +1341,8 @@ export default function AddScreen({
                   </button>
                   <button 
                     type="button"
-                    style={{ border: "none", background: "none", cursor: "pointer", color: "#999", marginLeft: 2, fontSize: 13, padding: 0 }} 
+                    className="topic-chip-btn"
+                    style={{ color: "#888" }} 
                     title="Удалить часть речи"
                     onClick={() => {
                       if (stats.customPos?.[k]) {

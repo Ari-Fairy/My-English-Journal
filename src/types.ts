@@ -44,6 +44,7 @@ export interface IrregularVerb {
   learned: boolean;
   learnedDate: string | null;
   streak: number;
+  createdAt?: number;
 }
 
 export interface UserProgress {

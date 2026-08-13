@@ -391,12 +391,15 @@ export default function StudyScreen({
       const isProblematic = currentConsecErrors >= 2;
       const isMandatoryEndOfDay = currentConsecErrors >= 3;
 
-      let intervalMin = 60; // Minimum 1 hour on error
+      // User rule: 2 or more errors -> 90 minutes (1h 30m). 1 error -> minimum 240 minutes (4 hours).
+      let intervalMin = currentConsecErrors >= 2 ? 90 : 240;
       const prevInterval = cur.intervalMinutes || 240;
 
-      if (prevInterval >= 10080) intervalMin = 1440;       // 7 days -> 24 hours
-      else if (prevInterval >= 4320) intervalMin = 240;    // 3 days -> 4 hours
-      else intervalMin = 60;                               // <= 24 hours -> 1 hour minimum
+      if (currentConsecErrors < 2) {
+        if (prevInterval >= 10080) intervalMin = 1440;       // 7 days -> 24 hours
+        else if (prevInterval >= 4320) intervalMin = 1440;    // 3 days -> 24 hours
+        else intervalMin = 240;                               // Default 4 hours minimum
+      }
 
       const nextReviewDate = new Date(nowMs + intervalMin * 60 * 1000).toISOString();
 
@@ -598,12 +601,12 @@ export default function StudyScreen({
 
   if (stage === "mode") {
     return (
-      <div className="fade-in">
+      <div className="fade-in study-container">
         <button className="back-btn" onClick={onExit}>← Назад</button>
         <h2 className="section-title" style={{ textAlign: "center", marginTop: 16 }}>
           {sessionType === "learn" ? "Как будем учить?" : "Как повторяем?"}
         </h2>
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="option-cards-container">
           {([
             { v: "cards", l: "🃏 Карточки", s: "Флип-карточки" },
             { v: "choice", l: "🎯 Выбор варианта", s: "Выбери из 4 вариантов" },
@@ -613,8 +616,7 @@ export default function StudyScreen({
           ] as const).map(m => (
             <button 
               key={m.v} 
-              className="card btn" 
-              style={{ textAlign: "left", padding: 18 }} 
+              className="option-card-btn" 
               onClick={() => {
                 if (m.v === "listening") {
                   setMode("listening");
@@ -627,6 +629,8 @@ export default function StudyScreen({
                   setQueue([...withErrors, ...rest].slice(0, limit));
                   setIdx(0);
                   setWrongIds([]);
+                  setSessionMistakes([]);
+                  setSessionLearnedIds([]);
                   setIsRepeatRound(false);
                   setAnswered(false);
                   setAns("");
@@ -649,8 +653,8 @@ export default function StudyScreen({
                 setStage("dir");
               }}
             >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18 }}>{m.l}</div>
-              <div style={{ fontSize: 12, color: "#aaa", marginTop: 4 }}>{m.s}</div>
+              <div className="option-card-title">{m.l}</div>
+              <div className="option-card-subtitle">{m.s}</div>
             </button>
           ))}
         </div>
@@ -660,7 +664,7 @@ export default function StudyScreen({
 
   if (stage === "dir") {
     return (
-      <div className="fade-in">
+      <div className="fade-in study-container">
         <button className="back-btn" onClick={() => {
           if (sessionType === "learn") {
             onExit();
@@ -669,7 +673,7 @@ export default function StudyScreen({
           }
         }}>← Назад</button>
         <h2 className="section-title" style={{ textAlign: "center", marginTop: 16 }}>Направление</h2>
-        <div style={{ marginTop: 16, display: "flex", flexDirection: "column", gap: 10 }}>
+        <div className="option-cards-container">
           {([
             { v: "en-ru", l: "English → Русский" },
             { v: "ru-en", l: "Русский → English" },
@@ -677,8 +681,7 @@ export default function StudyScreen({
           ] as const).map(d => (
             <button 
               key={d.v} 
-              className="card btn" 
-              style={{ textAlign: "left", padding: 18 }} 
+              className="option-card-btn" 
               onClick={() => {
                 setDir(d.v);
                 const pool = getPool();
@@ -699,7 +702,7 @@ export default function StudyScreen({
                 setStage("session");
               }}
             >
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 18 }}>{d.l}</div>
+              <div className="option-card-title">{d.l}</div>
             </button>
           ))}
         </div>
@@ -752,7 +755,7 @@ export default function StudyScreen({
 
   if (stage === "done") {
     return (
-      <div className="fade-in" style={{ textAlign: "center", paddingTop: 30, maxWidth: 500, margin: "0 auto" }}>
+      <div className="fade-in study-container" style={{ textAlign: "center", paddingTop: 30, maxWidth: 500, margin: "0 auto" }}>
         <div style={{ fontSize: 56, marginBottom: 8 }}>🕊️</div>
         <h2 className="section-title" style={{ margin: 0 }}>Отлично!</h2>
         <p className="sub-text" style={{ marginTop: 4 }}>Сессия завершена</p>
@@ -810,7 +813,7 @@ export default function StudyScreen({
     const activeSubWords = activeCatObj ? getWordsForCategory(words, activeCatObj.id, categories) : [];
 
     return (
-      <div className="fade-in" style={{ textAlign: "center", paddingTop: 40, maxWidth: 500, margin: "0 auto" }}>
+      <div className="fade-in study-container" style={{ textAlign: "center", paddingTop: 40, maxWidth: 500, margin: "0 auto" }}>
         <div style={{ fontSize: 48, marginBottom: 12 }}>
           {isRootFullyLearned ? "🎉" : "📭"}
         </div>
@@ -862,7 +865,7 @@ export default function StudyScreen({
   if (mode === "cards") {
     const cardFlipped = ans === "flipped" || (answered && !ok);
     return (
-      <div className="fade-in">
+      <div className="fade-in study-container">
         <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
           <button className="back-btn" onClick={onExit}>✕</button>
           <span className="badge">{idx + 1}/{queue.length}</span>
@@ -967,7 +970,7 @@ export default function StudyScreen({
   }
 
   return (
-    <div className="fade-in">
+    <div className="fade-in study-container">
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 12 }}>
         <button className="back-btn" onClick={onExit}>✕</button>
         <span className="badge">{idx + 1}/{queue.length}</span>

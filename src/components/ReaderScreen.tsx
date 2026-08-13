@@ -440,7 +440,7 @@ export default function ReaderScreen({
 
   if (!selectedLevel) {
     return (
-      <div className="fade-in">
+      <div className="fade-in reader-container">
         <button className="back-btn" onClick={onBack} style={{ marginBottom: 16 }}>← Назад</button>
         <h2 className="section-title" style={{ marginBottom: 4 }}>Чтение книг</h2>
         <p style={{ fontSize: 13, color: "#aaa", marginBottom: 16 }}>Нажми на любое слово, чтобы мгновенно перевести его и добавить в словарь!</p>
@@ -685,7 +685,7 @@ export default function ReaderScreen({
   const tokens = story.text.split(/(\s+)/);
 
   return (
-    <div className="fade-in">
+    <div className="fade-in reader-container">
       {toast && <div className="toast">{toast}</div>}
       <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 14 }}>
         <button className="back-btn" onClick={() => setSelectedLevel(null)}>← Назад</button>
