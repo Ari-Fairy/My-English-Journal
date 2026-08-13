@@ -962,20 +962,14 @@ export default function StudyScreen({
                   : "0 10px 30px rgba(0,0,0,0.06)"
               }}
             >
-              {cardFlipped ? (
-                <>
-                  <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
-                  <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.en : cur.ru}</div>
-                  <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
-                    {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
-                    {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
-                  </div>
-                  <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>← Нажми или смахни карточку</div>
-                  <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
-                </>
-              ) : (
-                <div style={{ height: "100%" }} />
-              )}
+              <div className="sub-text" style={{ marginBottom: 6, textTransform: "uppercase", letterSpacing: "1px", fontSize: 11, color: "var(--muted)" }}>{pDir === "en-ru" ? "English" : "Русский"}</div>
+              <div className="study-word" style={{ fontSize: "2.1rem", lineHeight: 1.25, margin: "4px 0" }}>{pDir === "en-ru" ? cur.en : cur.ru}</div>
+              <div style={{ display: "flex", gap: 6, justifyContent: "center", flexWrap: "wrap", marginTop: 8 }}>
+                {cur.partOfSpeech && <span className="badge" style={{ background: "rgba(143,160,128,0.15)", color: "var(--sage)", fontSize: 11 }}>🏷️ {getPosLabel(cur.partOfSpeech)}</span>}
+                {cur.topic && <span className="badge" style={{ background: "rgba(220,175,100,0.15)", color: "#b45309", fontSize: 11 }}>📌 {getTopicLabel(cur.topic)}</span>}
+              </div>
+              <div style={{ fontSize: 11, color: "#aaa", marginTop: 10 }}>← Нажми или смахни карточку</div>
+              <button className="btn btn-ghost" style={{ fontSize: 20, padding: "6px 14px", marginTop: 8 }} onClick={(e) => { e.stopPropagation(); speak(pDir === "en-ru" ? cur.en : cur.ru, pDir === "en-ru" ? "en-US" : "ru-RU"); }}>🔊</button>
             </div>
           </div>
         </div>

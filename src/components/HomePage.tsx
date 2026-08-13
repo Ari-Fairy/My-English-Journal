@@ -462,85 +462,56 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
         {/* Study buttons for active category */}
         <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
           <button 
-            className="btn btn-primary" 
-            style={{ 
-              width: "100%", 
-              padding: "16px 20px", 
-              textAlign: "left", 
-              display: "flex", 
-              justifyContent: "space-between", 
-              alignItems: "center", 
-              borderRadius: "1.2rem", 
-              fontSize: 15,
-              cursor: "pointer" 
-            }}
+            className="home-study-btn btn-primary" 
             onClick={() => onStartStudy("learn", false)} 
           >
             <div>
-              <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
+              <div className="btn-title" style={{ color: "#fff" }}>
                 Учить категорию ✨
               </div>
-              <div style={{ fontSize: 12.5, opacity: .9, marginTop: 2, color: "#eee" }}>
+              <div className="btn-sub" style={{ color: "#eee" }}>
                 Новые слова — {activeNewWords.length}
               </div>
             </div>
-            <span style={{ fontSize: 22, opacity: .9 }}>→</span>
+            <span className="btn-icon" style={{ color: "#fff", opacity: .9 }}>→</span>
           </button>
 
           {activeReviewWords.length > 0 ? (
             <button 
-              className="btn" 
+              className="home-study-btn" 
               style={{ 
-                width: "100%", 
-                padding: "16px 20px", 
-                textAlign: "left", 
-                display: "flex", 
-                justifyContent: "space-between", 
-                alignItems: "center", 
-                borderRadius: "1.2rem", 
-                fontSize: 15,
                 background: "var(--sage)",
                 color: "#fff",
                 boxShadow: "0 4px 12px rgba(148,161,135,.2)",
-                border: "none",
-                cursor: "pointer"
+                border: "none"
               }}
               onClick={() => onStartStudy("review", false)}
             >
               <div>
-                <div style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 19, color: "#fff", fontWeight: 600 }}>
+                <div className="btn-title" style={{ color: "#fff" }}>
                   Повторить категорию ↺
                 </div>
-                <div style={{ fontSize: 12.5, opacity: .9, marginTop: 2, color: "#eee" }}>
+                <div className="btn-sub" style={{ color: "#eee" }}>
                   {activeReviewWords.length} {activeReviewWords.length === 1 ? "слово ждёт" : activeReviewWords.length < 5 ? "слова ждут" : "слов ждут"} повторения
                 </div>
               </div>
-              <span style={{ fontSize: 22, opacity: .9 }}>↺</span>
+              <span className="btn-icon" style={{ color: "#fff", opacity: .9 }}>↺</span>
             </button>
           ) : (
             <button 
-              className="btn" 
+              className="home-study-btn" 
               style={{ 
-                width: "100%", 
-                padding: "12px 18px", 
-                textAlign: "left", 
-                display: "flex", 
-                justifyContent: "space-between", 
-                alignItems: "center", 
-                borderRadius: "1.2rem", 
-                fontSize: 14,
-                background: "rgba(0,0,0,0.02)",
-                color: "var(--text-muted)",
-                border: "1px dashed var(--border)",
-                cursor: "pointer"
+                background: "rgba(0,0,0,0.025)",
+                color: "var(--charcoal)",
+                border: "1px dashed var(--border)"
               }}
               onClick={() => setRecallInfo(r => !r)}
             >
               <div>
-                <div style={{ fontSize: 14, color: "var(--muted)", fontWeight: 600 }}>
+                <div className="btn-title" style={{ color: "var(--charcoal)" }}>
                   {isCurrentActivePaused ? "Повторения на паузе ⏸️" : "Recall категории 🔒"}
                 </div>
-                <div style={{ fontSize: 11, marginTop: 2, color: "var(--muted)" }}>
+                <div className="btn-sub" style={{ color: "var(--muted)" }}>
                   {isCurrentActivePaused
                     ? "Повторения выключены. Нажмите «Включить», чтобы возобновить."
                     : activeCatStats.learned === 0 
@@ -551,7 +522,7 @@ export default function HomePage({ words, stats, theme = "light", onToggleTheme,
                   }
                 </div>
               </div>
-              <span style={{ fontSize: 18, opacity: .5 }}>🕒</span>
+              <span className="btn-icon" style={{ color: "var(--charcoal)", opacity: .5 }}>🕒</span>
             </button>
           )}
         </div>

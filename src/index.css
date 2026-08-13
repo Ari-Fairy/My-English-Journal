@@ -469,8 +469,8 @@ body::before {
 .menu-card {
   background: var(--card);
   border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 1.5rem;
-  padding: 18px 14px;
+  border-radius: 1.25rem;
+  padding: 13px 10px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   text-align: center;
   cursor: pointer;
@@ -485,29 +485,66 @@ body::before {
 }
 
 .menu-card:hover {
-  transform: translateY(-3px);
-  box-shadow: 0 10px 32px rgba(0, 0, 0, 0.07);
+  transform: translateY(-2px);
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.06);
 }
 
 .menu-card .icon {
-  font-size: 22px;
-  margin-bottom: 6px;
+  font-size: 20px;
+  margin-bottom: 4px;
 }
 
 .menu-card .title {
   font-family: 'Lora', serif;
   font-style: italic;
-  font-size: 15px;
+  font-size: 13.5px;
   color: var(--warm);
-  font-weight: 500;
+  font-weight: 400;
 }
 
 .menu-card .sub {
-  font-size: 10px;
+  font-size: 9.5px;
   color: #aaa;
   text-transform: uppercase;
-  letter-spacing: .1em;
+  letter-spacing: .08em;
   margin-top: 2px;
+}
+
+.home-study-btn {
+  width: 100%;
+  min-height: 68px;
+  padding: 14px 18px !important;
+  display: flex !important;
+  justify-content: space-between !important;
+  align-items: center !important;
+  border-radius: 1.2rem !important;
+  box-sizing: border-box !important;
+  text-align: left !important;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  user-select: none;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.home-study-btn .btn-title {
+  font-family: 'Lora', serif;
+  font-style: italic;
+  font-size: 17px !important;
+  font-weight: 600;
+  line-height: 1.2;
+}
+
+.home-study-btn .btn-sub {
+  font-size: 12px !important;
+  margin-top: 3px;
+  line-height: 1.2;
+  opacity: 0.9;
+}
+
+.home-study-btn .btn-icon {
+  font-size: 20px !important;
+  flex-shrink: 0;
+  margin-left: 12px;
 }
 
 .study-card {
@@ -956,9 +993,13 @@ body::before {
 /* Irregular cards (flip) */
 .flip-card {
   perspective: 800px;
+  -webkit-perspective: 800px;
   width: 100%;
   height: 245px;
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  user-select: none;
+  -webkit-user-select: none;
 }
 
 .flip-inner {
@@ -966,17 +1007,21 @@ body::before {
   width: 100%;
   height: 100%;
   transition: transform 0.5s cubic-bezier(.4,0,.2,1);
+  -webkit-transition: -webkit-transform 0.5s cubic-bezier(.4,0,.2,1);
   transform-style: preserve-3d;
+  -webkit-transform-style: preserve-3d;
 }
 
 .flip-inner.flipped {
   transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
 }
 
 .flip-front, .flip-back {
   position: absolute;
   inset: 0;
   backface-visibility: hidden;
+  -webkit-backface-visibility: hidden;
   border-radius: 1.75rem;
   display: flex;
   flex-direction: column;
@@ -995,6 +1040,7 @@ body::before {
   background: linear-gradient(135deg, rgba(124, 139, 114, 0.1), rgba(158, 149, 132, 0.08));
   border: 1.5px solid rgba(124, 139, 114, 0.2);
   transform: rotateY(180deg);
+  -webkit-transform: rotateY(180deg);
 }
 
 /* Topic manager */
@@ -1324,11 +1370,11 @@ body::before {
   }
 
   /* Universal Buttons Scale */
-  .btn:not(.menu-card) {
+  .btn:not(.menu-card):not(.home-study-btn) {
     font-size: 13px !important;
     padding: 8px 14px !important;
   }
-  .btn-primary:not(.menu-card), .btn-secondary:not(.menu-card), .btn-outline:not(.menu-card) {
+  .btn-primary:not(.menu-card):not(.home-study-btn), .btn-secondary:not(.menu-card):not(.home-study-btn), .btn-outline:not(.menu-card):not(.home-study-btn) {
     padding: 8px 14px !important;
     font-size: 13px !important;
   }

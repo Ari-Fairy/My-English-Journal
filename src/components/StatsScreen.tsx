@@ -79,7 +79,7 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
   }, [categories]);
 
   return (
-    <div className="fade-in stats-container max-w-md mx-auto">
+    <div className="fade-in stats-container">
       <button className="back-btn" onClick={onBack} style={{ marginBottom: 16 }}>← Назад</button>
       <h2 className="section-title" style={{ marginBottom: 16 }}>📊 Статистика и аналитика</h2>
 
@@ -168,7 +168,7 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
             const subCategories = categories.filter(c => c.parentId === topCat.id && !c.archived);
 
             return (
-              <div key={topCat.id} className="card" style={{ padding: "12px 14px", border: "1px solid var(--border)", marginBottom: 0 }}>
+              <div key={topCat.id} className="card" style={{ border: "1px solid var(--border)", marginBottom: 0 }}>
                 {/* Main Category Header */}
                 <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", marginBottom: 6 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: 6 }}>
@@ -269,7 +269,7 @@ export default function StatsScreen({ words, stats, onBack }: StatsScreenProps) 
 
       {/* Tab 2: Topics Progress */}
       {activeTab === "topics" && (
-        <div className="card" style={{ padding: "14px 16px" }}>
+        <div className="card">
           <h3 style={{ fontSize: 13.5, fontWeight: 600, marginBottom: 10 }}>🏷️ Прогресс по темам</h3>
           {Object.keys(byTopic).length === 0 ? (
             <p style={{ fontSize: 12, color: "var(--muted)", fontStyle: "italic", textAlign: "center", margin: "12px 0" }}>

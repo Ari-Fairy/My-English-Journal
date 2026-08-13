@@ -1999,7 +1999,7 @@ export default function CategoriesScreen({
               {/* Row 1: Action Buttons */}
               <div style={{ display: "flex", gap: 8, flexWrap: "wrap", alignItems: "center" }}>
                 {/* Button: Create Subcategory in current category */}
-                {selectedMainCatId && (
+                {selectedMainCatId && !categories.find(c => c.id === (selectedSubCatId || selectedMainCatId))?.parentId && (
                   <button 
                     className="btn btn-primary" 
                     style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 700 }}
@@ -2136,7 +2136,7 @@ export default function CategoriesScreen({
                   : "Выберите, с чего хотите начать: создать структуру из подкатегорий (например, «Урок 1», «Серия 1») или сразу добавить слова напрямую в категорию?"}
               </p>
               <div style={{ display: "flex", gap: 12, justifyContent: "center", flexWrap: "wrap" }}>
-                {selectedMainCatId && (
+                {selectedMainCatId && !categories.find(c => c.id === (selectedSubCatId || selectedMainCatId))?.parentId && (
                   <button 
                     className="btn btn-primary" 
                     style={{ fontSize: 13, padding: "11px 22px", borderRadius: 30, fontWeight: 700 }}
@@ -2146,7 +2146,7 @@ export default function CategoriesScreen({
                   </button>
                 )}
                 <button 
-                  className={selectedMainCatId ? "btn btn-secondary" : "btn btn-primary"} 
+                  className={selectedMainCatId && !categories.find(c => c.id === (selectedSubCatId || selectedMainCatId))?.parentId ? "btn btn-secondary" : "btn btn-primary"} 
                   style={{ fontSize: 13, padding: "11px 22px", borderRadius: 30, fontWeight: 700 }}
                   onClick={() => {
                     setAddEn("");
@@ -2455,15 +2455,17 @@ export default function CategoriesScreen({
                 ➕ Новое слово
               </button>
 
-              <button 
-                className="btn btn-secondary" 
-                style={{ fontSize: 12, padding: "8px 14px", flex: "1 1 auto", background: "rgba(188,71,73,0.12)", color: "var(--terracotta)", fontWeight: 700 }}
-                onClick={() => {
-                  handleOpenCreateModal(currentViewCategory.id);
-                }}
-              >
-                📂 Добавить подкатегорию
-              </button>
+              {!currentViewCategory.parentId && (
+                <button 
+                  className="btn btn-secondary" 
+                  style={{ fontSize: 12, padding: "8px 14px", flex: "1 1 auto", background: "rgba(188,71,73,0.12)", color: "var(--terracotta)", fontWeight: 700 }}
+                  onClick={() => {
+                    handleOpenCreateModal(currentViewCategory.id);
+                  }}
+                >
+                  📂 Добавить подкатегорию
+                </button>
+              )}
 
               {viewCatId !== "cat_main" && (
                 <button 
