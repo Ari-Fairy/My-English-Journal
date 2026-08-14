@@ -1424,7 +1424,7 @@ export default function CategoriesScreen({
           )}
 
           {/* Categories Grid/List */}
-          <div style={{ display: "flex", flexDirection: "column", gap: 14, maxWidth: "100%" }}>
+          <div style={{ display: "flex", flexDirection: "column", gap: 9, maxWidth: "100%" }}>
             {topCategories
               .filter(c => !searchTerm.trim() || c.name.toLowerCase().includes(searchTerm.toLowerCase()))
               .map(topCat => {
@@ -1437,11 +1437,11 @@ export default function CategoriesScreen({
                 return (
                   <div 
                     key={topCat.id} 
-                    className="card" 
+                    className="card main-cat-card" 
                     style={{ 
                       borderLeft: isSelected ? "5px solid var(--rose)" : isActive ? "5px solid var(--sage)" : "1px solid var(--border)",
-                      padding: "18px",
-                      borderRadius: "1.2rem",
+                      padding: "12px 14px",
+                      borderRadius: "1rem",
                       boxSizing: "border-box",
                       cursor: "pointer",
                       transition: "transform 0.15s ease, box-shadow 0.15s ease",
@@ -1519,54 +1519,54 @@ export default function CategoriesScreen({
                       </div>
 
                       {/* Main Category Card Action Controls */}
-                      <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
+                      <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }} onClick={e => e.stopPropagation()}>
                         <button 
                           className="btn btn-secondary" 
-                          style={{ fontSize: 12, padding: "7px 12px", borderRadius: 30, fontWeight: 600 }}
+                          style={{ fontSize: 12, padding: "6px 10px", borderRadius: 30, fontWeight: 600 }}
                           onClick={(e) => {
                             e.stopPropagation();
                             onNavigateHomeWithCategory(topCat.id);
                           }}
                           title="Сделать активной и учить на главном экране"
                         >
-                          🎯 Учить на главном
+                          🎯<span className="mob-hide"> Учить на главном</span>
                         </button>
 
                         <button 
                           className="btn btn-secondary" 
-                          style={{ fontSize: 12, padding: "7px 12px", borderRadius: 30, fontWeight: 600 }}
+                          style={{ fontSize: 12, padding: "6px 10px", borderRadius: 30, fontWeight: 600 }}
                           onClick={e => handleTogglePauseCategory(topCat.id, e)}
                           title={topCat.paused ? "Возобновить повторения" : "Поставить повторения на паузу"}
                         >
-                          {topCat.paused ? "▶️ Включить" : "⏸️ Пауза"}
+                          {topCat.paused ? <>▶️<span className="mob-hide"> Включить</span></> : <>⏸️<span className="mob-hide"> Пауза</span></>}
                         </button>
 
                         {subCats.length > 0 && (
                           <button 
                             className="btn btn-secondary" 
-                            style={{ fontSize: 12, padding: "7px 12px", borderRadius: 30, fontWeight: 600 }}
+                            style={{ fontSize: 12, padding: "6px 10px", borderRadius: 30, fontWeight: 600 }}
                             onClick={() => {
                               setSelectedMainCatId(topCat.id);
                               setSelectedSubCatId(topCat.id);
                             }}
                             title="Просмотреть все слова этой категории"
                           >
-                            📖 Все слова ({statsCat.total})
+                            📖<span className="mob-hide"> Все слова ({statsCat.total})</span>
                           </button>
                         )}
 
                         <button 
                           className="btn btn-secondary" 
-                          style={{ fontSize: 12, padding: "7px 12px", borderRadius: 30, fontWeight: 600 }}
+                          style={{ fontSize: 12, padding: "6px 10px", borderRadius: 30, fontWeight: 600 }}
                           onClick={() => handleOpenCreateModal(topCat.id)}
                           title="Добавить подкатегорию"
                         >
-                          ➕ Подкатегория
+                          ➕<span className="mob-hide"> Подкатегория</span>
                         </button>
 
                         <button 
                           className="btn btn-secondary" 
-                          style={{ fontSize: 13, padding: "8px 12px", borderRadius: 30 }}
+                          style={{ fontSize: 13, padding: "6px 10px", borderRadius: 30 }}
                           onClick={() => handleOpenEditModal(topCat)}
                           title="Изменить категорию"
                         >
@@ -1576,7 +1576,7 @@ export default function CategoriesScreen({
                         {canDelete && (
                           <button 
                             className="btn btn-secondary" 
-                            style={{ fontSize: 13, padding: "8px 12px", borderRadius: 30, color: "var(--terracotta)" }}
+                            style={{ fontSize: 13, padding: "6px 10px", borderRadius: 30, color: "var(--terracotta)" }}
                             onClick={() => handleOpenDeleteModal(topCat.id)}
                             title="Удалить категорию"
                           >
@@ -1619,10 +1619,10 @@ export default function CategoriesScreen({
               </div>
 
               {/* Top Right Buttons: Учить на главном & Все слова */}
-              <div style={{ display: "flex", gap: 8, alignItems: "center", flexWrap: "wrap" }}>
+              <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap" }}>
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "8px 16px", borderRadius: 30, fontWeight: 600, whiteSpace: "nowrap" }}
+                  style={{ fontSize: 13, padding: "6px 12px", borderRadius: 30, fontWeight: 600, whiteSpace: "nowrap" }}
                   onClick={() => onNavigateHomeWithCategory(currentMainCategory.id)}
                   title="Сделать активной и учить на главном экране"
                 >
@@ -1631,7 +1631,7 @@ export default function CategoriesScreen({
 
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "8px 16px", borderRadius: 30, fontWeight: 600, whiteSpace: "nowrap" }}
+                  style={{ fontSize: 13, padding: "6px 12px", borderRadius: 30, fontWeight: 600, whiteSpace: "nowrap" }}
                   onClick={() => setSelectedSubCatId(selectedMainCatId)}
                   title="Просмотреть все слова этой категории"
                 >
@@ -1649,25 +1649,25 @@ export default function CategoriesScreen({
                 {/* Button: Create Subcategory */}
                 <button 
                   className="btn btn-primary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 700 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 700 }}
                   onClick={() => handleOpenCreateModal(selectedMainCatId)}
                 >
-                  ➕<span className="btn-label-desktop"> Создать подкатегорию</span>
+                  ➕<span className="mob-hide"> Подкатегория</span>
                 </button>
 
                 {/* Button: Import Words */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 600 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 600 }}
                   onClick={() => handleOpenImportModal(selectedMainCatId)}
                 >
-                  📥<span className="btn-label-desktop"> Импортировать слова</span>
+                  📥<span className="mob-hide"> Импорт</span>
                 </button>
 
                 {/* Button: Transfer Words */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 600 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 600 }}
                   onClick={() => {
                     setTransferSourceCatFilter("all");
                     setTransferSearch("");
@@ -1681,17 +1681,17 @@ export default function CategoriesScreen({
                   }}
                   title="Перенести слова из другой основной категории"
                 >
-                  🔀<span className="btn-label-desktop"> Перенести слова</span>
+                  🔀<span className="mob-hide"> Перенос</span>
                 </button>
 
                 {/* Button: Edit Main Category */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 14px", borderRadius: 30, fontWeight: 600 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 600 }}
                   onClick={() => handleOpenEditModal(currentMainCategory)}
                   title="Редактировать категорию"
                 >
-                  ✏️<span className="btn-label-desktop"> Изменить категорию</span>
+                  ✏️<span className="mob-hide"> Изменить</span>
                 </button>
               </div>
 
@@ -1827,7 +1827,7 @@ export default function CategoriesScreen({
               </div>
             </div>
           ) : (
-            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(280px, 1fr))", gap: 14 }}>
+            <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(220px, 1fr))", gap: 9 }}>
               {subcategoriesForMainCat.map(subCat => {
                 const subStats = getCategoryStatsCached(subCat.id);
                 const isSubActive = activeCategoryId === subCat.id;
@@ -1837,15 +1837,15 @@ export default function CategoriesScreen({
                 return (
                   <div 
                     key={subCat.id}
-                    className="card"
+                    className="card sub-cat-card"
                     style={{
                       border: isSubSelected ? "2px solid var(--rose)" : isSubActive ? "2px solid var(--sage)" : "1px solid var(--border)",
-                      borderRadius: "1.2rem",
-                      padding: "16px",
+                      borderRadius: "1rem",
+                      padding: "11px 13px",
                       display: "flex",
                       flexDirection: "column",
                       justifyContent: "space-between",
-                      gap: 12,
+                      gap: 8,
                       cursor: "pointer",
                       background: isSubSelected ? "rgba(224,122,95,0.08)" : isSubActive ? "rgba(143,160,128,0.12)" : "var(--card)",
                       boxShadow: "0 2px 6px rgba(0,0,0,0.02)"
@@ -1910,17 +1910,17 @@ export default function CategoriesScreen({
                     </div>
 
                     {/* Subcategory Action Buttons Below Progress Bar */}
-                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 12 }} onClick={e => e.stopPropagation()}>
+                    <div style={{ display: "flex", gap: 6, alignItems: "center", flexWrap: "wrap", marginTop: 10 }} onClick={e => e.stopPropagation()}>
                       <button 
                         className="btn btn-secondary" 
-                        style={{ fontSize: 12, padding: "6px 12px", borderRadius: 30, fontWeight: 600 }}
+                        style={{ fontSize: 12, padding: "6px 10px", borderRadius: 30, fontWeight: 600 }}
                         onClick={(e) => {
                           e.stopPropagation();
                           onNavigateHomeWithCategory(subCat.id);
                         }}
                         title="Сделать активной и учить на главном экране"
                       >
-                        🎯 Учить на главном
+                        🎯<span className="mob-hide"> Учить на главном</span>
                       </button>
 
                       <button 
@@ -1929,7 +1929,7 @@ export default function CategoriesScreen({
                         onClick={e => handleTogglePauseCategory(subCat.id, e)}
                         title={subCat.paused ? "Возобновить повторения" : "Поставить повторения на паузу"}
                       >
-                        {subCat.paused ? "▶️ Включить" : "⏸️ Пауза"}
+                        {subCat.paused ? <>▶️<span className="mob-hide"> Включить</span></> : <>⏸️<span className="mob-hide"> Пауза</span></>}
                       </button>
 
                       <button 
@@ -2002,17 +2002,17 @@ export default function CategoriesScreen({
                 {selectedMainCatId && !categories.find(c => c.id === (selectedSubCatId || selectedMainCatId))?.parentId && (
                   <button 
                     className="btn btn-primary" 
-                    style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 700 }}
+                    style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 700 }}
                     onClick={() => handleOpenCreateModal(selectedMainCatId)}
                   >
-                    📂<span className="btn-label-desktop"> Добавить подкатегорию</span>
+                    📂<span className="mob-hide"> Подкатегория</span>
                   </button>
                 )}
 
                 {/* Button: Add Word */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 700 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 700 }}
                   onClick={() => {
                     setAddEn("");
                     setAddRu("");
@@ -2024,13 +2024,13 @@ export default function CategoriesScreen({
                     setShowAddWordModal(true);
                   }}
                 >
-                  ➕<span className="btn-label-desktop"> Добавить слово</span>
+                  ➕<span className="mob-hide"> Добавить слово</span>
                 </button>
 
                 {/* Button: Import Words */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 600 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 600 }}
                   onClick={() => {
                     setImportCatId(selectedSubCatId);
                     setImportTargetSubId(selectedSubCatId);
@@ -2039,13 +2039,13 @@ export default function CategoriesScreen({
                     setImportMsg("");
                   }}
                 >
-                  📥<span className="btn-label-desktop"> Импортировать слова</span>
+                  📥<span className="mob-hide"> Импорт</span>
                 </button>
 
                 {/* Button: Transfer Words */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 600 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 600 }}
                   onClick={() => {
                     setTransferSourceCatFilter("all");
                     setTransferSearch("");
@@ -2055,16 +2055,16 @@ export default function CategoriesScreen({
                   }}
                   title="Перенести слова из других подкатегорий"
                 >
-                  🔀<span className="btn-label-desktop"> Перенести слова</span>
+                  🔀<span className="mob-hide"> Перенос</span>
                 </button>
 
                 {/* Button: Study on Main */}
                 <button 
                   className="btn btn-secondary" 
-                  style={{ fontSize: 13, padding: "9px 16px", borderRadius: 30, fontWeight: 600 }}
+                  style={{ fontSize: 12.5, padding: "8px 14px", borderRadius: 30, fontWeight: 600 }}
                   onClick={() => onNavigateHomeWithCategory(selectedSubCatId)}
                 >
-                  🎯<span className="btn-label-desktop"> Учить на главном</span>
+                  🎯<span className="mob-hide"> Учить на главном</span>
                 </button>
               </div>
 
@@ -2161,22 +2161,22 @@ export default function CategoriesScreen({
               </div>
             </div>
           ) : (
-            <div style={{ display: "flex", flexDirection: "column", gap: 10 }}>
+            <div style={{ display: "flex", flexDirection: "column", gap: 7 }}>
               {/* Selection Control Bar for Bulk Delete */}
               {selectedWordIds.size > 0 && (
                 <div 
                   className="card" 
                   style={{ 
-                    padding: "12px 16px", 
-                    marginBottom: 10, 
+                    padding: "10px 14px", 
+                    marginBottom: 8, 
                     background: "rgba(188, 71, 73, 0.08)", 
                     border: "1.5px solid var(--terracotta)", 
-                    borderRadius: "1.2rem", 
+                    borderRadius: "1rem", 
                     display: "flex", 
                     alignItems: "center", 
                     justifyContent: "space-between", 
                     flexWrap: "wrap", 
-                    gap: 10 
+                    gap: 8 
                   }}
                 >
                   <div style={{ display: "flex", alignItems: "center", gap: 10, flexWrap: "wrap" }}>
@@ -2235,13 +2235,13 @@ export default function CategoriesScreen({
                 return (
                   <div 
                     key={w.id} 
-                    className="card"
+                    className="card cat-word-card"
                     style={{ 
-                      borderRadius: "1rem", 
-                      padding: "14px 16px",
+                      borderRadius: "0.85rem", 
+                      padding: "9px 12px",
                       display: "flex",
                       flexDirection: "column",
-                      gap: 8,
+                      gap: 5,
                       background: isSelected ? "rgba(188, 71, 73, 0.05)" : "var(--card)",
                       border: isSelected ? "2px solid var(--terracotta)" : "1px solid var(--border)",
                       transition: "border 0.15s ease, background 0.15s ease",
@@ -2275,7 +2275,7 @@ export default function CategoriesScreen({
 
                         <div>
                           <div style={{ display: "flex", alignItems: "center", gap: 8, flexWrap: "wrap" }}>
-                            <span style={{ fontSize: 17, fontWeight: 800, color: "var(--charcoal)" }}>
+                            <span className="word-en" style={{ fontSize: 17, fontWeight: 800, color: "var(--charcoal)" }}>
                               {w.en}
                             </span>
                             <button 
@@ -2285,7 +2285,7 @@ export default function CategoriesScreen({
                             >
                               🔊
                             </button>
-                            <span style={{ color: "var(--terracotta)", fontWeight: 700, fontSize: 15 }}>
+                            <span className="word-ru" style={{ color: "var(--terracotta)", fontWeight: 700, fontSize: 15 }}>
                               ➔ {w.ru}
                             </span>
                           </div>
@@ -2314,7 +2314,7 @@ export default function CategoriesScreen({
                           className="btn btn-secondary" 
                           style={{ 
                             fontSize: 11, 
-                            padding: "6px 14px", 
+                            padding: "6px 12px", 
                             borderRadius: 30,
                             background: w.learned ? "rgba(143,160,128,0.15)" : "var(--sage)", 
                             color: w.learned ? "var(--sage)" : "#fff",

@@ -974,10 +974,10 @@ export default function App() {
             className="card overlay-card" 
             style={{ 
               textAlign: "center", 
-              padding: "32px 24px", 
-              maxWidth: 360, 
+              padding: "24px 20px", 
+              maxWidth: 350, 
               width: "88%",
-              borderRadius: "1.75rem",
+              borderRadius: "1.5rem",
               boxShadow: "0 16px 48px rgba(0,0,0,0.14)",
               background: "var(--card)",
               border: "1px solid rgba(255,255,255,0.8)",
@@ -985,21 +985,21 @@ export default function App() {
             }} 
             onClick={e => e.stopPropagation()}
           >
-            <div style={{ fontSize: 42, marginBottom: 10 }}>✨</div>
-            <h2 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 24, fontWeight: 500, color: "var(--charcoal)", margin: "0 0 10px 0" }}>
+            <div style={{ fontSize: 32, marginBottom: 8 }}>✨</div>
+            <h2 style={{ fontFamily: "Lora, serif", fontStyle: "italic", fontSize: 20, fontWeight: 500, color: "var(--charcoal)", margin: "0 0 8px 0" }}>
               С возвращением!
             </h2>
-            <p style={{ textTransform: "uppercase", letterSpacing: "0.8px", fontSize: 12.5, color: "var(--muted)", margin: "0 0 22px 0" }}>
+            <p style={{ textTransform: "uppercase", letterSpacing: "0.8px", fontSize: 11.5, color: "var(--muted)", margin: "0 0 18px 0" }}>
               ВАША ТЕКУЩАЯ СЕРИЯ: <span style={{ color: "var(--rose)", fontWeight: 700 }}>{progress.streak} {progress.streak === 1 ? "ДЕНЬ" : progress.streak < 5 ? "ДНЯ" : "ДНЕЙ"}</span>
             </p>
             <button 
-              className="btn btn-primary" 
+              className="btn btn-primary welcome-btn" 
               style={{ 
                 width: "100%", 
-                padding: "16px 20px", 
-                fontSize: 17, 
+                padding: "13px 18px", 
+                fontSize: 15, 
                 fontWeight: 700, 
-                borderRadius: "1.25rem", 
+                borderRadius: "1.2rem", 
                 cursor: "pointer",
                 background: "var(--rose)",
                 color: "#fff",

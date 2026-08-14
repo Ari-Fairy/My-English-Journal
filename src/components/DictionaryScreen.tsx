@@ -499,7 +499,7 @@ export default function DictionaryScreen({
                         onClick={() => toggleLearn(w)}
                         title={w.learned ? "Изучать снова" : "Знаю слово"}
                       >
-                        {w.learned ? "↩️" : "✓"} <span className="dict-btn-text-desktop">{w.learned ? "Изучать снова" : "Знаю слово"}</span>
+                        {w.learned ? "↩️ Изучать снова" : "✓ Знаю слово"}
                       </button>
                       <button className="btn btn-sm dict-btn-action" onClick={() => startEdit(w)} title="Редактировать">✏️</button>
                       <button className="btn btn-sm dict-btn-action" style={{ color: "var(--rose)" }} onClick={() => setWordToDeleteConfirm(w)} title="Удалить">🗑</button>

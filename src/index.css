@@ -469,8 +469,8 @@ body::before {
 .menu-card {
   background: var(--card);
   border: 1px solid rgba(255, 255, 255, 0.85);
-  border-radius: 1.25rem;
-  padding: 13px 10px;
+  border-radius: 1.5rem;
+  padding: 18px 14px;
   box-shadow: 0 4px 16px rgba(0, 0, 0, 0.04);
   text-align: center;
   cursor: pointer;
@@ -490,23 +490,23 @@ body::before {
 }
 
 .menu-card .icon {
-  font-size: 20px;
-  margin-bottom: 4px;
+  font-size: 22px;
+  margin-bottom: 6px;
 }
 
 .menu-card .title {
   font-family: 'Lora', serif;
   font-style: italic;
-  font-size: 13.5px;
+  font-size: 15px;
   color: var(--warm);
-  font-weight: 400;
+  font-weight: 500;
 }
 
 .menu-card .sub {
-  font-size: 9.5px;
+  font-size: 10px;
   color: #aaa;
   text-transform: uppercase;
-  letter-spacing: .08em;
+  letter-spacing: .1em;
   margin-top: 2px;
 }
 
@@ -632,7 +632,7 @@ body::before {
 }
 
 @media (max-width: 640px) {
-  .btn-label-desktop {
+  .mob-hide {
     display: none !important;
   }
 }
@@ -1269,7 +1269,7 @@ body::before {
     font-size: 11px !important;
   }
   .dict-btn-text-desktop {
-    display: none !important;
+    display: inline;
   }
 
   .topic-chip-container {
@@ -1349,8 +1349,11 @@ body::before {
     margin-bottom: 12px !important;
   }
   .menu-card {
-    padding: 12px 10px !important;
-    border-radius: 1.1rem !important;
+    padding: 16px 12px !important;
+    border-radius: 1.25rem !important;
+  }
+  .menu-card .title {
+    font-size: 14.5px !important;
   }
 
   /* Universal Typography Scale on Mobile */
@@ -1370,14 +1373,41 @@ body::before {
   }
 
   /* Universal Buttons Scale */
-  .btn:not(.menu-card):not(.home-study-btn) {
+  .btn:not(.menu-card):not(.home-study-btn):not(.study-ans-btn):not(.welcome-btn):not(.choice-btn) {
     font-size: 13px !important;
     padding: 8px 14px !important;
   }
-  .btn-primary:not(.menu-card):not(.home-study-btn), .btn-secondary:not(.menu-card):not(.home-study-btn), .btn-outline:not(.menu-card):not(.home-study-btn) {
+  .btn-primary:not(.menu-card):not(.home-study-btn):not(.study-ans-btn):not(.welcome-btn):not(.choice-btn), 
+  .btn-secondary:not(.menu-card):not(.home-study-btn):not(.study-ans-btn):not(.welcome-btn):not(.choice-btn), 
+  .btn-outline:not(.menu-card):not(.home-study-btn):not(.study-ans-btn):not(.welcome-btn):not(.choice-btn) {
     padding: 8px 14px !important;
     font-size: 13px !important;
   }
+
+  /* Main Action & Study Buttons on Mobile */
+  .home-study-btn {
+    padding: 14px 18px !important;
+    min-height: 62px !important;
+  }
+  .home-study-btn .btn-title {
+    font-size: 16px !important;
+  }
+  .home-study-btn .btn-sub {
+    font-size: 11.5px !important;
+  }
+  .study-ans-btn, .choice-btn {
+    padding: 10px 14px !important;
+    font-size: 14px !important;
+    font-weight: 600 !important;
+    min-height: 42px !important;
+  }
+  .welcome-btn {
+    padding: 12px 16px !important;
+    font-size: 14.5px !important;
+    font-weight: 600 !important;
+    min-height: 44px !important;
+  }
+
   .btn-sm {
     padding: 5px 10px !important;
     font-size: 11.5px !important;
@@ -1402,16 +1432,44 @@ body::before {
     padding: 3px 7px !important;
   }
 
-  /* Categories & Subcategories Screen Scale */
-  .categories-container .card {
-    padding: 14px 16px !important;
+  /* Categories & Subcategories Screen Scale - Proper Gaps & Readable Buttons */
+  .categories-container {
+    max-width: 560px !important;
+    margin: 0 auto !important;
+    width: 100% !important;
+    padding-left: 8px !important;
+    padding-right: 8px !important;
+    box-sizing: border-box !important;
+  }
+  .categories-container .card:not(.cat-word-card) {
+    padding: 12px 14px !important;
     margin-bottom: 12px !important;
+    border-radius: 1rem !important;
+  }
+  .categories-container .btn:not(.home-study-btn) {
+    padding: 6px 11px !important;
+    font-size: 12.5px !important;
+    line-height: 1.2 !important;
   }
   .cat-icon-text { font-size: 20px !important; }
-  .cat-title-text { font-size: 15.5px !important; }
-  .subcat-icon-text { font-size: 18px !important; }
-  .subcat-title-text { font-size: 14.5px !important; }
-  .cat-sub-info { font-size: 12px !important; }
+  .cat-title-text { font-size: 15px !important; }
+  .subcat-icon-text { font-size: 17px !important; }
+  .subcat-title-text { font-size: 14px !important; }
+  .cat-sub-info { font-size: 11.5px !important; margin-top: 2px !important; }
+
+  /* Word Cards inside Categories */
+  .cat-word-card {
+    padding: 10px 12px !important;
+    gap: 6px !important;
+    margin-bottom: 10px !important;
+    border-radius: 0.85rem !important;
+  }
+  .cat-word-card .word-en { font-size: 14.5px !important; }
+  .cat-word-card .word-ru { font-size: 13.5px !important; }
+  .cat-word-card .btn {
+    padding: 5px 10px !important;
+    font-size: 11.5px !important;
+  }
 
   /* Dictionary Screen Scale - Reverted to Original Compact Cards */
   .dictionary-container .card {

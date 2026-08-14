@@ -978,8 +978,8 @@ export default function StudyScreen({
           {!answered ? (
             <div style={{ display: "flex", gap: 10 }}>
               <button 
-                className="btn btn-outline" 
-                style={{ flex: 1, padding: 15 }} 
+                className="btn btn-outline study-ans-btn" 
+                style={{ flex: 1, padding: "11px 16px" }} 
                 onClick={() => { 
                   handleAns("__dont_remember__"); 
                 }}
@@ -987,8 +987,8 @@ export default function StudyScreen({
                 👈 Не знаю
               </button>
               <button 
-                className="btn btn-primary" 
-                style={{ flex: 1, padding: 15 }} 
+                className="btn btn-primary study-ans-btn" 
+                style={{ flex: 1, padding: "11px 16px" }} 
                 onClick={() => { 
                   handleAns(expected); 
                 }}
@@ -998,8 +998,8 @@ export default function StudyScreen({
             </div>
           ) : (
             <button 
-              className="btn btn-secondary animate-bounce-subtle" 
-              style={{ width: "100%", padding: 15 }} 
+              className="btn btn-secondary animate-bounce-subtle study-ans-btn" 
+              style={{ width: "100%", padding: "11px 16px" }} 
               onClick={next}
             >
               {idx + 1 >= queue.length 
@@ -1125,7 +1125,7 @@ export default function StudyScreen({
               onKeyDown={e => e.key === "Enter" && ans.trim() && handleAns(ans)} 
               placeholder={mode === "listening" ? "Напишите услышанное слово по-английски..." : "Ваш ответ..."} 
             />
-            <button className="btn btn-primary" style={{ width: "100%", padding: 15 }} onClick={() => ans.trim() && handleAns(ans)} disabled={!ans.trim()}>Проверить</button>
+            <button className="btn btn-primary study-ans-btn" style={{ width: "100%", padding: "11px 16px" }} onClick={() => ans.trim() && handleAns(ans)} disabled={!ans.trim()}>Проверить</button>
             <button className="btn btn-ghost" style={{ color: "#ccc" }} onClick={() => handleAns("__dont_remember__")}>🤍 Не помню</button>
           </div>
         )}
@@ -1163,8 +1163,8 @@ export default function StudyScreen({
         )}
         {answered && (
           <button 
-            className="btn btn-secondary animate-bounce-subtle" 
-            style={{ width: "100%", padding: 15, marginTop: 8 }} 
+            className="btn btn-secondary animate-bounce-subtle study-ans-btn" 
+            style={{ width: "100%", padding: "11px 16px", marginTop: 8 }} 
             onClick={next}
           >
             {idx + 1 >= queue.length 
